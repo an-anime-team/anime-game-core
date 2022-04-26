@@ -10,6 +10,7 @@ impl Version {
         }
     }
 
+    // TODO: long versions support (1111.222222.3333333)
     pub fn from_str(str: &str) -> Version {
         let str = str.as_bytes();
 
@@ -31,4 +32,9 @@ impl PartialEq<Version> for String {
     fn eq(&self, other: &Version) -> bool {
         self == &other.to_string()
     }
+}
+
+#[test]
+fn test_version_from_str() {
+    assert_eq!(Version::from_str("1.2.3").to_string(), "1.2.3");
 }

@@ -5,9 +5,8 @@ pub mod consts {
 pub mod game;
 pub mod locales;
 pub mod json_schemas;
+pub mod downloader;
 
 mod version;
 
 pub use version::Version;
-
-mod tests;
