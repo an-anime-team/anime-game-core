@@ -7,12 +7,19 @@ WIP
 - Game installation
   - <s>Current game version</s>
   - <s>Latest game version</s>
+
+  Feature: `install`
+
   - Install the game (calculate installation difference)
   - Update existing installation
   - Repair game files
+
 - Voice packages
   - <s>Installed voice packages</s>
   - <s>Available voice packages</s>
+
+  Feature: `install`
+
   - Update outdated package
   - Repair broken packages
 

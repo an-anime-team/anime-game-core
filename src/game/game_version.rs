@@ -1,8 +1,71 @@
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read};
+use std::env::temp_dir;
 
 use crate::json_schemas;
 use crate::Version;
+use crate::downloader::download::{download, Stream};
+
+use wait_not_await::Await;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum DiffError {
+    AlreadyLatest,
+    RemoteNotAvailable,
+    CanNotCalculate
+}
+
+#[derive(Debug)]
+pub enum InstallError {
+    StreamOpenError(minreq::Error)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Diff {
+    from: Version,
+    to: Version,
+    uri: String,
+    size: u64,
+    path_to_game: String
+}
+
+impl Diff {
+    pub fn get_from_version(&self) -> Version {
+        self.from
+    }
+    
+    pub fn get_to_version(&self) -> Version {
+        self.to
+    }
+
+    pub fn get_uri(&self) -> &str {
+        self.uri.as_str()
+    }
+
+    pub fn get_size(&self) -> u64 {
+        self.size
+    }
+
+    #[cfg(feature = "install")]
+    pub fn install(&self) -> Await<Result<(), InstallError>> {
+        self.install_to(self.path_to_game.clone())
+    }
+
+    #[cfg(feature = "install")]
+    pub fn install_to<T: ToString>(&self, path: T) -> Await<Result<(), InstallError>> {
+        let path = path.to_string();
+        let uri = self.uri.clone();
+
+        Await::new(move || {
+            match download(uri) {
+                Ok(stream) => {
+                    Ok(())
+                },
+                Err(err) => Err(InstallError::StreamOpenError(err))
+            }
+        })
+    }
+}
 
 pub struct GameVersion {
     path: String,
@@ -82,6 +145,36 @@ impl GameVersion {
         match &self.remote {
             Some(remote) => Some(Version::from_str(remote.data.game.latest.version.as_str())),
             None => None
+        }
+    }
+
+    pub fn diff(&self) -> Result<Diff, DiffError> {
+        match &self.remote {
+            Some(remote) => {
+                let curr = self.installed().unwrap();
+                let latest = self.latest().unwrap();
+
+                if curr == latest {
+                    Err(DiffError::AlreadyLatest)
+                }
+
+                else {
+                    for diff in &remote.data.game.diffs {
+                        if diff.version == curr {
+                            return Ok(Diff {
+                                from: Version::from_str(diff.version.clone()),
+                                to: latest,
+                                uri: diff.path.clone(),
+                                size: diff.size.parse().unwrap(),
+                                path_to_game: self.path.clone()
+                            })
+                        }
+                    }
+
+                    Err(DiffError::CanNotCalculate)
+                }
+            },
+            None => Err(DiffError::RemoteNotAvailable)
         }
     }
 

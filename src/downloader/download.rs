@@ -8,7 +8,7 @@ impl Stream {
     pub const CHUNK_SIZE: usize = 1024;
 
     pub fn new(response: minreq::ResponseLazy) -> Stream {
-        let mut total = response.size_hint().0;
+        let total = response.size_hint().0;
 
         /*if let Some(len) = response.headers.get("content-length") {
             total = len.parse().unwrap();
@@ -54,7 +54,7 @@ impl Stream {
     }
 }
 
-pub fn download(uri: &str) -> Result<Stream, minreq::Error> {
+pub fn download<T: Into<minreq::URL>>(uri: T) -> Result<Stream, minreq::Error> {
     match minreq::get(uri).send_lazy() {
         Ok(response) => Ok(Stream::new(response)),
         Err(err) => Err(err)

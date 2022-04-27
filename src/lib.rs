@@ -5,6 +5,8 @@ pub mod consts {
 pub mod game;
 pub mod locales;
 pub mod json_schemas;
+
+#[cfg(feature = "install")]
 pub mod downloader;
 
 mod version;
