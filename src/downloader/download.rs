@@ -1,3 +1,5 @@
+use std::path::Path;
+use std::process::{Command, Stdio};
 use std::time::{Instant, Duration};
 use std::io::{Error, Write};
 use std::fs::File;
@@ -16,25 +18,34 @@ pub enum Downloaders {
 }
 
 pub struct Stream {
+    uri: String,
     response: minreq::ResponseLazy,
     total: usize,
-    on_update: Box<dyn Fn(StreamUpdate)>
+    on_update: Box<dyn Fn(StreamUpdate)>,
+    pub download_progress_interval: Duration
 }
 
 impl Stream {
     pub const CHUNK_SIZE: usize = 1024;
 
-    pub fn new(response: minreq::ResponseLazy) -> Stream {
-        let total = response.size_hint().0;
+    pub fn open<T: ToString>(uri: T) -> Result<Stream, minreq::Error> {
+        match minreq::get(uri.to_string()).send_lazy() {
+            Ok(response) => {
+                let mut total = response.size_hint().0;
 
-        /*if let Some(len) = response.headers.get("content-length") {
-            total = len.parse().unwrap();
-        }*/
-        
-        Stream {
-            response,
-            total,
-            on_update: Box::new(|_| {})
+                if let Some(len) = response.headers.get("content-length") {
+                    total = len.parse().unwrap();
+                }
+
+                Ok(Stream {
+                    uri: uri.to_string(),
+                    response,
+                    total,
+                    on_update: Box::new(|_| {}),
+                    download_progress_interval: Duration::from_millis(50)
+                })
+            },
+            Err(err) => Err(err)
         }
     }
 
@@ -43,18 +54,47 @@ impl Stream {
     }
 
     pub fn download<T: ToString>(&mut self, path: T, method: Downloaders) -> Result<Duration, Error> {
-        let instant = Instant::now();
-
         match method {
             Downloaders::Aria2c => todo!(),
             Downloaders::Curl => {
-                todo!()
+                // curl -s -L -N -C - -o <output> <uri>
+                let child = Command::new("curl")
+                    .args([
+                        "-s", "-L", "-N", "-C", "-",
+                        "-o", path.to_string().as_str(),
+                        self.uri.as_str()
+                    ])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn();
+
+                match child {
+                    Ok(mut child) => {
+                        (self.on_update)(StreamUpdate::Start);
+
+                        let instant = Instant::now();
+
+                        while let Ok(None) = child.try_wait() {
+                            if let Ok(metadata) = Path::new(&path.to_string()).metadata() {
+                                (self.on_update)(StreamUpdate::Progress(usize::try_from(metadata.len()).unwrap(), self.total));
+                            }
+
+                            std::thread::sleep(self.download_progress_interval);
+                        }
+
+                        (self.on_update)(StreamUpdate::Finish);
+
+                        Ok(instant.elapsed())
+                    },
+                    Err(err) => Err(err)
+                }
             },
             Downloaders::Native => {
                 match File::create(path.to_string()) {
                     Ok(mut file) => {
                         (self.on_update)(StreamUpdate::Start);
 
+                        let instant = Instant::now();
                         let mut progress = 0;
 
                         while let Some(mut bytes) = self.get_chunk() {
@@ -92,12 +132,5 @@ impl Stream {
 
     pub fn get_total(&self) -> usize {
         self.total
-    }
-}
-
-pub fn download<T: Into<minreq::URL>>(uri: T) -> Result<Stream, minreq::Error> {
-    match minreq::get(uri).send_lazy() {
-        Ok(response) => Ok(Stream::new(response)),
-        Err(err) => Err(err)
     }
 }

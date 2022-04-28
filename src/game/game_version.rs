@@ -4,7 +4,7 @@ use std::env::temp_dir;
 
 use crate::json_schemas;
 use crate::Version;
-use crate::downloader::download::{download, Stream};
+use crate::downloader::download::Stream;
 
 use wait_not_await::Await;
 
@@ -57,7 +57,7 @@ impl Diff {
         let uri = self.uri.clone();
 
         Await::new(move || {
-            match download(uri) {
+            match Stream::open(uri) {
                 Ok(stream) => {
                     Ok(())
                 },
