@@ -1,4 +1,113 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Instant, Duration};
+use std::path::Path;
+
+#[derive(Debug)]
+pub enum StreamUpdate {
+    Start(ArchiveInfo),
+    Unpacked(ArchiveEntry, u32, u32),
+
+    /// Successfully unpacked if `Finish(Ok(ExitStatus(unix_wait_status(0))))`
+    Finish(Result<std::process::ExitStatus, std::io::Error>)
+}
+
+pub struct Stream {
+    archive: Archive,
+    on_update: Box<dyn Fn(StreamUpdate)>,
+    pub unpack_progress_interval: Duration
+}
+
+impl Stream {
+    pub fn open(path: String) -> Option<Stream> {
+        match Archive::open(path) {
+            Some(archive) => Some(Stream {
+                archive,
+                on_update: Box::new(|_| {}),
+                unpack_progress_interval: Duration::from_millis(10)
+            }),
+            None => None
+        }
+    }
+
+    pub fn from_archive(archive: Archive) -> Stream {
+        Self {
+            archive,
+            on_update: Box::new(|_| {}),
+            unpack_progress_interval: Duration::from_millis(10)
+        }
+    }
+
+    pub fn on_update<T: Fn(StreamUpdate) + 'static>(&mut self, callback: T) {
+        self.on_update = Box::new(callback);
+    }
+
+    pub fn unpack<T: ToString>(&self, to: T) -> Option<Duration> {
+        match self.archive.get_info() {
+            Some(info) => {
+                let child = match info.r#type {
+                    ArchiveType::Zip => {
+                        Command::new("unzip")
+                            .arg("-o")
+                            .arg(self.archive.get_path())
+                            .arg("-d")
+                            .arg(to.to_string())
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .spawn()
+        
+                    },
+                    ArchiveType::Tar => {
+                        Command::new("tar")
+                            .arg("-xvf")
+                            .arg(self.archive.get_path())
+                            .arg("-C")
+                            .arg(to.to_string())
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .spawn()
+                    }
+                };
+        
+                match child {
+                    Ok(mut child) => {
+                        (self.on_update)(StreamUpdate::Start(info.clone()));
+
+                        let instant = Instant::now();
+
+                        let mut remained = info.files.clone();
+                        let mut progress = 0u32;
+
+                        while let Ok(None) = child.try_wait() {
+                            let mut new_remained = Vec::new();
+
+                            for entry in remained {
+                                if Path::new(&entry.path).exists() {
+                                    progress += entry.size.size();
+
+                                    (self.on_update)(StreamUpdate::Unpacked(entry, progress, info.size.size()));
+                                }
+
+                                else {
+                                    new_remained.push(entry);
+                                }
+                            }
+
+                            remained = new_remained;
+
+                            std::thread::sleep(self.unpack_progress_interval);
+                        }
+
+                        (self.on_update)(StreamUpdate::Finish(child.wait()));
+
+                        Some(instant.elapsed())
+                    },
+                    Err(_) => None
+                }
+            },
+            None => None
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ArchiveType {
@@ -6,62 +115,38 @@ pub enum ArchiveType {
     Tar
 }
 
-pub struct Stream {
-    path: String,
-    archive_type: ArchiveType,
-    on_start: Box<dyn FnOnce()>,
-    on_unpacked: Box<dyn FnOnce()>,
-    on_finish: Box<dyn FnOnce()>
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileSize {
+    Compressed(u32),
+    Uncompressed(u32),
+    Both {
+        compressed: u32,
+        uncompressed: u32
+    }
 }
 
-impl Stream {
-    pub fn new(path: String, archive_type: ArchiveType) -> Stream {
-        Stream {
-            path,
-            archive_type,
-            on_start: Box::new(|| {}),
-            on_unpacked: Box::new(|| {}),
-            on_finish: Box::new(|| {})
+impl FileSize {
+    /// Returns compressed / uncompressed size, or compressed if both available
+    pub fn size(&self) -> u32 {
+        match self {
+            FileSize::Compressed(size) => size.clone(),
+            FileSize::Uncompressed(size) => size.clone(),
+            FileSize::Both { compressed, uncompressed: _ } => compressed.clone(),
         }
-    }
-
-    pub fn on_start<T: FnOnce() + 'static>(&mut self, callback: T) {
-        self.on_start = Box::new(callback);
-    }
-
-    pub fn on_unpacked<T: FnOnce() + 'static>(&mut self, callback: T) {
-        self.on_unpacked = Box::new(callback);
-    }
-
-    pub fn on_finish<T: FnOnce() + 'static>(&mut self, callback: T) {
-        self.on_finish = Box::new(callback);
-    }
-
-    pub fn unpack(&self) {
-        let command = match self.archive_type {
-            ArchiveType::Zip => {
-                Command::new("unzip")
-            },
-            ArchiveType::Tar => {
-                Command::new("tar")
-            },
-        };
-
-
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveEntry {
     pub path: String,
-    pub compressed_size: u32,
-    pub uncompressed_size: u32
+    pub size: FileSize
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveInfo {
-    pub compressed_size: u32,
-    pub uncompressed_size: u32,
+    pub path: String,
+    pub r#type: ArchiveType,
+    pub size: FileSize,
     pub files: Vec<ArchiveEntry>
 }
 
@@ -72,7 +157,7 @@ pub struct Archive {
 }
 
 impl Archive {
-    pub fn new<T: ToString>(path: T) -> Option<Archive> {
+    pub fn open<T: ToString>(path: T) -> Option<Archive> {
         let path = path.to_string();
 
         if path.len() > 4 && &path[path.len() - 4..] == ".zip" {
@@ -82,7 +167,7 @@ impl Archive {
             })
         }
 
-        else if path.len() > 4 && &path[path.len() - 7..path.len() - 2] == ".tar." {
+        else if path.len() > 7 && &path[path.len() - 7..path.len() - 2] == ".tar." {
             Some(Archive {
                 path,
                 archive_type: ArchiveType::Tar
@@ -102,6 +187,7 @@ impl Archive {
         self.path.as_str()
     }
 
+    // TODO: add tests
     pub fn get_info(&self) -> Option<ArchiveInfo> {
         match self.archive_type {
             ArchiveType::Zip => {
@@ -114,27 +200,89 @@ impl Archive {
                     Ok(output) => {
                         // Had to write it this way
                         let lines = String::from_utf8_lossy(output.stdout.as_slice());
-                        let lines = lines.split_whitespace().collect::<Vec<&str>>();
+                        let lines = lines.split('\n').collect::<Vec<&str>>();
 
-                        todo!();
+                        let mut total_compressed = 0;
+                        let mut total_uncompressed = 0;
 
-                        // let files = Vec::new();
+                        let mut files = Vec::new();
 
                         //     8905  Defl:N     2464  72% 04-27-2022 20:33 41521ee0  Cargo.lock
-                        for line in &lines[2..lines.len() - 2] {
+                        for line in &lines[3..lines.len() - 3] {
+                            let words = line.split_whitespace().collect::<Vec<&str>>();
 
+                            let compressed = words[2].parse().unwrap();
+                            let uncompressed = words[0].parse().unwrap();
+
+                            files.push(ArchiveEntry {
+                                path: words[7].to_string(),
+                                size: FileSize::Both {
+                                    compressed,
+                                    uncompressed
+                                }
+                            });
+
+                            total_compressed += compressed;
+                            total_uncompressed += uncompressed;
                         }
 
-                        None
+                        Some(ArchiveInfo {
+                            path: self.path.clone(),
+                            r#type: self.archive_type,
+                            size: FileSize::Both {
+                                compressed: total_compressed,
+                                uncompressed: total_uncompressed
+                            },
+                            files
+                        })
                     },
                     Err(_) => None
                 }
             },
-            ArchiveType::Tar => {
-                // Command::new("tar").arg("-tvf").arg(self.path.clone()).output()
 
-                None
+            ArchiveType::Tar => {
+                let output = Command::new("tar")
+                    .arg("-tvf")
+                    .arg(self.path.clone())
+                    .output();
+
+                match output {
+                    Ok(output) => {
+                        // Had to write it this way
+                        let lines = String::from_utf8_lossy(output.stdout.as_slice());
+                        let lines = lines.split('\n').collect::<Vec<&str>>();
+
+                        let mut total_uncompressed = 0;
+                        let mut files = Vec::new();
+
+                        // -rw-r--r-- observer/observer 8905 2022-04-27 20:33 Cargo.lock
+                        for line in &lines[..lines.len() - 1] {
+                            let words = line.split_whitespace().collect::<Vec<&str>>();
+
+                            let uncompressed = words[2].parse().unwrap();
+
+                            files.push(ArchiveEntry {
+                                path: words[5].to_string(),
+                                size: FileSize::Uncompressed(uncompressed)
+                            });
+
+                            total_uncompressed += uncompressed;
+                        }
+
+                        Some(ArchiveInfo {
+                            path: self.path.clone(),
+                            r#type: self.archive_type,
+                            size: FileSize::Uncompressed(total_uncompressed),
+                            files
+                        })
+                    },
+                    Err(_) => None
+                }
             }
         }
+    }
+
+    pub fn get_stream(&self) -> Stream {
+        Stream::from_archive(self.clone())
     }
 }
