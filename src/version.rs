@@ -43,8 +43,3 @@ impl PartialEq<Version> for String {
         self == &other.to_string()
     }
 }
-
-#[test]
-fn test_version_from_str() {
-    assert_eq!(Version::from_str("1.2.3").to_string(), "1.2.3");
-}

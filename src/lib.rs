@@ -11,4 +11,7 @@ pub mod downloader;
 
 mod version;
 
+#[cfg(test)]
+mod tests;
+
 pub use version::Version;

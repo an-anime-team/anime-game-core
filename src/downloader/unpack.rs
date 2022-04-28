@@ -5,6 +5,8 @@ use std::path::Path;
 #[derive(Debug)]
 pub enum StreamUpdate {
     Start(ArchiveInfo),
+
+    /// Unpacked file, current progress, total progress
     Unpacked(ArchiveEntry, u32, u32),
 
     /// Successfully unpacked if `Finish(Ok(ExitStatus(unix_wait_status(0))))`
@@ -116,7 +118,7 @@ pub enum ArchiveType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FileSize {
+pub enum EntrySize {
     Compressed(u32),
     Uncompressed(u32),
     Both {
@@ -125,13 +127,13 @@ pub enum FileSize {
     }
 }
 
-impl FileSize {
+impl EntrySize {
     /// Returns compressed / uncompressed size, or compressed if both available
     pub fn size(&self) -> u32 {
         match self {
-            FileSize::Compressed(size) => size.clone(),
-            FileSize::Uncompressed(size) => size.clone(),
-            FileSize::Both { compressed, uncompressed: _ } => compressed.clone(),
+            EntrySize::Compressed(size) => size.clone(),
+            EntrySize::Uncompressed(size) => size.clone(),
+            EntrySize::Both { compressed, uncompressed: _ } => compressed.clone(),
         }
     }
 }
@@ -139,14 +141,14 @@ impl FileSize {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveEntry {
     pub path: String,
-    pub size: FileSize
+    pub size: EntrySize
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveInfo {
     pub path: String,
     pub r#type: ArchiveType,
-    pub size: FileSize,
+    pub size: EntrySize,
     pub files: Vec<ArchiveEntry>
 }
 
@@ -216,7 +218,7 @@ impl Archive {
 
                             files.push(ArchiveEntry {
                                 path: words[7].to_string(),
-                                size: FileSize::Both {
+                                size: EntrySize::Both {
                                     compressed,
                                     uncompressed
                                 }
@@ -229,7 +231,7 @@ impl Archive {
                         Some(ArchiveInfo {
                             path: self.path.clone(),
                             r#type: self.archive_type,
-                            size: FileSize::Both {
+                            size: EntrySize::Both {
                                 compressed: total_compressed,
                                 uncompressed: total_uncompressed
                             },
@@ -263,7 +265,7 @@ impl Archive {
 
                             files.push(ArchiveEntry {
                                 path: words[5].to_string(),
-                                size: FileSize::Uncompressed(uncompressed)
+                                size: EntrySize::Uncompressed(uncompressed)
                             });
 
                             total_uncompressed += uncompressed;
@@ -272,7 +274,7 @@ impl Archive {
                         Some(ArchiveInfo {
                             path: self.path.clone(),
                             r#type: self.archive_type,
-                            size: FileSize::Uncompressed(total_uncompressed),
+                            size: EntrySize::Uncompressed(total_uncompressed),
                             files
                         })
                     },
