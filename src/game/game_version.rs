@@ -4,7 +4,7 @@ use std::env::temp_dir;
 
 use crate::json_schemas;
 use crate::Version;
-use crate::downloader::download::Stream;
+use crate::installer::downloader::{Stream, StreamUpdate, Downloaders};
 
 use wait_not_await::Await;
 
@@ -16,7 +16,7 @@ pub enum DiffError {
 }
 
 #[derive(Debug)]
-pub enum InstallError {
+pub enum DownloadError {
     StreamOpenError(minreq::Error)
 }
 
@@ -47,21 +47,29 @@ impl Diff {
     }
 
     #[cfg(feature = "install")]
-    pub fn install(&self) -> Await<Result<(), InstallError>> {
-        self.install_to(self.path_to_game.clone())
+    pub fn download(&self) -> Await<Result<(), DownloadError>> {
+        self.download_to(self.path_to_game.clone())
     }
 
     #[cfg(feature = "install")]
-    pub fn install_to<T: ToString>(&self, path: T) -> Await<Result<(), InstallError>> {
+    pub fn download_to<T: ToString>(&self, path: T) -> Await<Result<(), DownloadError>> {
         let path = path.to_string();
         let uri = self.uri.clone();
 
         Await::new(move || {
             match Stream::open(uri) {
-                Ok(stream) => {
-                    Ok(())
+                Ok(mut stream) => {
+                    stream.on_update(|state| {
+                        match state {
+                            StreamUpdate::Start => todo!(),
+                            StreamUpdate::Progress(_, _) => todo!(),
+                            StreamUpdate::Finish => todo!(),
+                        }
+                    });
+
+                    todo!();
                 },
-                Err(err) => Err(InstallError::StreamOpenError(err))
+                Err(err) => Err(DownloadError::StreamOpenError(err))
             }
         })
     }

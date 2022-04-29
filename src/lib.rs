@@ -6,12 +6,12 @@ pub mod game;
 pub mod locales;
 pub mod json_schemas;
 
-#[cfg(feature = "install")]
-pub mod downloader;
-
 mod version;
+
+pub use version::Version;
+
+#[cfg(feature = "install")]
+pub mod installer;
 
 #[cfg(test)]
 mod tests;
-
-pub use version::Version;
