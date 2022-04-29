@@ -133,4 +133,23 @@ impl Stream {
     pub fn get_total(&self) -> usize {
         self.total
     }
+
+    pub fn get_uri(&self) -> String {
+        self.uri.clone()
+    }
+
+    /// Get name of downloading file from uri
+    /// 
+    /// - `https://example.com/example.zip` -> `example.zip`
+    /// - `https://example.com` -> `index.html`
+    pub fn get_filename(&self) -> &str {
+        match self.uri.rfind('/') {
+            Some(index) => {
+                let file = &self.uri[index + 1..];
+
+                if file == "" { "index.html" } else { file }
+            },
+            None => "index.html"
+        }
+    }
 }

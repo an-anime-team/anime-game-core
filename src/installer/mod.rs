@@ -1,5 +1,6 @@
 use std::env::temp_dir;
 use std::fs::remove_file;
+use std::sync::Arc;
 use std::time::{Instant, Duration};
 use std::io::{Error, ErrorKind};
 
@@ -37,7 +38,7 @@ pub enum InstallerUpdate {
 
 pub struct Installer {
     downloader: DownloaderStream,
-    on_update: Box<dyn Fn(InstallerUpdate)>,
+    on_update: Arc<dyn Fn(InstallerUpdate)>,
     pub method: Downloaders,
     pub unpack_progress_interval: Option<Duration>
 }
@@ -47,7 +48,7 @@ impl Installer {
         match DownloaderStream::open(uri) {
             Ok(downloader) => Ok(Self {
                 downloader,
-                on_update: Box::new(|_| {}),
+                on_update: Arc::new(|_| {}),
                 method: Downloaders::Native,
                 unpack_progress_interval: None
             }),
@@ -68,21 +69,29 @@ impl Installer {
     }
 
     pub fn on_update<T: Fn(InstallerUpdate) + 'static>(&mut self, callback: T) {
-        self.on_update = Box::new(callback);
+        self.on_update = Arc::new(callback);
     }
 
     pub fn install<T: ToString>(&mut self, path: T) -> Result<Duration, Error> {
-        let mut temp_file = temp_dir();
+        let mut temp_file = temp_dir().to_str().unwrap().to_string();
 
-        temp_file.push(format!("/.{}", Uuid::new_v4().to_string()));
+        temp_file += format!("/.{}-{}", Uuid::new_v4().to_string(), self.downloader.get_filename()).as_str();
 
-        self.install_to(temp_file.to_str().unwrap(), path.to_string().as_str())
+        self.install_to(temp_file, path.to_string())
     }
 
     pub fn install_to<T: ToString>(&mut self, temp_path: T, unpack_path: T) -> Result<Duration, Error> {
         let instant = Instant::now();
 
         let temp_path = temp_path.to_string();
+
+        println!("Temp path: {}", temp_path);
+
+        let on_update = self.on_update.clone();
+
+        self.downloader.on_update(move |state| {
+            (on_update)(InstallerUpdate::Downloader(state));
+        });
 
         if let Err(err) = self.downloader.download(temp_path.clone(), self.method) {
             return Err(err);
@@ -95,6 +104,12 @@ impl Installer {
                 if let Some(interval) = self.unpack_progress_interval {
                     stream.unpack_progress_interval = interval;
                 }
+
+                let on_update = self.on_update.clone();
+
+                stream.on_update(move |state| {
+                    (on_update)(InstallerUpdate::Unpacker(state));
+                });
 
                 if stream.unpack(unpack_path) == None {
                     return Err(Error::new(ErrorKind::InvalidInput, "Archive unpacking error"));

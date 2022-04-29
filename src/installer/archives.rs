@@ -83,7 +83,7 @@ impl Stream {
                             let mut new_remained = Vec::new();
 
                             for entry in remained {
-                                if Path::new(&entry.path).exists() {
+                                if Path::new(format!("{}/{}", to.to_string(), entry.path).as_str()).exists() {
                                     progress += entry.size.size();
 
                                     (self.on_update)(StreamUpdate::Unpacked(entry, progress, info.size.size()));
