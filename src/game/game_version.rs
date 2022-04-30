@@ -1,23 +1,16 @@
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read};
-use std::env::temp_dir;
+use std::time::Duration;
 
 use crate::json_schemas;
 use crate::Version;
-use crate::installer::downloader::{Stream, StreamUpdate, Downloaders};
-
-use wait_not_await::Await;
+use crate::installer::prelude::*;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DiffError {
     AlreadyLatest,
     RemoteNotAvailable,
     CanNotCalculate
-}
-
-#[derive(Debug)]
-pub enum DownloadError {
-    StreamOpenError(minreq::Error)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,8 +31,8 @@ impl Diff {
         self.to
     }
 
-    pub fn get_uri(&self) -> &str {
-        self.uri.as_str()
+    pub fn get_uri(&self) -> String {
+        self.uri.clone()
     }
 
     pub fn get_size(&self) -> u64 {
@@ -47,31 +40,32 @@ impl Diff {
     }
 
     #[cfg(feature = "install")]
-    pub fn download(&self) -> Await<Result<(), DownloadError>> {
-        self.download_to(self.path_to_game.clone())
+    pub fn get_installer(&self) -> Result<Installer, minreq::Error> {
+        Installer::new(self.uri.clone())
     }
 
     #[cfg(feature = "install")]
-    pub fn download_to<T: ToString>(&self, path: T) -> Await<Result<(), DownloadError>> {
+    pub fn download(&self, params: InstallerParams) -> Result<Duration, Error> {
+        self.download_to(self.path_to_game.clone(), params)
+    }
+
+    #[cfg(feature = "install")]
+    pub fn download_to<T: ToString>(&self, path: T, params: InstallerParams) -> Result<Duration, Error> {
         let path = path.to_string();
         let uri = self.uri.clone();
 
-        Await::new(move || {
-            match Stream::open(uri) {
-                Ok(mut stream) => {
-                    stream.on_update(|state| {
-                        match state {
-                            StreamUpdate::Start => todo!(),
-                            StreamUpdate::Progress(_, _) => todo!(),
-                            StreamUpdate::Finish => todo!(),
-                        }
-                    });
+        match Installer::new(uri) {
+            Ok(mut installer) => {
+                installer.on_update(params.on_update);
 
-                    todo!();
-                },
-                Err(err) => Err(DownloadError::StreamOpenError(err))
-            }
-        })
+                installer.set_downloader(params.downloader);
+                installer.set_downloader_interval(params.downloader_updates_interval);
+                installer.set_unpacker_interval(params.unpacker_updates_interval);
+
+                installer.install(path)
+            },
+            Err(err) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("Installer init error: {:?}", err)))
+        }
     }
 }
 

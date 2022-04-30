@@ -1,5 +1,10 @@
 use crate::consts;
 use crate::json_schemas;
+use crate::installer::prelude::*;
+
+use std::io::ErrorKind;
+use std::time::Duration;
+use std::io::Error;
 
 mod game_version;
 mod voice_packages;
@@ -51,5 +56,28 @@ impl Game {
         let remote = if let Ok(remote) = self.get_remote() { Some(remote.clone()) } else { None };
 
         VoicePackages::new(self.path.clone(), remote)
+    }
+
+    pub fn download(&mut self, path: &str, params: InstallerParams) -> Result<Duration, Error> {
+        match self.get_remote() {
+            Ok(remote) => {
+                let path = path.to_string();
+                let uri = &remote.data.game.latest.path;
+
+                match Installer::new(uri) {
+                    Ok(mut installer) => {
+                        installer.on_update(params.on_update);
+
+                        installer.set_downloader(params.downloader);
+                        installer.set_downloader_interval(params.downloader_updates_interval);
+                        installer.set_unpacker_interval(params.unpacker_updates_interval);
+
+                        installer.install(path)
+                    },
+                    Err(err) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("Installer init error: {:?}", err)))
+                }
+            },
+            Err(err) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("Installer init error: {:?}", err)))
+        }
     }
 }

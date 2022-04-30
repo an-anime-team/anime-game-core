@@ -27,9 +27,37 @@ pub mod prelude {
     };
 
     pub use super::archives::StreamUpdate as UnpackerUpdate;
+    pub use super::InstallerParams;
 }
 
 use uuid::Uuid;
+
+pub struct InstallerParams {
+    pub downloader: Downloaders,
+    pub downloader_updates_interval: Duration,
+    pub unpacker_updates_interval: Duration,
+    pub on_update: Box<dyn Fn(InstallerUpdate) + 'static>
+}
+
+impl Default for InstallerParams {
+    fn default() -> Self {
+        Self {
+            downloader: Default::default(),
+            downloader_updates_interval: Duration::from_millis(500),
+            unpacker_updates_interval: Duration::from_millis(1000),
+            on_update: Box::new(|_| {})
+        }
+    }
+}
+
+impl InstallerParams {
+    pub fn with_updater<T: Fn(InstallerUpdate) + 'static>(on_update: T) -> Self {
+        Self {
+            on_update: Box::new(on_update),
+            ..Default::default()
+        }
+    }
+}
 
 pub enum InstallerUpdate {
     Downloader(DownloaderStreamUpdate),

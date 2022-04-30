@@ -17,6 +17,12 @@ pub enum Downloaders {
     Native
 }
 
+impl Default for Downloaders {
+    fn default() -> Self {
+        Self::Native
+    }
+}
+
 pub struct Stream {
     uri: String,
     response: minreq::ResponseLazy,
