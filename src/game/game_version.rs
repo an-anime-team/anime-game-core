@@ -82,6 +82,7 @@ impl GameVersion {
         }
     }
 
+    /// Try to parse installed game version
     pub fn installed(&self) -> Result<Version, Error> {
         match File::open(format!("{}/GenshinImpact_Data/globalgamemanagers", &self.path)) {
             Ok(file) => {
@@ -143,6 +144,9 @@ impl GameVersion {
         }
     }
 
+    /// Get latest available game version
+    /// 
+    /// Returns `None` if remote server is not available
     pub fn latest(&self) -> Option<Version> {
         match &self.remote {
             Some(remote) => Some(Version::from_str(remote.data.game.latest.version.as_str())),
@@ -150,6 +154,22 @@ impl GameVersion {
         }
     }
 
+    /// Check if the current game version is latest available
+    /// 
+    /// Returns `None` if this can't be checked (remote server is not available or failed to parse currently installed game version)
+    pub fn is_latest(&self) -> Option<bool> {
+        match self.installed() {
+            Ok(installed) => {
+                match self.latest() {
+                    Some(latest) => Some(installed == latest),
+                    None => None
+                }
+            },
+            Err(_) => None
+        }
+    }
+
+    /// Get difference between currently installed and latest available game versions
     pub fn diff(&self) -> Result<Diff, DiffError> {
         match &self.remote {
             Some(remote) => {

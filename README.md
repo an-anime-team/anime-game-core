@@ -1,6 +1,6 @@
 # 🦀 Anime Game Core
 
-WIP
+Common library to control the Genshin Impact installation, written in Rust
 
 ## Roadmap to 1.0.0
 
@@ -10,8 +10,8 @@ WIP
 
   Feature: `install`
 
-  - Install the game (calculate installation difference)
-  - Update existing installation
+  - <s>Install the game (calculate installation difference)</s>
+  - <s>Update existing installation</s>
   - Repair game files
 
 - Voice packages
@@ -20,7 +20,9 @@ WIP
 
   Feature: `install`
 
-  - Update outdated package
+  - </s>Install new voice packages</s>
+  - Download voice packages
+  - Update outdated packages
   - Repair broken packages
 
 Feature: `linux-patch`

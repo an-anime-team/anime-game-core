@@ -77,7 +77,7 @@ impl Game {
                     Err(err) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("Installer init error: {:?}", err)))
                 }
             },
-            Err(err) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("Installer init error: {:?}", err)))
+            Err(err) => Err(Error::new(ErrorKind::AddrNotAvailable, format!("Failed to fetch remote data: {:?}", err)))
         }
     }
 }
