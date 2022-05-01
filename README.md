@@ -20,8 +20,8 @@ Common library to control the Genshin Impact installation, written in Rust
 
   Feature: `install`
 
-  - </s>Install new voice packages</s>
-  - Download voice packages
+  - <s>Install new voice packages</s>
+  - <s>Delete voice packages</s>
   - Update outdated packages
   - Repair broken packages
 

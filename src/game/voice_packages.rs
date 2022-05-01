@@ -1,4 +1,4 @@
-use std::fs::read_dir;
+use std::fs::{read_dir, remove_dir_all};
 use std::io::{Error, ErrorKind};
 use std::time::Duration;
 
@@ -103,10 +103,21 @@ impl VoicePackages {
         }
     }
 
+    /// Get path to the voice packages folder
+    /// 
+    /// `<path_to_game>/<game>_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows`
     pub fn locales_folder(&self) -> String {
         format!("{}/GenshinImpact_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows", &self.path)
     }
 
+    /// Get path to the specified voice package folder
+    /// 
+    /// `<path_to_game>/<game>_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/<locale folder>`
+    pub fn get_locale_path(&self, locale: VoiceLocales) -> String {
+        format!("{}/{}", self.locales_folder(), Self::locale_to_folder(locale))
+    }
+
+    /// Get corresponding folder name for the specified voice locale
     pub fn folder_to_locale<T: ToString>(folder: T) -> Option<VoiceLocales> {
         for (locale, locale_folder) in LOCALES_FOLDERS {
             if locale_folder == &folder.to_string() {
@@ -117,6 +128,7 @@ impl VoicePackages {
         None
     }
 
+    /// Try to get corresponding voice locale for the specified folder name
     pub fn locale_to_folder(locale: VoiceLocales) -> String {
         for (voice_locale, folder) in LOCALES_FOLDERS {
             if voice_locale == &locale {
@@ -279,5 +291,10 @@ impl VoicePackages {
             },
             None => Err(Error::new(ErrorKind::InvalidData, "Remote server is not available"))
         }
+    }
+
+    /// Delete voice package
+    pub fn delete(&self, locale: VoiceLocales) -> Result<(), Error> {
+        remove_dir_all(self.get_locale_path(locale))
     }
 }
