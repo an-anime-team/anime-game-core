@@ -121,6 +121,10 @@ impl Game {
         }
     }
 
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
     /// Checks if the game is installed
     pub fn is_installed(&self) -> bool {
         Path::new(&self.path).exists()

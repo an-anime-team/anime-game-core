@@ -10,6 +10,7 @@ use crate::json_schemas::versions::{
     Response as ApiResponse,
     VoicePack as RemoteVoicePack
 };
+use crate::consts::get_voice_package_path;
 
 pub enum VoicePackage {
     Installed {
@@ -17,9 +18,9 @@ pub enum VoicePackage {
         locale: VoiceLocale
     },
     NotInstalled {
-        uri: String,
         locale: VoiceLocale,
-        version: Version
+        version: Version,
+        data: RemoteVoicePack
     }
 }
 
@@ -49,10 +50,35 @@ impl VoicePackage {
         }
     }
 
+    /// Get installation status of this package
+    /// 
+    /// This method will return `false` if this package is `VoicePackage::NotInstalled` enum value
+    /// 
+    /// If you want to check it's actually installed - you'd need to use `is_installed_in`
     pub fn is_installed(&self) -> bool {
         match self {
             Self::Installed { path: _, locale: _ } => true,
-            Self::NotInstalled { uri: _, locale: _, version: _ } => false
+            Self::NotInstalled { locale: _, version: _, data: _ } => false
+        }
+    }
+
+    /// Calculate voice package size in bytes
+    pub fn get_size(&self) -> u64 {
+        match self {
+            VoicePackage::Installed { path, locale: _ } => get_size(path).unwrap(),
+            VoicePackage::NotInstalled { locale: _, version: _, data } => data.package_size.parse::<u64>().unwrap(),
+        }
+    }
+
+    /// This method will return `true` if the package has `VoicePackage::Installed` enum value
+    /// 
+    /// If it's `VoicePackage::NotInstalled`, then this method will check `game_path`'s voices folder
+    pub fn is_installed_in<T: ToString>(&self, game_path: T) -> bool {
+        match self {
+            Self::Installed { path: _, locale: _ } => true,
+            Self::NotInstalled { locale, version: _, data: _ } => {
+                Path::new(&get_voice_package_path(game_path, locale.to_folder())).exists()
+            }
         }
     }
 
@@ -67,9 +93,9 @@ impl VoicePackage {
 
                         for package in response.data.game.latest.voice_packs {
                             packages.push(Self::NotInstalled {
-                                uri: package.path,
-                                locale: VoiceLocale::from_str(package.language).unwrap(),
-                                version: version.clone()
+                                locale: VoiceLocale::from_str(&package.language).unwrap(),
+                                version: version.clone(),
+                                data: package
                             });
                         }
 
@@ -85,7 +111,7 @@ impl VoicePackage {
     pub fn locale(&self) -> VoiceLocale {
         match self {
             Self::Installed { path: _, locale } => *locale,
-            Self::NotInstalled { uri: _, locale, version: _ } => *locale
+            Self::NotInstalled { locale, version: _, data: _ } => *locale
         }
     }
 
@@ -107,7 +133,7 @@ impl VoicePackage {
         }
 
         match &self {
-            Self::NotInstalled { uri: _, locale: _, version } => Some(*version),
+            Self::NotInstalled { locale: _, version, data: _ } => Some(*version),
             Self::Installed { path, locale } => {
                 // self.path is Some(...) if self.version is None
                 // this means that this struct was made from some currently installed path
