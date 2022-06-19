@@ -1,5 +1,5 @@
 [package]
-name = "animegame-core"
+name = "anime-game-core"
 version = "0.1.0"
 authors = ["Nikita Podvirnyy <suimin.tu.mu.ga.mi@gmail.com>"]
 license = "GPL-3.0"
@@ -7,14 +7,20 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-fs_extra = "1.2.0"
-minreq = { version = "2.6.0", features = ["json-using-serde", "https"] }
+curl = "0.4.43"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-uuid = { version = "1.0.0", features = ["v4", "fast-rng"], optional = true }
+fs_extra = "1.2.0"
+
+# Install feature
+uuid = { version = "1.1.2", features = ["v4", "fast-rng"], optional = true }
+zip = { version = "0.6.2", optional = true }
+tar = { version = "0.4.38", optional = true }
+
+# Compression types for tar
+xz = { version = "0.1.0", optional = true }
+bzip2 = { version = "0.4.3", optional = true }
+flate2 = { version = "1.0.24", optional = true }
 
 [features]
-install = ["dep:uuid"]
-linux-patch = ["install"]
-wine = ["install"]
-dxvk = ["install"]
+install = ["dep:uuid", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2"]

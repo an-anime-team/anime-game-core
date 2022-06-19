@@ -11,6 +11,12 @@ impl fmt::Debug for Version {
     }
 }
 
+impl fmt::Display for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.version[0], self.version[1], self.version[2])
+    }
+}
+
 impl Version {
     pub fn new(a: u8, b: u8, c: u8) -> Version {
         Version {
@@ -18,7 +24,7 @@ impl Version {
         }
     }
 
-    // TODO: long versions support (1111.222222.3333333)
+    // TODO: long versions support (1111.222222.3333333) and format checking
     pub fn from_str<T: ToString>(str: T) -> Version {
         // I had to write it like that
         let str = str.to_string();

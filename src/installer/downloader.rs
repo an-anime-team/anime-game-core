@@ -1,161 +1,148 @@
+use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
-use std::time::{Instant, Duration};
-use std::io::{Error, Write};
 use std::fs::File;
 
-pub enum StreamUpdate {
-    Start,
-    Progress(usize, usize),
-    Finish
+use curl::easy::Easy;
+
+#[derive(Debug)]
+pub struct Downloader {
+    length: Option<u64>,
+    curl: Easy
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Downloaders {
-    Aria2c,
-    Curl,
-    Native
-}
-
-impl Default for Downloaders {
-    fn default() -> Self {
-        Self::Native
-    }
-}
-
-pub struct Stream {
-    uri: String,
-    response: minreq::ResponseLazy,
-    total: usize,
-    on_update: Box<dyn Fn(StreamUpdate)>,
-    pub download_progress_interval: Duration
-}
-
-impl Stream {
-    pub const CHUNK_SIZE: usize = 1024;
-
-    pub fn open<T: ToString>(uri: T) -> Result<Stream, minreq::Error> {
-        match minreq::get(uri.to_string()).send_lazy() {
-            Ok(response) => {
-                let mut total = response.size_hint().0;
-
-                if let Some(len) = response.headers.get("content-length") {
-                    total = len.parse().unwrap();
-                }
-
-                Ok(Stream {
-                    uri: uri.to_string(),
-                    response,
-                    total,
-                    on_update: Box::new(|_| {}),
-                    download_progress_interval: Duration::from_millis(50)
-                })
-            },
-            Err(err) => Err(err)
-        }
-    }
-
-    pub fn on_update<T: Fn(StreamUpdate) + 'static>(&mut self, callback: T) {
-        self.on_update = Box::new(callback);
-    }
-
-    pub fn download<T: ToString>(&mut self, path: T, method: Downloaders) -> Result<Duration, Error> {
-        match method {
-            Downloaders::Aria2c => todo!(),
-            Downloaders::Curl => {
-                // curl -s -L -N -C - -o <output> <uri>
-                let child = Command::new("curl")
-                    .args([
-                        "-s", "-L", "-N", "-C", "-",
-                        "-o", path.to_string().as_str(),
-                        self.uri.as_str()
-                    ])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn();
-
-                match child {
-                    Ok(mut child) => {
-                        (self.on_update)(StreamUpdate::Start);
-
-                        let instant = Instant::now();
-
-                        while let Ok(None) = child.try_wait() {
-                            if let Ok(metadata) = Path::new(&path.to_string()).metadata() {
-                                (self.on_update)(StreamUpdate::Progress(usize::try_from(metadata.len()).unwrap(), self.total));
-                            }
-
-                            std::thread::sleep(self.download_progress_interval);
-                        }
-
-                        (self.on_update)(StreamUpdate::Finish);
-
-                        Ok(instant.elapsed())
-                    },
-                    Err(err) => Err(err)
-                }
-            },
-            Downloaders::Native => {
-                match File::create(path.to_string()) {
-                    Ok(mut file) => {
-                        (self.on_update)(StreamUpdate::Start);
-
-                        let instant = Instant::now();
-                        let mut progress = 0;
-
-                        while let Some(mut bytes) = self.get_chunk() {
-                            progress += bytes.len();
-                            
-                            (self.on_update)(StreamUpdate::Progress(progress, self.total));
-
-                            file.write_all(&mut bytes);
-                        }
-
-                        (self.on_update)(StreamUpdate::Finish);
-        
-                        Ok(instant.elapsed())
-                    },
-                    Err(err) => Err(err),
-                }
-            }
-        }
-    }
-
-    // TODO: improve speed
-    fn get_chunk(&mut self) -> Option<Vec<u8>> {
-        let mut chunk = Vec::with_capacity(Self::CHUNK_SIZE);
-
-        for _ in 0..Self::CHUNK_SIZE {
-            match self.response.next() {
-                Some(Ok((byte, _))) => chunk.push(byte),
-                Some(Err(_)) => break,
-                None => break
-            }
-        }
-
-        if chunk.len() > 0 { Some(chunk) } else { None }
-    }
-
-    pub fn get_total(&self) -> usize {
-        self.total
-    }
-
-    pub fn get_uri(&self) -> String {
-        self.uri.clone()
-    }
-
-    /// Get name of downloading file from uri
+impl Downloader {
+    /// Try to open downloading stream
     /// 
-    /// - `https://example.com/example.zip` -> `example.zip`
-    /// - `https://example.com` -> `index.html`
-    pub fn get_filename(&self) -> &str {
-        match self.uri.rfind('/') {
-            Some(index) => {
-                let file = &self.uri[index + 1..];
+    /// Will return `Error` if the URL is not valid
+    pub fn new<T: ToString>(uri: T) -> Result<Self, curl::Error> {
+        let mut curl = Easy::new();
 
-                if file == "" { "index.html" } else { file }
+        curl.url(&uri.to_string())?;
+
+        curl.follow_location(true)?;
+        curl.progress(true)?;
+
+        curl.nobody(true)?;
+
+        if let Ok(length) = curl.content_length_download() {
+            if length >= 0.0 {
+                return Ok(Self {
+                    length: Some(length.ceil() as u64),
+                    curl
+                });
+            }
+        }
+
+        else if let Ok(length) = curl.download_size() {
+            if length >= 0.0 {
+                return Ok(Self {
+                    length: Some(length.ceil() as u64),
+                    curl
+                });
+            }
+        }
+        
+        let (send, recv) = std::sync::mpsc::channel::<u64>();
+
+        curl.header_function(move |header| {
+            let header = String::from_utf8_lossy(header);
+
+            // Content-Length: 8899
+            if header.len() > 16 && &header[..16] == "Content-Length: " {
+                send.send(header[16..header.len() - 2].parse::<u64>().unwrap());
+            }
+
+            true
+        })?;
+
+        curl.perform()?;
+
+        let mut content_length = 0;
+
+        while let Ok(len) = recv.try_recv() {
+            if len > 0 {
+                content_length = len;
+            }
+        }
+
+        Ok(Self {
+            length: match content_length {
+                0 => None,
+                len => Some(len)
             },
-            None => "index.html"
+            curl
+        })
+    }
+
+    /// Try to get content length
+    pub fn try_get_length(&self) -> Option<u64> {
+        self.length
+    }
+
+    // TODO: verify available free space before starting downloading
+    // TODO: somehow use FnOnce instead of Fn
+
+    pub fn download<Fd, Fp>(&mut self, downloader: Fd, progress: Fp) -> Result<(), curl::Error>
+    where
+        // array of bytes
+        Fd: Fn(&[u8]) -> Result<usize, curl::easy::WriteError> + Send + 'static,
+        // (curr, total)
+        Fp: Fn(u64, u64) + Send + 'static
+    {
+        self.curl.nobody(false)?;
+
+        self.curl.write_function(move |data| {
+            (downloader)(data)
+        })?;
+
+        let content_length = self.length.clone();
+
+        self.curl.progress_function(move |expected_total, downloaded, _, _| {
+            (progress)(downloaded.ceil() as u64, content_length.unwrap_or(expected_total.ceil() as u64));
+
+            true
+        })?;
+
+        self.curl.perform()
+    }
+
+    pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), curl::Error>
+    where
+        T: ToString,
+        // (curr, total)
+        Fp: Fn(u64, u64) + Send + 'static
+    {
+        let path = path.to_string();
+
+        match File::create(Path::new(path.as_str())) {
+            Ok(mut file) => {
+                let (send, recv) = std::sync::mpsc::channel::<Vec<u8>>();
+
+                // TODO: downloading speed may be higher than disk writing speed, so
+                //       this thread can store lots of data in memory before pushing it
+                //       to the disk which can lead to some issues
+                //       it's better to somehow pause downloading if the queue is full
+
+                // FIXME: maaaaaaaaaaybeeeeeeeeee it's kinda slow, BUT my 400 MB benchmark said nah it's fast as possible
+
+                std::thread::spawn(move || {
+                    while let Ok(data) = recv.recv_timeout(std::time::Duration::from_secs(5)) {
+                        file.write(&data);
+                    }
+
+                    file.flush();
+                });
+        
+                self.download(move |data| {
+                    send.send(data.to_vec());
+
+                    Ok(data.len())
+                }, progress)
+            },
+            Err(_) => {
+                // FIXME
+                panic!("Failed to create output file");
+            }
         }
     }
 }

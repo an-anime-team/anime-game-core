@@ -1,17 +1,23 @@
-pub mod consts {
-    pub const VERSIONS_URL: &str = "https://sdk-os-static.mihoyo.com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10";
-}
-
-pub mod game;
-pub mod locales;
+pub mod consts;
+pub mod api;
 pub mod json_schemas;
-
-mod version;
-
-pub use version::Version;
+pub mod version;
+pub mod game;
+pub mod voice_data;
 
 #[cfg(feature = "install")]
 pub mod installer;
 
-#[cfg(test)]
-mod tests;
+pub mod prelude {
+    pub use super::consts::*;
+    pub use super::version::Version;
+    pub use super::api::API;
+    pub use super::game::{
+        Game,
+        VersionDiff as GameVersionDiff
+    };
+    pub use super::voice_data::prelude::*;
+
+    #[cfg(feature = "install")]
+    pub use super::installer::prelude::*;
+}

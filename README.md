@@ -7,11 +7,12 @@ Common library to control the Genshin Impact installation, written in Rust
 - Game installation
   - <s>Current game version</s>
   - <s>Latest game version</s>
+  - <s>Versions differences</s>
 
   Feature: `install`
 
-  - <s>Install the game (calculate installation difference)</s>
-  - <s>Update existing installation</s>
+  - Install the game
+  - Update existing installation
   - Repair game files
 
 - Voice packages
@@ -20,8 +21,8 @@ Common library to control the Genshin Impact installation, written in Rust
 
   Feature: `install`
 
-  - <s>Install new voice packages</s>
-  - <s>Delete voice packages</s>
+  - Install new voice packages
+  - Delete voice packages
   - Update outdated packages
   - Repair broken packages
 
