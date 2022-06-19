@@ -72,6 +72,8 @@ impl Installer {
             (download_progress_updater)(Update::DownloadingProgress(curr, total));
         }) {
             Ok(_) => {
+                (updater)(Update::DownloadingFinished);
+
                 match Archive::open(&temp_path) {
                     Some(mut archive) => {
                         (updater)(Update::UnpackingStarted(unpack_to.to_string()));

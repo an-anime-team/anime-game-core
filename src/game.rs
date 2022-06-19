@@ -10,7 +10,13 @@ use super::version::Version;
 use super::api::API;
 
 #[cfg(feature = "install")]
-use super::installer::downloader::Downloader;
+use super::installer::{
+    downloader::Downloader,
+    installer::{
+        Installer,
+        Update as InstallerUpdate
+    }
+};
 
 #[derive(Debug, Clone)]
 pub enum DiffDownloadError {
@@ -41,42 +47,6 @@ pub enum VersionDiff {
 }
 
 impl VersionDiff {
-    /// Try to download archive with game update
-    /// 
-    /// This archive will be downloaded as `[game path]/game.zip`
-    /// 
-    /// TODO: remove this method because in general it shouldn't be used. Instead, if you want to download
-    ///       just archive with the game, you likely want to use `download_to`. To install the game,
-    ///       meaning download its archive, unpack it to `[game path]` folder and then remove this archive,
-    ///       you need to use `install` or `install_to` method
-    #[cfg(feature = "install")]
-    pub fn download<Fd, Fp>(&self, progress: Fp) -> Result<(), DiffDownloadError>
-    where Fp: Fn(u64, u64) + Send + 'static
-    {
-        let url;
-        let path_to_game;
-
-        match self {
-            // Can't be downloaded
-            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
-
-            // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, data, game_path } => { url = data.path.clone(); path_to_game = game_path },
-            VersionDiff::NotInstalled { latest: _, data, game_path } => { url = data.path.clone(); path_to_game = game_path }
-        }
-
-        match Downloader::new(url) {
-            Ok(mut updater) => {
-                match updater.download_to(format!("{}/game.zip", path_to_game), progress) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(DiffDownloadError::Curl(err))
-                }
-            },
-            Err(err) => Err(DiffDownloadError::Curl(err))
-        }
-    }
-
     /// Try to download archive with game update by specified path
     #[cfg(feature = "install")]
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
@@ -103,6 +73,51 @@ impl VersionDiff {
                     Ok(_) => Ok(()),
                     Err(err) => Err(DiffDownloadError::Curl(err))
                 }
+            },
+            Err(err) => Err(DiffDownloadError::Curl(err))
+        }
+    }
+
+    /// Try to install the game
+    #[cfg(feature = "install")]
+    pub fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
+    where F: Fn(InstallerUpdate) + Clone + Send + 'static
+    {
+        match self {
+            // Can't be downloaded
+            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
+            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
+
+            // Can be downloaded
+            VersionDiff::Diff { current: _, latest: _, data: _, game_path } => self.install_to(game_path, updater),
+            VersionDiff::NotInstalled { latest: _, data: _, game_path } => self.install_to(game_path, updater)
+        }
+    }
+
+    /// Try to install the game by specified location
+    #[cfg(feature = "install")]
+    pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
+    where
+        T: ToString,
+        F: Fn(InstallerUpdate) + Clone + Send + 'static
+    {
+        let url;
+
+        match self {
+            // Can't be downloaded
+            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
+            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
+
+            // Can be downloaded
+            VersionDiff::Diff { current: _, latest: _, data, game_path: _ } => url = data.path.clone(),
+            VersionDiff::NotInstalled { latest: _, data, game_path: _ } => url = data.path.clone()
+        }
+
+        match Installer::new(url) {
+            Ok(mut installer) => {
+                installer.install(path, updater);
+
+                Ok(())
             },
             Err(err) => Err(DiffDownloadError::Curl(err))
         }

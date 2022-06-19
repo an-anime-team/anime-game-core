@@ -123,8 +123,6 @@ impl Downloader {
                 //       to the disk which can lead to some issues
                 //       it's better to somehow pause downloading if the queue is full
 
-                // FIXME: maaaaaaaaaaybeeeeeeeeee it's kinda slow, BUT my 400 MB benchmark said nah it's fast as possible
-
                 std::thread::spawn(move || {
                     while let Ok(data) = recv.recv_timeout(std::time::Duration::from_secs(5)) {
                         file.write(&data);
