@@ -4,6 +4,7 @@ pub mod json_schemas;
 pub mod version;
 pub mod game;
 pub mod voice_data;
+pub mod external;
 
 #[cfg(feature = "install")]
 pub mod installer;
@@ -20,4 +21,7 @@ pub mod prelude {
 
     #[cfg(feature = "install")]
     pub use super::installer::prelude::*;
+
+    #[cfg(feature = "install")]
+    pub use super::external::hdiff;
 }

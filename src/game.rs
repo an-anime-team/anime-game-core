@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{File, read_to_string, remove_file};
 use std::io::{Error, ErrorKind, Read};
 use std::path::Path;
 
@@ -115,9 +115,27 @@ impl VersionDiff {
 
         match Installer::new(url) {
             Ok(mut installer) => {
-                installer.install(path, updater);
+                installer.install(path.to_string(), updater);
 
-                Ok(())
+                // TODO: https://gitlab.com/an-anime-team/an-anime-game-launcher/-/blob/main/src/ts/launcher/states/ApplyChanges.ts
+                // TODO: update states for patches applying and removing of outdated files
+
+                // Remove outdated files
+                match read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
+                    Ok(files) => {
+                        for file in files.split("\n").collect::<Vec<&str>>() {
+                            let file: &str = file.trim_end();
+
+                            // TODO: add errors handling
+                            remove_file(file).expect("Failed to remove outdated file");
+                        }
+
+                        remove_file(format!("{}/deletefiles.txt", path.to_string())).expect("Failed to remove deletefiles.txt");
+
+                        Ok(())
+                    },
+                    Err(_) => todo!() // FIXME
+                }
             },
             Err(err) => Err(DiffDownloadError::Curl(err))
         }

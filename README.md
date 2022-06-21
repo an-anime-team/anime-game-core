@@ -4,40 +4,49 @@ Common library to control the Genshin Impact installation, written in Rust
 
 ## Roadmap to 1.0.0
 
-- Game installation
-  - <s>Current game version</s>
-  - <s>Latest game version</s>
-  - <s>Versions differences</s>
+* [ ] Game
+  * [x] Get current version
+  * [x] Calculate difference with the latest version
 
   Feature: `install`
 
-  - Install the game
-  - Update existing installation
-  - Repair game files
+  * [x] Install the difference
+  * [ ] Apply changes for updates
+    * [x] Remove outdated files
+    * [ ] Apply hdiff changes
+  * [ ] Repair game files
 
-- Voice packages
-  - <s>Installed voice packages</s>
-  - <s>Available voice packages</s>
+* [ ] Voice packages
+  * [x] List installed packages
+  * [x] Get packages versions
+  * [x] List available packages
+  * [ ] Calculate difference with the latest version
 
   Feature: `install`
 
-  - Install new voice packages
-  - Delete voice packages
-  - Update outdated packages
-  - Repair broken packages
+  * [ ] Install the difference
+  * [ ] Apply changes for updates
+    * [ ] Remove outdated files
+    * [ ] Apply hdiff changes
+  * [ ] Delete voice packages
+  * [ ] Repair broken packages
+
+Feature: `telemetry`
+
+* [ ] Disable / enable
 
 Feature: `linux-patch`
 
-- Identify installed patch info
-- Fetch remote patch info
-- Apply / revert patch
+* [ ] Identify installed patch info
+* [ ] Fetch remote patch info
+* [ ] Apply / revert patch
 
 Feature: `wine`
 
-- Manage wine installations (download, remove)
-- Create prefix
+* [ ] Manage wine installations (download, remove)
+* [ ] Create prefix
 
 Feature: `dxvk`
 
-- Manage DXVKs installations (download, remove)
-- Apply DXVK
+* [ ] Manage DXVKs installations (download, remove)
+* [ ] Apply DXVK
