@@ -8,6 +8,8 @@ use super::voice_data::package::VoicePackage;
 use super::consts::{get_voice_package_path, get_voice_packages_path};
 use super::version::Version;
 use super::api::API;
+
+#[cfg(feature = "install")]
 use super::installer::diff::{VersionDiff, TryGetDiff};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +126,7 @@ impl Game {
     }
 }
 
+#[cfg(feature = "install")]
 impl TryGetDiff for Game {
     fn try_get_diff(&self) -> Result<VersionDiff, Error> {
         match API::try_fetch() {

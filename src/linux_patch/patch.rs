@@ -1,6 +1,3 @@
-use std::fs::read_to_string;
-use std::io::{Error, ErrorKind};
-
 use crate::version::Version;
 use crate::curl::fetch;
 use crate::api::API;
@@ -26,13 +23,15 @@ pub enum Regions {
 
 impl Regions {
     /// Compares `player_hash` with inner values
+    /// 
+    /// If `player_hash` not equal to the inner value, then the patch was applied
     pub fn is_applied<T: ToString>(&self, player_hash: T) -> bool {
         let player_hash = &player_hash.to_string();
 
         match self {
-            Self::Global(hash) => hash == player_hash,
-            Self::China(hash) => hash == player_hash,
-            Self::Both { global, china } => global == player_hash || china == player_hash
+            Self::Global(hash) => hash != player_hash,
+            Self::China(hash) => hash != player_hash,
+            Self::Both { global, china } => global != player_hash && china != player_hash
         }
     }
 }
@@ -221,14 +220,14 @@ impl Patch {
     /// 
     /// This method will return `Ok(false)` if the patch is not available, outdated or in preparation state
     pub fn is_applied<T: ToString>(&self, game_path: T) -> Result<bool, std::io::Error> {
-        let dll =  read_to_string(format!("{}/UnityPlayer.dll", game_path.to_string()))?;
+        let dll = std::fs::read(format!("{}/UnityPlayer.dll", game_path.to_string()))?;
         let hash = format!("{:x}", md5::compute(dll));
 
         match self {
             Patch::NotAvailable => Ok(false),
             Patch::Outdated { .. } => Ok(false),
             Patch::Preparation { .. } => Ok(false),
-            
+
             Patch::Testing { player_hash, .. } => Ok(player_hash.is_applied(hash)),
             Patch::Available { player_hash, .. } => Ok(player_hash.is_applied(hash))
         }

@@ -26,4 +26,7 @@ pub mod prelude {
 
     #[cfg(feature = "install")]
     pub use super::external::hdiff;
+
+    #[cfg(feature = "linux-patch")]
+    pub use super::linux_patch::Patch;
 }
