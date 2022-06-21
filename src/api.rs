@@ -6,6 +6,9 @@ use serde::Deserialize;
 
 use super::consts::API_URI;
 
+static mut RESPONSE_CACHE: Option<Response> = None;
+
+#[derive(Debug, Clone)]
 pub struct Response {
     data: Vec<u8>
 }
@@ -33,31 +36,41 @@ impl<'a> Response {
 pub struct API;
 
 impl<'a> API {
-    /// Remote server can not be available
-    /// TODO: cache response
+    /// Remote server can be not available
     pub fn try_fetch() -> Result<Response, curl::Error> {
-        let mut curl = Easy::new();
-        let (sender, receiver) = mpsc::channel();
+        unsafe {
+            match &RESPONSE_CACHE {
+                Some(cache) => Ok(cache.clone()),
+                None => {
+                    let mut curl = Easy::new();
+                    let (sender, receiver) = mpsc::channel();
 
-        curl.url(API_URI)?;
+                    curl.url(API_URI)?;
 
-        curl.write_function(move |data| {
-            sender.send(Vec::from(data));
+                    curl.write_function(move |data| {
+                        sender.send(Vec::from(data));
 
-            Ok(data.len())
-        })?;
+                        Ok(data.len())
+                    })?;
 
-        curl.perform()?;
+                    curl.perform()?;
 
-        let mut result = Vec::new();
+                    let mut result = Vec::new();
 
-        while let Ok(mut data) = receiver.try_recv() {
-            result.append(&mut data);
+                    while let Ok(mut data) = receiver.try_recv() {
+                        result.append(&mut data);
+                    }
+
+                    let response = Response {
+                        data: result
+                    };
+
+                    RESPONSE_CACHE = Some(response.clone());
+
+                    Ok(response)
+                }
+            }
         }
-
-        Ok(Response {
-            data: result
-        })
     }
 
     // TODO: add try_fetch_json
