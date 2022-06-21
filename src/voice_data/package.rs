@@ -60,16 +60,16 @@ impl VoicePackage {
     /// If you want to check it's actually installed - you'd need to use `is_installed_in`
     pub fn is_installed(&self) -> bool {
         match self {
-            Self::Installed { path: _, locale: _ } => true,
-            Self::NotInstalled { locale: _, version: _, data: _, game_path: _ } => false
+            Self::Installed { .. } => true,
+            Self::NotInstalled { .. } => false
         }
     }
 
     /// Calculate voice package size in bytes
     pub fn get_size(&self) -> u64 {
         match self {
-            VoicePackage::Installed { path, locale: _ } => get_size(path).unwrap(),
-            VoicePackage::NotInstalled { locale: _, version: _, data, game_path: _ } => data.package_size.parse::<u64>().unwrap(),
+            VoicePackage::Installed { path, .. } => get_size(path).unwrap(),
+            VoicePackage::NotInstalled { data, .. } => data.package_size.parse::<u64>().unwrap(),
         }
     }
 
@@ -78,8 +78,8 @@ impl VoicePackage {
     /// If it's `VoicePackage::NotInstalled`, then this method will check `game_path`'s voices folder
     pub fn is_installed_in<T: ToString>(&self, game_path: T) -> bool {
         match self {
-            Self::Installed { path: _, locale: _ } => true,
-            Self::NotInstalled { locale, version: _, data: _, game_path: _ } => {
+            Self::Installed { .. } => true,
+            Self::NotInstalled { locale, .. } => {
                 Path::new(&get_voice_package_path(game_path, locale.to_folder())).exists()
             }
         }
@@ -232,8 +232,8 @@ impl TryGetDiff for VoicePackage {
                                                 download_size: diff.size.parse::<u64>().unwrap(),
                                                 unpacked_size: diff.package_size.parse::<u64>().unwrap(),
                                                 unpacking_path: match self {
-                                                    VoicePackage::Installed { path: _, locale: _ } => None,
-                                                    VoicePackage::NotInstalled { locale: _, version: _, data: _, game_path } => game_path.clone(),
+                                                    VoicePackage::Installed { .. } => None,
+                                                    VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
                                                 }
                                             })
                                         }
@@ -258,8 +258,8 @@ impl TryGetDiff for VoicePackage {
                             download_size: latest.size.parse::<u64>().unwrap(),
                             unpacked_size: latest.package_size.parse::<u64>().unwrap(),
                             unpacking_path: match self {
-                                VoicePackage::Installed { path: _, locale: _ } => None,
-                                VoicePackage::NotInstalled { locale: _, version: _, data: _, game_path } => game_path.clone(),
+                                VoicePackage::Installed { .. } => None,
+                                VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
                             }
                         })
                     }

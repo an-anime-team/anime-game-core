@@ -82,8 +82,8 @@ impl VersionDiff {
             VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, url: diff_url, download_size: _, unpacked_size: _, unpacking_path: _ } => url = diff_url.clone(),
-            VersionDiff::NotInstalled { latest: _, url: diff_url, download_size: _, unpacked_size: _, unpacking_path: _ } => url = diff_url.clone()
+            VersionDiff::Diff { url: diff_url, .. } => url = diff_url.clone(),
+            VersionDiff::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
         }
 
         match Downloader::new(url) {
@@ -112,13 +112,13 @@ impl VersionDiff {
             VersionDiff::Outdated { current: _, latest: _ } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, url: _, download_size: _, unpacked_size: _, unpacking_path } => {
+            VersionDiff::Diff { unpacking_path, .. } => {
                 match unpacking_path {
                     Some(unpacking_path) => self.install_to(unpacking_path, updater),
                     None => Err(DiffDownloadError::PathNotSpecified)
                 }
             },
-            VersionDiff::NotInstalled { latest: _, url: _, download_size: _, unpacked_size: _, unpacking_path } => {
+            VersionDiff::NotInstalled { unpacking_path, .. } => {
                 match unpacking_path {
                     Some(unpacking_path) => self.install_to(unpacking_path, updater),
                     None => Err(DiffDownloadError::PathNotSpecified)
@@ -142,8 +142,8 @@ impl VersionDiff {
             VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, url: diff_url, download_size: _, unpacked_size: _, unpacking_path: _ } => url = diff_url.clone(),
-            VersionDiff::NotInstalled { latest: _, url: diff_url, download_size: _, unpacked_size: _, unpacking_path: _ } => url = diff_url.clone()
+            VersionDiff::Diff { url: diff_url, .. } => url = diff_url.clone(),
+            VersionDiff::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
         }
 
         match Installer::new(url) {
@@ -182,8 +182,8 @@ impl VersionDiff {
             VersionDiff::Outdated { current: _, latest: _ } => None,
 
             // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, url: diff_url, download_size, unpacked_size, unpacking_path: _ } => Some((*download_size, *unpacked_size)),
-            VersionDiff::NotInstalled { latest: _, url: diff_url, download_size, unpacked_size, unpacking_path: _ } => Some((*download_size, *unpacked_size))
+            VersionDiff::Diff { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size)),
+            VersionDiff::NotInstalled { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size))
         }
     }
 
@@ -195,8 +195,8 @@ impl VersionDiff {
             VersionDiff::Outdated { current: _, latest: _ } => None,
 
             // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, url: diff_url, download_size: _, unpacked_size: _, unpacking_path } => unpacking_path.clone(),
-            VersionDiff::NotInstalled { latest: _, url: diff_url, download_size: _, unpacked_size: _, unpacking_path } => unpacking_path.clone()
+            VersionDiff::Diff { unpacking_path, .. } => unpacking_path.clone(),
+            VersionDiff::NotInstalled { unpacking_path, .. } => unpacking_path.clone()
         }
     }
 }
