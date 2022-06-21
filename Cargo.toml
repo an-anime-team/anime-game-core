@@ -22,7 +22,10 @@ xz = { version = "0.1.0", optional = true }
 bzip2 = { version = "0.4.3", optional = true }
 flate2 = { version = "1.0.24", optional = true }
 
+# Linux patch feature
+md5 = { version = "0.7.0", optional = true }
+
 [features]
 install = ["dep:uuid", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2"]
-linux-patch = []
+linux-patch = ["dep:md5"]
 all = ["install", "linux-patch"]
