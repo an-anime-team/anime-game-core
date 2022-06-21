@@ -1,5 +1,8 @@
 use serde::Deserialize;
 
+// In theory this can not contain data field
+// and has some actual error, but I never had it in practice
+
 #[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Response {
     pub retcode: u16,
@@ -12,10 +15,13 @@ pub struct Data {
     pub web_url: String,
     pub game: Game,
 
+    // We're not talking about it here
+    
+    // pub pre_download_game, // TODO
+
     // pub deprecated_packages,
     // pub plugin: Plugin,
     // pub force_update,
-    // pub pre_download_game,
     // pub sdk
 }
 

@@ -14,6 +14,19 @@ use crate::json_schemas::versions::{
 use crate::consts::get_voice_package_path;
 use crate::installer::diff::{VersionDiff, TryGetDiff};
 
+/// Find voice package with specified locale from list of packages
+fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
+    for pack in list {
+        if pack.language == locale.to_code() {
+            return pack;
+        }
+    }
+
+    // We're sure that all possible voice packages are listed in VoiceLocale... right?
+    unreachable!();
+}
+
+#[derive(Debug, Clone)]
 pub enum VoicePackage {
     Installed {
         path: String,
@@ -52,6 +65,33 @@ impl VoicePackage {
             None
         }
     }
+
+    /// Get latest voice package with specified locale
+    /// 
+    /// Note that returned object will be `VoicePackage::NotInstalled`, but
+    /// technically it can be installed. This method just don't know the game's path
+    pub fn with_locale(locale: VoiceLocale) -> Option<Self> {
+        match API::try_fetch() {
+            Ok(response) => {
+                match response.try_json::<ApiResponse>() {
+                    Ok(response) => {
+                        let latest = response.data.game.latest;
+
+                        Some(Self::NotInstalled {
+                            locale,
+                            version: Version::from_str(latest.version),
+                            data: find_voice_pack(latest.voice_packs, locale),
+                            game_path: None
+                        })
+                    },
+                    Err(_) => None
+                }
+            },
+            Err(_) => None
+        }
+    }
+
+    // TODO: find_in(game_path: String, locale: VoiceLocale)
 
     /// Get installation status of this package
     /// 
@@ -126,17 +166,6 @@ impl VoicePackage {
     /// 
     /// TODO: maybe some errors output
     pub fn try_get_version(&self) -> Option<Version> {
-        fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
-            for pack in list {
-                if pack.language == locale.to_code() {
-                    return pack;
-                }
-            }
-    
-            // We're sure that all possible voice packages are listed in VoiceLocale... right?
-            unreachable!();
-        }
-
         match &self {
             Self::NotInstalled { locale: _, version, data: _, game_path: _} => Some(*version),
             Self::Installed { path, locale } => {
@@ -225,6 +254,8 @@ impl TryGetDiff for VoicePackage {
                                 else {
                                     for diff in response.data.game.diffs {
                                         if diff.version == current {
+                                            let diff = find_voice_pack(diff.voice_packs, self.locale());
+
                                             return Ok(VersionDiff::Diff {
                                                 current,
                                                 latest: Version::from_str(response.data.game.latest.version),
@@ -250,10 +281,10 @@ impl TryGetDiff for VoicePackage {
                     }
                     
                     else {
-                        let latest = response.data.game.latest;
+                        let latest = find_voice_pack(response.data.game.latest.voice_packs, self.locale());
 
                         Ok(VersionDiff::NotInstalled {
-                            latest: Version::from_str(&latest.version),
+                            latest: Version::from_str(response.data.game.latest.version),
                             url: latest.path,
                             download_size: latest.size.parse::<u64>().unwrap(),
                             unpacked_size: latest.package_size.parse::<u64>().unwrap(),

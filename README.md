@@ -20,13 +20,13 @@ Common library to control the Anime Game installation, written in Rust
   * [x] List installed packages
   * [x] Get packages versions
   * [x] List available packages
-  * [ ] Calculate difference with the latest version
+  * [x] Calculate difference with the latest version
 
   Feature: `install`
 
-  * [ ] Install the difference
+  * [x] Install the difference
   * [ ] Apply changes for updates
-    * [ ] Remove outdated files
+    * [x] Remove outdated files
     * [ ] Apply hdiff changes
   * [ ] Delete voice packages
   * [ ] Repair broken packages

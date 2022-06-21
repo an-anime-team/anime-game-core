@@ -68,7 +68,7 @@ pub enum VersionDiff {
 impl VersionDiff {
     /// Try to download archive with the difference by specified path
     #[cfg(feature = "install")]
-    fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
+    pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
     where
         T: ToString,
         // (curr, total)
@@ -103,7 +103,7 @@ impl VersionDiff {
     /// It's recommended to use `unpacking_path` before this method to be sure that current enum knows
     /// where the difference should be installed
     #[cfg(feature = "install")]
-    fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
+    pub fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
     where F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
         match self {
@@ -129,7 +129,7 @@ impl VersionDiff {
 
     /// Try to install the difference by specified location
     #[cfg(feature = "install")]
-    fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
+    pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
     where
         T: ToString,
         F: Fn(InstallerUpdate) + Clone + Send + 'static
@@ -154,21 +154,19 @@ impl VersionDiff {
                 // TODO: update states for patches applying and removing of outdated files
 
                 // Remove outdated files
-                match read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
-                    Ok(files) => {
-                        for file in files.split("\n").collect::<Vec<&str>>() {
-                            let file: &str = file.trim_end();
+                // We're ignoring Err because in practice it means that deletefiles.txt is missing
+                if let Ok(files) = read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
+                    for file in files.split("\n").collect::<Vec<&str>>() {
+                        let file: &str = file.trim_end();
 
-                            // TODO: add errors handling
-                            remove_file(file).expect("Failed to remove outdated file");
-                        }
+                        // TODO: add errors handling
+                        remove_file(file).expect("Failed to remove outdated file");
+                    }
 
-                        remove_file(format!("{}/deletefiles.txt", path.to_string())).expect("Failed to remove deletefiles.txt");
-
-                        Ok(())
-                    },
-                    Err(_) => todo!() // FIXME
+                    remove_file(format!("{}/deletefiles.txt", path.to_string())).expect("Failed to remove deletefiles.txt");
                 }
+                
+                Ok(())
             },
             Err(err) => Err(DiffDownloadError::Curl(err))
         }
