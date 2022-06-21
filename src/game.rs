@@ -8,7 +8,7 @@ use super::voice_data::package::VoicePackage;
 use super::consts::{get_voice_package_path, get_voice_packages_path};
 use super::version::Version;
 use super::api::API;
-use super::installer::diff::*;
+use super::installer::diff::{VersionDiff, TryGetDiff};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
@@ -122,9 +122,10 @@ impl Game {
             Err(err) => Err(err)
         }
     }
+}
 
-    /// Try to get difference between currently installed game version and the latest available
-    pub fn try_get_diff(&self) -> Result<VersionDiff, Error> {
+impl TryGetDiff for Game {
+    fn try_get_diff(&self) -> Result<VersionDiff, Error> {
         match API::try_fetch() {
             Ok(response) => match response.try_json::<super::json_schemas::versions::Response>() {
                 Ok(response) => {
@@ -142,8 +143,9 @@ impl Game {
                                                 current,
                                                 latest: Version::from_str(response.data.game.latest.version),
                                                 url: diff.path,
-                                                size: diff.package_size.parse::<u64>().unwrap(),
-                                                unpacking_path: self.path.clone()
+                                                download_size: diff.size.parse::<u64>().unwrap(),
+                                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                                unpacking_path: Some(self.path.clone())
                                             })
                                         }
                                     }
@@ -159,11 +161,14 @@ impl Game {
                     }
                     
                     else {
+                        let latest = response.data.game.latest;
+
                         Ok(VersionDiff::NotInstalled {
-                            latest: Version::from_str(&response.data.game.latest.version),
-                            url: response.data.game.latest.path,
-                            size: response.data.game.latest.package_size.parse::<u64>().unwrap(),
-                            unpacking_path: self.path.clone()
+                            latest: Version::from_str(&latest.version),
+                            url: latest.path,
+                            download_size: latest.size.parse::<u64>().unwrap(),
+                            unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                            unpacking_path: Some(self.path.clone())
                         })
                     }
                 },

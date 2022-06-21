@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::cmp::{max, min};
+use std::io::{Error, ErrorKind};
 
 use fs_extra::dir::get_size;
 
@@ -11,6 +12,7 @@ use crate::json_schemas::versions::{
     VoicePack as RemoteVoicePack
 };
 use crate::consts::get_voice_package_path;
+use crate::installer::diff::{VersionDiff, TryGetDiff};
 
 pub enum VoicePackage {
     Installed {
@@ -20,7 +22,8 @@ pub enum VoicePackage {
     NotInstalled {
         locale: VoiceLocale,
         version: Version,
-        data: RemoteVoicePack
+        data: RemoteVoicePack,
+        game_path: Option<String>
     }
 }
 
@@ -58,7 +61,7 @@ impl VoicePackage {
     pub fn is_installed(&self) -> bool {
         match self {
             Self::Installed { path: _, locale: _ } => true,
-            Self::NotInstalled { locale: _, version: _, data: _ } => false
+            Self::NotInstalled { locale: _, version: _, data: _, game_path: _ } => false
         }
     }
 
@@ -66,7 +69,7 @@ impl VoicePackage {
     pub fn get_size(&self) -> u64 {
         match self {
             VoicePackage::Installed { path, locale: _ } => get_size(path).unwrap(),
-            VoicePackage::NotInstalled { locale: _, version: _, data } => data.package_size.parse::<u64>().unwrap(),
+            VoicePackage::NotInstalled { locale: _, version: _, data, game_path: _ } => data.package_size.parse::<u64>().unwrap(),
         }
     }
 
@@ -76,7 +79,7 @@ impl VoicePackage {
     pub fn is_installed_in<T: ToString>(&self, game_path: T) -> bool {
         match self {
             Self::Installed { path: _, locale: _ } => true,
-            Self::NotInstalled { locale, version: _, data: _ } => {
+            Self::NotInstalled { locale, version: _, data: _, game_path: _ } => {
                 Path::new(&get_voice_package_path(game_path, locale.to_folder())).exists()
             }
         }
@@ -95,7 +98,8 @@ impl VoicePackage {
                             packages.push(Self::NotInstalled {
                                 locale: VoiceLocale::from_str(&package.language).unwrap(),
                                 version: version.clone(),
-                                data: package
+                                data: package,
+                                game_path: None
                             });
                         }
 
@@ -108,10 +112,11 @@ impl VoicePackage {
         }
     }
 
+    /// Get voice package locale
     pub fn locale(&self) -> VoiceLocale {
         match self {
             Self::Installed { path: _, locale } => *locale,
-            Self::NotInstalled { locale, version: _, data: _ } => *locale
+            Self::NotInstalled { locale, version: _, data: _, game_path: _ } => *locale
         }
     }
 
@@ -120,7 +125,7 @@ impl VoicePackage {
     /// contain voice package files
     /// 
     /// TODO: maybe some errors output
-    pub fn try_get_version(&mut self) -> Option<Version> {
+    pub fn try_get_version(&self) -> Option<Version> {
         fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
             for pack in list {
                 if pack.language == locale.to_code() {
@@ -133,7 +138,7 @@ impl VoicePackage {
         }
 
         match &self {
-            Self::NotInstalled { locale: _, version, data: _ } => Some(*version),
+            Self::NotInstalled { locale: _, version, data: _, game_path: _} => Some(*version),
             Self::Installed { path, locale } => {
                 // self.path is Some(...) if self.version is None
                 // this means that this struct was made from some currently installed path
@@ -201,6 +206,67 @@ impl VoicePackage {
                     Err(_) => None
                 }
             }
+        }
+    }
+}
+
+impl TryGetDiff for VoicePackage {
+    fn try_get_diff(&self) -> Result<VersionDiff, Error> {
+        match API::try_fetch() {
+            Ok(response) => match response.try_json::<ApiResponse>() {
+                Ok(response) => {
+                    if self.is_installed() {
+                        match self.try_get_version() {
+                            Some(current) => {
+                                if response.data.game.latest.version == current {
+                                    Ok(VersionDiff::Latest(current))
+                                }
+            
+                                else {
+                                    for diff in response.data.game.diffs {
+                                        if diff.version == current {
+                                            return Ok(VersionDiff::Diff {
+                                                current,
+                                                latest: Version::from_str(response.data.game.latest.version),
+                                                url: diff.path,
+                                                download_size: diff.size.parse::<u64>().unwrap(),
+                                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                                unpacking_path: match self {
+                                                    VoicePackage::Installed { path: _, locale: _ } => None,
+                                                    VoicePackage::NotInstalled { locale: _, version: _, data: _, game_path } => game_path.clone(),
+                                                }
+                                            })
+                                        }
+                                    }
+            
+                                    Ok(VersionDiff::Outdated {
+                                        current,
+                                        latest: Version::from_str(response.data.game.latest.version)
+                                    })
+                                }
+                            },
+                            None => Err(Error::new(ErrorKind::Other, "Failed to get voice package version"))
+                        }
+                    }
+                    
+                    else {
+                        let latest = response.data.game.latest;
+
+                        Ok(VersionDiff::NotInstalled {
+                            latest: Version::from_str(&latest.version),
+                            url: latest.path,
+                            download_size: latest.size.parse::<u64>().unwrap(),
+                            unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                            unpacking_path: match self {
+                                VoicePackage::Installed { path: _, locale: _ } => None,
+                                VoicePackage::NotInstalled { locale: _, version: _, data: _, game_path } => game_path.clone(),
+                            }
+                        })
+                    }
+                },
+                Err(err) => Err(Error::new(ErrorKind::InvalidData, format!("Failed to decode server response: {}", err.to_string())))
+            },
+            Err(err) => Err(err)
         }
     }
 }
