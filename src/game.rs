@@ -1,4 +1,4 @@
-use std::fs::{File, read_to_string, remove_file};
+use std::fs::File;
 use std::io::{Error, ErrorKind, Read};
 use std::path::Path;
 
@@ -8,139 +8,7 @@ use super::voice_data::package::VoicePackage;
 use super::consts::{get_voice_package_path, get_voice_packages_path};
 use super::version::Version;
 use super::api::API;
-
-#[cfg(feature = "install")]
-use super::installer::{
-    downloader::Downloader,
-    installer::{
-        Installer,
-        Update as InstallerUpdate
-    }
-};
-
-#[derive(Debug, Clone)]
-pub enum DiffDownloadError {
-    AlreadyLatest,
-    Outdated,
-    Curl(curl::Error)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VersionDiff {
-    Latest(Version),
-    Diff {
-        current: Version,
-        latest: Version,
-        data: super::json_schemas::versions::Diff,
-        game_path: String
-    },
-    /// Difference can't be calculated because installed game version is too old
-    Outdated {
-        current: Version,
-        latest: Version
-    },
-    NotInstalled {
-        latest: Version,
-        data: super::json_schemas::versions::Latest,
-        game_path: String
-    }
-}
-
-impl VersionDiff {
-    /// Try to download archive with game update by specified path
-    #[cfg(feature = "install")]
-    pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
-    where
-        T: ToString,
-        // (curr, total)
-        Fp: Fn(u64, u64) + Send + 'static
-    {
-        let url;
-
-        match self {
-            // Can't be downloaded
-            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
-
-            // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, data, game_path: _ } => url = data.path.clone(),
-            VersionDiff::NotInstalled { latest: _, data, game_path: _ } => url = data.path.clone()
-        }
-
-        match Downloader::new(url) {
-            Ok(mut downloader) => {
-                match downloader.download_to(path, progress) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(DiffDownloadError::Curl(err))
-                }
-            },
-            Err(err) => Err(DiffDownloadError::Curl(err))
-        }
-    }
-
-    /// Try to install the game
-    #[cfg(feature = "install")]
-    pub fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
-    where F: Fn(InstallerUpdate) + Clone + Send + 'static
-    {
-        match self {
-            // Can't be downloaded
-            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
-
-            // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, data: _, game_path } => self.install_to(game_path, updater),
-            VersionDiff::NotInstalled { latest: _, data: _, game_path } => self.install_to(game_path, updater)
-        }
-    }
-
-    /// Try to install the game by specified location
-    #[cfg(feature = "install")]
-    pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
-    where
-        T: ToString,
-        F: Fn(InstallerUpdate) + Clone + Send + 'static
-    {
-        let url;
-
-        match self {
-            // Can't be downloaded
-            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
-
-            // Can be downloaded
-            VersionDiff::Diff { current: _, latest: _, data, game_path: _ } => url = data.path.clone(),
-            VersionDiff::NotInstalled { latest: _, data, game_path: _ } => url = data.path.clone()
-        }
-
-        match Installer::new(url) {
-            Ok(mut installer) => {
-                installer.install(path.to_string(), updater);
-
-                // TODO: https://gitlab.com/an-anime-team/an-anime-game-launcher/-/blob/main/src/ts/launcher/states/ApplyChanges.ts
-                // TODO: update states for patches applying and removing of outdated files
-
-                // Remove outdated files
-                match read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
-                    Ok(files) => {
-                        for file in files.split("\n").collect::<Vec<&str>>() {
-                            let file: &str = file.trim_end();
-
-                            // TODO: add errors handling
-                            remove_file(file).expect("Failed to remove outdated file");
-                        }
-
-                        remove_file(format!("{}/deletefiles.txt", path.to_string())).expect("Failed to remove deletefiles.txt");
-
-                        Ok(())
-                    },
-                    Err(_) => todo!() // FIXME
-                }
-            },
-            Err(err) => Err(DiffDownloadError::Curl(err))
-        }
-    }
-}
+use super::installer::diff::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
@@ -273,8 +141,9 @@ impl Game {
                                             return Ok(VersionDiff::Diff {
                                                 current,
                                                 latest: Version::from_str(response.data.game.latest.version),
-                                                data: diff,
-                                                game_path: self.path.clone()
+                                                url: diff.path,
+                                                size: diff.package_size.parse::<u64>().unwrap(),
+                                                unpacking_path: self.path.clone()
                                             })
                                         }
                                     }
@@ -292,8 +161,9 @@ impl Game {
                     else {
                         Ok(VersionDiff::NotInstalled {
                             latest: Version::from_str(&response.data.game.latest.version),
-                            data: response.data.game.latest,
-                            game_path: self.path.clone()
+                            url: response.data.game.latest.path,
+                            size: response.data.game.latest.package_size.parse::<u64>().unwrap(),
+                            unpacking_path: self.path.clone()
                         })
                     }
                 },

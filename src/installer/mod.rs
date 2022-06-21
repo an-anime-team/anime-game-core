@@ -1,6 +1,7 @@
 pub mod downloader;
 pub mod archives;
 pub mod installer;
+pub mod diff;
 
 pub mod prelude {
     pub use super::downloader::Downloader;
@@ -9,4 +10,5 @@ pub mod prelude {
         Installer,
         Update as InstallerUpdate
     };
+    pub use super::diff::*;
 }

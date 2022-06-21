@@ -1,6 +1,6 @@
 # 🦀 Anime Game Core
 
-Common library to control the Genshin Impact installation, written in Rust
+Common library to control the Anime Game installation, written in Rust
 
 ## Roadmap to 1.0.0
 

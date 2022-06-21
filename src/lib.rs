@@ -13,10 +13,7 @@ pub mod prelude {
     pub use super::consts::*;
     pub use super::version::Version;
     pub use super::api::API;
-    pub use super::game::{
-        Game,
-        VersionDiff as GameVersionDiff
-    };
+    pub use super::game::Game;
     pub use super::voice_data::prelude::*;
 
     #[cfg(feature = "install")]
