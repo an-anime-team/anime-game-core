@@ -125,7 +125,7 @@ impl VoicePackage {
         }
     }
 
-    /// Get list of 
+    /// Get list of latest voice packages
     pub fn list_latest() -> Option<Vec<VoicePackage>> {
         match API::try_fetch() {
             Ok(response) => {

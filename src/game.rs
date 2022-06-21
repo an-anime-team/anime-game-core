@@ -33,6 +33,19 @@ impl Game {
         Path::new(&self.path).exists()
     }
 
+    /// Try to get latest game version
+    pub fn try_get_latest_version() -> Option<Version> {
+        match API::try_fetch() {
+            Ok(response) => {
+                match response.try_json::<crate::json_schemas::versions::Response>() {
+                    Ok(response) => Some(Version::from_str(response.data.game.latest.version)),
+                    Err(_) => None
+                }
+            },
+            Err(_) => None
+        }
+    }
+
     /// Try to get installed game version
     pub fn try_get_version(&self) -> Result<Version, Error> {
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
