@@ -1,8 +1,7 @@
-use std::io::Error;
 use std::string::FromUtf8Error;
 use std::sync::mpsc;
 
-use curl::easy::Easy as curl;
+use curl::easy::Easy;
 use serde::Deserialize;
 
 use super::consts::API_URI;
@@ -36,8 +35,8 @@ pub struct API;
 impl<'a> API {
     /// Remote server can not be available
     /// TODO: cache response
-    pub fn try_fetch() -> Result<Response, Error> {
-        let mut curl = curl::new();
+    pub fn try_fetch() -> Result<Response, curl::Error> {
+        let mut curl = Easy::new();
         let (sender, receiver) = mpsc::channel();
 
         curl.url(API_URI)?;

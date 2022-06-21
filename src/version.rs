@@ -33,8 +33,22 @@ impl Version {
         Version::new(str[0] - 48, str[2] - 48, str[4] - 48)
     }
 
+    /// Converts `Version` struct to readable format (e.g. "1.2.3")
+    /// 
+    /// ```
+    /// assert_eq!(Version::new(1, 2, 3).to_string(), "1.2.3");
+    /// ```
     pub fn to_string(&self) -> String {
         format!("{}.{}.{}", self.version[0], self.version[1], self.version[2])
+    }
+
+    /// Converts `Version` struct to plain format (e.g. "123")
+    /// 
+    /// ```
+    /// assert_eq!(Version::new(1, 2, 3).to_plain_string(), "123");
+    /// ```
+    pub fn to_plain_string(&self) -> String {
+        format!("{}{}{}", self.version[0], self.version[1], self.version[2])
     }
 }
 

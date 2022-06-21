@@ -37,8 +37,8 @@ Feature: `telemetry`
 
 Feature: `linux-patch`
 
+* [x] Fetch remote patch info
 * [ ] Identify installed patch info
-* [ ] Fetch remote patch info
 * [ ] Apply / revert patch
 
 Feature: `wine`

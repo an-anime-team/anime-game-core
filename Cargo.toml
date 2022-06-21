@@ -7,7 +7,7 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-curl = "0.4.43"
+curl = "0.4.43" # `static-curl` for static linking
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 fs_extra = "1.2.0"
@@ -24,3 +24,5 @@ flate2 = { version = "1.0.24", optional = true }
 
 [features]
 install = ["dep:uuid", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2"]
+linux-patch = []
+all = ["install", "linux-patch"]

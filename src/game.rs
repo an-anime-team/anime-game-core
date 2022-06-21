@@ -174,7 +174,7 @@ impl TryGetDiff for Game {
                 },
                 Err(err) => Err(Error::new(ErrorKind::InvalidData, format!("Failed to decode server response: {}", err.to_string())))
             },
-            Err(err) => Err(err)
+            Err(err) => Err(err.into())
         }
     }
 }

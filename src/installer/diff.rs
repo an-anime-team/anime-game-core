@@ -156,9 +156,7 @@ impl VersionDiff {
                 // Remove outdated files
                 // We're ignoring Err because in practice it means that deletefiles.txt is missing
                 if let Ok(files) = read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
-                    for file in files.split("\n").collect::<Vec<&str>>() {
-                        let file: &str = file.trim_end();
-
+                    for file in files.lines().collect::<Vec<&str>>() {
                         // TODO: add errors handling
                         remove_file(file).expect("Failed to remove outdated file");
                     }
