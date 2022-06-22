@@ -5,6 +5,7 @@ use curl::easy::Easy;
 use serde::Deserialize;
 
 use super::consts::API_URI;
+use crate::json_schemas::versions::Response as ApiResponse;
 
 static mut RESPONSE_CACHE: Option<Response> = None;
 
@@ -36,7 +37,7 @@ impl<'a> Response {
 pub struct API;
 
 impl<'a> API {
-    /// Remote server can be not available
+    /// Try to fetch data from the game's api
     pub fn try_fetch() -> Result<Response, curl::Error> {
         unsafe {
             match &RESPONSE_CACHE {
@@ -73,5 +74,14 @@ impl<'a> API {
         }
     }
 
-    // TODO: add try_fetch_json
+    /// Try to fetch data from the game's api and decode it from the json format
+    pub fn try_fetch_json() -> Result<ApiResponse, std::io::Error> {
+        match Self::try_fetch() {
+            Ok(response) => match response.try_json::<ApiResponse>() {
+                Ok(response) => Ok(response),
+                Err(err) => Err(err.into())
+            },
+            Err(err) => Err(err.into())
+        }
+    }
 }

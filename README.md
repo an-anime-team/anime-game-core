@@ -14,7 +14,7 @@ Common library to control the Anime Game installation, written in Rust
   * [ ] Apply changes for updates
     * [x] Remove outdated files
     * [ ] Apply hdiff changes
-  * [ ] Repair game files
+  * [x] Repair game files
 
 * [ ] Voice packages
   * [x] List installed packages

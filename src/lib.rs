@@ -10,6 +10,9 @@ pub mod external;
 #[cfg(feature = "install")]
 pub mod installer;
 
+#[cfg(feature = "install")]
+pub mod repairer;
+
 #[cfg(feature = "linux-patch")]
 pub mod linux_patch;
 
@@ -26,6 +29,9 @@ pub mod prelude {
 
     #[cfg(feature = "install")]
     pub use super::external::hdiff;
+
+    #[cfg(feature = "install")]
+    pub use super::repairer;
 
     #[cfg(feature = "linux-patch")]
     pub use super::linux_patch::Patch;
