@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VoiceLocale {
     English,
     Japanese,
@@ -55,6 +55,12 @@ impl VoiceLocale {
             "Japanese" => Some(VoiceLocale::Japanese),
             "Korean"   => Some(VoiceLocale::Korean),
             "Chinese"  => Some(VoiceLocale::Chinese),
+
+            // Lowercased variants
+            "english"  => Some(VoiceLocale::English),
+            "japanese" => Some(VoiceLocale::Japanese),
+            "korean"   => Some(VoiceLocale::Korean),
+            "chinese"  => Some(VoiceLocale::Chinese),
 
             // Folders
             "English(US)" => Some(VoiceLocale::English),

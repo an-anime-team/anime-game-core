@@ -2,8 +2,6 @@ use std::fs::File;
 use std::io::{Error, ErrorKind, Read};
 use std::path::Path;
 
-use fs_extra::dir::get_dir_content;
-
 use super::voice_data::package::VoicePackage;
 use super::consts::{get_voice_package_path, get_voice_packages_path};
 use super::version::Version;
@@ -119,14 +117,14 @@ impl Game {
     }
 
     /// Get list of installed voice packages
-    pub fn get_voice_packages(&self) -> Result<Vec<VoicePackage>, fs_extra::error::Error> {
-        match get_dir_content(get_voice_packages_path(&self.path)) {
+    pub fn get_voice_packages(&self) -> Result<Vec<VoicePackage>, Error> {
+        match std::fs::read_dir(get_voice_packages_path(&self.path)) {
             Ok(content) => {
                 let mut packages = Vec::new();
 
-                for dir in &content.directories[1..] {
-                    if let Some(dir) = Path::new(dir).file_name() {
-                        if let Some(package) = VoicePackage::new(get_voice_package_path(&self.path, dir.to_string_lossy())) {
+                for entry in content {
+                    if let Ok(entry) = entry {
+                        if let Some(package) = VoicePackage::new(get_voice_package_path(&self.path, entry.file_name().to_string_lossy())) {
                             packages.push(package);
                         }
                     }

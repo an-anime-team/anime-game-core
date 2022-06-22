@@ -26,7 +26,7 @@ fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoi
     unreachable!();
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VoicePackage {
     Installed {
         path: String,
@@ -106,10 +106,15 @@ impl VoicePackage {
     }
 
     /// Calculate voice package size in bytes
-    pub fn get_size(&self) -> u64 {
+    /// 
+    /// (unpacked size, Option(archive size))
+    pub fn size(&self) -> (u64, Option<u64>) {
         match self {
-            VoicePackage::Installed { path, .. } => get_size(path).unwrap(),
-            VoicePackage::NotInstalled { data, .. } => data.package_size.parse::<u64>().unwrap(),
+            VoicePackage::Installed { path, .. } => (get_size(path).unwrap(), None),
+            VoicePackage::NotInstalled { data, .. } => (
+                data.package_size.parse::<u64>().unwrap(),
+                Some(data.size.parse::<u64>().unwrap())
+            ),
         }
     }
 
