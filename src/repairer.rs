@@ -17,11 +17,11 @@ pub struct IntegrityFile {
 
 impl IntegrityFile {
     /// Compare file hashes
-    pub fn verify<T: ToString>(&self, game_path: T) -> Result<bool, Error> {
-        let hash = std::fs::read(format!("{}/{}", game_path.to_string(), self.path))?;
-        let hash = format!("{:x}", md5::compute(hash));
-
-        Ok(hash == self.md5)
+    pub fn verify<T: ToString>(&self, game_path: T) -> bool {
+        match std::fs::read(format!("{}/{}", game_path.to_string(), self.path)) {
+            Ok(hash) => format!("{:x}", md5::compute(hash)) == self.md5,
+            Err(_) => false
+        }
     }
 
     /// Replace remote file with the latest one
