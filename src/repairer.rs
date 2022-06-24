@@ -5,6 +5,7 @@ use serde_json::{from_str, Value};
 use crate::api::API;
 use crate::curl::fetch;
 use crate::installer::downloader::Downloader;
+use crate::voice_data::locale::VoiceLocale;
 
 // {"remoteName": "UnityPlayer.dll", "md5": "8c8c3d845b957e4cb84c662bed44d072", "fileSize": 33466104}
 #[derive(Debug, Clone)]
@@ -34,11 +35,12 @@ impl IntegrityFile {
     }
 }
 
-/// Try to list latest game files
-pub fn try_get_integrity_files() -> Result<Vec<IntegrityFile>, Error> {
+fn try_get_some_integrity_files<T: ToString>(file_name: T) -> Result<Vec<IntegrityFile>, Error> {
     let response = API::try_fetch_json()?;
+
+    let decompressed_path = response.data.game.latest.decompressed_path;
     
-    let mut pkg_version = fetch(format!("{}/pkg_version", &response.data.game.latest.decompressed_path))?;
+    let mut pkg_version = fetch(format!("{}/{}", &decompressed_path, file_name.to_string()))?;
     let pkg_version = pkg_version.get_body()?;
 
     let mut files = Vec::new();
@@ -49,10 +51,20 @@ pub fn try_get_integrity_files() -> Result<Vec<IntegrityFile>, Error> {
                 path: value["remoteName"].as_str().unwrap().to_string(),
                 md5: value["md5"].as_str().unwrap().to_string(),
                 size: value["fileSize"].as_u64().unwrap(),
-                base_url: response.data.game.latest.decompressed_path.clone()
+                base_url: decompressed_path.clone()
             });
         }
     }
 
     Ok(files)
+}
+
+/// Try to list latest game files
+pub fn try_get_integrity_files() -> Result<Vec<IntegrityFile>, Error> {
+    Ok(try_get_some_integrity_files("pkg_version")?)
+}
+
+/// Try to list latest voice package files
+pub fn try_get_voice_integrity_files(locale: VoiceLocale) -> Result<Vec<IntegrityFile>, Error> {
+    Ok(try_get_some_integrity_files(format!("Audio_{}_pkg_version", locale.to_folder()))?)
 }
