@@ -71,21 +71,16 @@ impl VoicePackage {
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
     /// technically it can be installed. This method just don't know the game's path
     pub fn with_locale(locale: VoiceLocale) -> Option<Self> {
-        match API::try_fetch() {
+        match API::try_fetch_json() {
             Ok(response) => {
-                match response.try_json::<ApiResponse>() {
-                    Ok(response) => {
-                        let latest = response.data.game.latest;
+                let latest = response.data.game.latest;
 
-                        Some(Self::NotInstalled {
-                            locale,
-                            version: Version::from_str(latest.version),
-                            data: find_voice_pack(latest.voice_packs, locale),
-                            game_path: None
-                        })
-                    },
-                    Err(_) => None
-                }
+                Some(Self::NotInstalled {
+                    locale,
+                    version: Version::from_str(latest.version),
+                    data: find_voice_pack(latest.voice_packs, locale),
+                    game_path: None
+                })
             },
             Err(_) => None
         }
@@ -186,52 +181,47 @@ impl VoicePackage {
                         // (version, remote_size, |package_size - remote_size|)
                         let mut curr: (Version, u64, u64);
         
-                        match API::try_fetch() {
+                        match API::try_fetch_json() {
                             Ok(response) => {
-                                match response.try_json::<ApiResponse>() {
-                                    Ok(response) => {
-                                        let latest_voice_pack = find_voice_pack(response.data.game.latest.voice_packs, *locale);
-        
+                                let latest_voice_pack = find_voice_pack(response.data.game.latest.voice_packs, *locale);
+
+                                curr = (
+                                    Version::from_str(response.data.game.latest.version),
+                                    latest_voice_pack.package_size.parse().unwrap(),
+                                    0
+                                );
+
+                                // We have to use it here because e.g. (2 - 3) can cause u64 overflow
+                                curr.2 = max(package_size, curr.1) - min(package_size, curr.1);
+
+                                // List through other versions of the game
+                                for diff in response.data.game.diffs {
+                                    let voice_pack = find_voice_pack(diff.voice_packs, *locale);
+                                    let voice_pack_size = voice_pack.package_size.parse().unwrap();
+
+                                    let size_diff = max(package_size, voice_pack_size) - min(package_size, voice_pack_size);
+
+                                    // If this version has lower size difference - then it's likely
+                                    // an actual version we have
+                                    if size_diff < curr.2 {
                                         curr = (
-                                            Version::from_str(response.data.game.latest.version),
-                                            latest_voice_pack.package_size.parse().unwrap(),
-                                            0
+                                            Version::from_str(diff.version),
+                                            voice_pack_size,
+                                            size_diff
                                         );
-        
-                                        // We have to use it here because e.g. (2 - 3) can cause u64 overflow
-                                        curr.2 = max(package_size, curr.1) - min(package_size, curr.1);
-        
-                                        // List through other versions of the game
-                                        for diff in response.data.game.diffs {
-                                            let voice_pack = find_voice_pack(diff.voice_packs, *locale);
-                                            let voice_pack_size = voice_pack.package_size.parse().unwrap();
-        
-                                            let size_diff = max(package_size, voice_pack_size) - min(package_size, voice_pack_size);
-        
-                                            // If this version has lower size difference - then it's likely
-                                            // an actual version we have
-                                            if size_diff < curr.2 {
-                                                curr = (
-                                                    Version::from_str(diff.version),
-                                                    voice_pack_size,
-                                                    size_diff
-                                                );
-                                            }
-                                        }
-        
-                                        // If the difference is too big - we expect this voice package
-                                        // to be like really old, and we can't predict its version
-                                        // for now this difference is 3 GB. Idk which value is better
-                                        // This one should work fine for 2.5.0 - 2.7.0 versions window
-                                        if curr.2 < 3072000000 {
-                                            Some(curr.0)
-                                        }
-        
-                                        else {
-                                            None
-                                        }
-                                    },
-                                    Err(_) => None
+                                    }
+                                }
+
+                                // If the difference is too big - we expect this voice package
+                                // to be like really old, and we can't predict its version
+                                // for now this difference is 3 GB. Idk which value is better
+                                // This one should work fine for 2.5.0 - 2.7.0 versions window
+                                if curr.2 < 3072000000 {
+                                    Some(curr.0)
+                                }
+
+                                else {
+                                    None
                                 }
                             },
                             Err(_) => None
@@ -246,61 +236,58 @@ impl VoicePackage {
 
 impl TryGetDiff for VoicePackage {
     fn try_get_diff(&self) -> Result<VersionDiff, Error> {
-        match API::try_fetch() {
-            Ok(response) => match response.try_json::<ApiResponse>() {
-                Ok(response) => {
-                    if self.is_installed() {
-                        match self.try_get_version() {
-                            Some(current) => {
-                                if response.data.game.latest.version == current {
-                                    Ok(VersionDiff::Latest(current))
-                                }
-            
-                                else {
-                                    for diff in response.data.game.diffs {
-                                        if diff.version == current {
-                                            let diff = find_voice_pack(diff.voice_packs, self.locale());
-
-                                            return Ok(VersionDiff::Diff {
-                                                current,
-                                                latest: Version::from_str(response.data.game.latest.version),
-                                                url: diff.path,
-                                                download_size: diff.size.parse::<u64>().unwrap(),
-                                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
-                                                unpacking_path: match self {
-                                                    VoicePackage::Installed { .. } => None,
-                                                    VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
-                                                }
-                                            })
-                                        }
-                                    }
-            
-                                    Ok(VersionDiff::Outdated {
-                                        current,
-                                        latest: Version::from_str(response.data.game.latest.version)
-                                    })
-                                }
-                            },
-                            None => Err(Error::new(ErrorKind::Other, "Failed to get voice package version"))
-                        }
-                    }
-                    
-                    else {
-                        let latest = find_voice_pack(response.data.game.latest.voice_packs, self.locale());
-
-                        Ok(VersionDiff::NotInstalled {
-                            latest: Version::from_str(response.data.game.latest.version),
-                            url: latest.path,
-                            download_size: latest.size.parse::<u64>().unwrap(),
-                            unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                            unpacking_path: match self {
-                                VoicePackage::Installed { .. } => None,
-                                VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
+        match API::try_fetch_json() {
+            Ok(response) => {
+                if self.is_installed() {
+                    match self.try_get_version() {
+                        Some(current) => {
+                            if response.data.game.latest.version == current {
+                                Ok(VersionDiff::Latest(current))
                             }
-                        })
+        
+                            else {
+                                for diff in response.data.game.diffs {
+                                    if diff.version == current {
+                                        let diff = find_voice_pack(diff.voice_packs, self.locale());
+
+                                        return Ok(VersionDiff::Diff {
+                                            current,
+                                            latest: Version::from_str(response.data.game.latest.version),
+                                            url: diff.path,
+                                            download_size: diff.size.parse::<u64>().unwrap(),
+                                            unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                            unpacking_path: match self {
+                                                VoicePackage::Installed { .. } => None,
+                                                VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
+                                            }
+                                        })
+                                    }
+                                }
+        
+                                Ok(VersionDiff::Outdated {
+                                    current,
+                                    latest: Version::from_str(response.data.game.latest.version)
+                                })
+                            }
+                        },
+                        None => Err(Error::new(ErrorKind::Other, "Failed to get voice package version"))
                     }
-                },
-                Err(err) => Err(Error::new(ErrorKind::InvalidData, format!("Failed to decode server response: {}", err.to_string())))
+                }
+                
+                else {
+                    let latest = find_voice_pack(response.data.game.latest.voice_packs, self.locale());
+
+                    Ok(VersionDiff::NotInstalled {
+                        latest: Version::from_str(response.data.game.latest.version),
+                        url: latest.path,
+                        download_size: latest.size.parse::<u64>().unwrap(),
+                        unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                        unpacking_path: match self {
+                            VoicePackage::Installed { .. } => None,
+                            VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
+                        }
+                    })
+                }
             },
             Err(err) => Err(err.into())
         }

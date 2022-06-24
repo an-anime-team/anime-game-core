@@ -76,12 +76,8 @@ impl<'a> API {
 
     /// Try to fetch data from the game's api and decode it from the json format
     pub fn try_fetch_json() -> Result<ApiResponse, std::io::Error> {
-        match Self::try_fetch() {
-            Ok(response) => match response.try_json::<ApiResponse>() {
-                Ok(response) => Ok(response),
-                Err(err) => Err(err.into())
-            },
-            Err(err) => Err(err.into())
-        }
+        let response = Self::try_fetch()?;
+
+        Ok(response.try_json::<ApiResponse>()?)
     }
 }

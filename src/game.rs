@@ -33,13 +33,8 @@ impl Game {
 
     /// Try to get latest game version
     pub fn try_get_latest_version() -> Option<Version> {
-        match API::try_fetch() {
-            Ok(response) => {
-                match response.try_json::<crate::json_schemas::versions::Response>() {
-                    Ok(response) => Some(Version::from_str(response.data.game.latest.version)),
-                    Err(_) => None
-                }
-            },
+        match API::try_fetch_json() {
+            Ok(response) => Some(Version::from_str(response.data.game.latest.version)),
             Err(_) => None
         }
     }
@@ -118,77 +113,67 @@ impl Game {
 
     /// Get list of installed voice packages
     pub fn get_voice_packages(&self) -> Result<Vec<VoicePackage>, Error> {
-        match std::fs::read_dir(get_voice_packages_path(&self.path)) {
-            Ok(content) => {
-                let mut packages = Vec::new();
+        let content = std::fs::read_dir(get_voice_packages_path(&self.path))?;
 
-                for entry in content {
-                    if let Ok(entry) = entry {
-                        if let Some(package) = VoicePackage::new(get_voice_package_path(&self.path, entry.file_name().to_string_lossy())) {
-                            packages.push(package);
-                        }
-                    }
-                }
+        let packages = content.into_iter()
+            .filter_map(|result| result.ok())
+            .filter_map(|entry| {
+                let path = get_voice_package_path(&self.path, entry.file_name().to_string_lossy());
 
-                Ok(packages)
-            },
-            Err(err) => Err(err)
-        }
+                VoicePackage::new(path)
+            })
+            .collect();
+
+        Ok(packages)
     }
 }
 
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
     fn try_get_diff(&self) -> Result<VersionDiff, Error> {
-        match API::try_fetch() {
-            Ok(response) => match response.try_json::<super::json_schemas::versions::Response>() {
-                Ok(response) => {
-                    if self.is_installed() {
-                        match self.try_get_version() {
-                            Ok(current) => {
-                                if response.data.game.latest.version == current {
-                                    Ok(VersionDiff::Latest(current))
-                                }
-            
-                                else {
-                                    for diff in response.data.game.diffs {
-                                        if diff.version == current {
-                                            return Ok(VersionDiff::Diff {
-                                                current,
-                                                latest: Version::from_str(response.data.game.latest.version),
-                                                url: diff.path,
-                                                download_size: diff.size.parse::<u64>().unwrap(),
-                                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
-                                                unpacking_path: Some(self.path.clone())
-                                            })
-                                        }
-                                    }
-            
-                                    Ok(VersionDiff::Outdated {
-                                        current,
-                                        latest: Version::from_str(response.data.game.latest.version)
-                                    })
-                                }
-                            },
-                            Err(err) => Err(err)
-                        }
-                    }
-                    
-                    else {
-                        let latest = response.data.game.latest;
+        let response = API::try_fetch_json()?;
 
-                        Ok(VersionDiff::NotInstalled {
-                            latest: Version::from_str(&latest.version),
-                            url: latest.path,
-                            download_size: latest.size.parse::<u64>().unwrap(),
-                            unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                            unpacking_path: Some(self.path.clone())
+        if self.is_installed() {
+            match self.try_get_version() {
+                Ok(current) => {
+                    if response.data.game.latest.version == current {
+                        Ok(VersionDiff::Latest(current))
+                    }
+
+                    else {
+                        for diff in response.data.game.diffs {
+                            if diff.version == current {
+                                return Ok(VersionDiff::Diff {
+                                    current,
+                                    latest: Version::from_str(response.data.game.latest.version),
+                                    url: diff.path,
+                                    download_size: diff.size.parse::<u64>().unwrap(),
+                                    unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                    unpacking_path: Some(self.path.clone())
+                                })
+                            }
+                        }
+
+                        Ok(VersionDiff::Outdated {
+                            current,
+                            latest: Version::from_str(response.data.game.latest.version)
                         })
                     }
                 },
-                Err(err) => Err(Error::new(ErrorKind::InvalidData, format!("Failed to decode server response: {}", err.to_string())))
-            },
-            Err(err) => Err(err.into())
+                Err(err) => Err(err)
+            }
+        }
+        
+        else {
+            let latest = response.data.game.latest;
+
+            Ok(VersionDiff::NotInstalled {
+                latest: Version::from_str(&latest.version),
+                url: latest.path,
+                download_size: latest.size.parse::<u64>().unwrap(),
+                unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                unpacking_path: Some(self.path.clone())
+            })
         }
     }
 }
