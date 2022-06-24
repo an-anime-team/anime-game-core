@@ -128,6 +128,8 @@ impl Game {
     }
 }
 
+// TODO: game predownloading
+
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
     fn try_get_diff(&self) -> Result<VersionDiff, Error> {
