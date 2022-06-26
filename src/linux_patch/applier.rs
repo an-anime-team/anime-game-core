@@ -179,7 +179,10 @@ impl PatchApplier {
     /// 
     /// This method doesn't verify the state of the locally installed patch.
     /// You should do it manually using `is_sync` method
-    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F) -> Result<bool, Error> {
+    /// 
+    /// It's recommended to run this method with `use_root = true` to append telemetry entries to the hosts file.
+    /// The patch script will be run with `pkexec` and this ask for root password
+    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> Result<bool, Error> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -218,16 +221,26 @@ impl PatchApplier {
                 fs::write(&patch_file, patch_script)?;
 
                 // Execute patch.sh from the game folder
-                // pkexec bash -c "cd '<game path>' ; bash '<patch path>/patch.sh'"
-                // We have to use this command as pkexec ignores current working directory
-                let output = Command::new("pkexec")
-                    .arg("bash")
-                    .arg("-c")
-                    .arg(format!("\"cd '{}' ; bash '{}'\"", game_path.to_string(), patch_file))
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::null())
-                    .spawn()?;
+                let output = if use_root {
+                    // pkexec bash -c "cd '<game path>' ; bash '<patch path>/patch.sh'"
+                    // We have to use this command as pkexec ignores current working directory
+                    Command::new("pkexec")
+                        .arg("bash")
+                        .arg("-c")
+                        .arg(format!("\"cd '{}' ; bash '{}'\"", game_path.to_string(), patch_file))
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::null())
+                        .spawn()?
+                } else {
+                    Command::new("bash")
+                        .arg(patch_file)
+                        .current_dir(game_path.to_string())
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::null())
+                        .spawn()?
+                };
 
                 // Input "y" as it's asked in the patch script
                 // I could remove it, but who actually cares?
