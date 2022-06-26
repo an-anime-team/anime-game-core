@@ -39,7 +39,7 @@ Feature: `linux-patch`
 
 * [x] Fetch remote patch info
 * [x] Identify installed patch info
-* [ ] Apply / revert patch
+* [x] Apply / revert patch
 
 Feature: `wine`
 

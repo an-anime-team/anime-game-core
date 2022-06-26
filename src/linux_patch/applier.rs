@@ -7,7 +7,7 @@ use std::env::temp_dir;
 use uuid::Uuid;
 // use git2::{Repository, ResetType, Error};
 
-use super::Patch;
+use crate::version::ToVersion;
 
 pub struct PatchApplier {
     folder: String
@@ -179,11 +179,9 @@ impl PatchApplier {
     /// 
     /// This method doesn't verify the state of the locally installed patch.
     /// You should do it manually using `is_sync` method
-    pub fn apply<T: ToString>(&self, game_path: T, patch: Patch) -> Result<bool, Error> {
-        match patch {
-            // We can only apply test or stable patch
-            Patch::Available { version, .. } |
-            Patch::Testing { version, .. } => {
+    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F) -> Result<bool, Error> {
+        match patch_version.to_version() {
+            Some(version) => {
                 let temp_dir = self.get_temp_path();
                 let patch_folder = format!("{}/{}", self.folder, version.to_plain_string());
 
@@ -220,9 +218,12 @@ impl PatchApplier {
                 fs::write(&patch_file, patch_script)?;
 
                 // Execute patch.sh from the game folder
-                let output = Command::new("bash")
-                    .arg(patch_file)
-                    .current_dir(game_path.to_string())
+                // pkexec bash -c "cd '<game path>' ; bash '<patch path>/patch.sh'"
+                // We have to use this command as pkexec ignores current working directory
+                let output = Command::new("pkexec")
+                    .arg("bash")
+                    .arg("-c")
+                    .arg(format!("\"cd '{}' ; bash '{}'\"", game_path.to_string(), patch_file))
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
@@ -240,7 +241,64 @@ impl PatchApplier {
                 // Return patching status
                 Ok(String::from_utf8_lossy(&output.stdout).contains("Patch applied!"))
             },
-            _ => Err(Error::new(ErrorKind::Other, "Given patch is not latest nor testing"))
+            None => Err(Error::new(ErrorKind::Other, "Failed to get patch version"))
+        }
+    }
+
+    /// Revert patch
+    /// 
+    /// This method doesn't verify the state of the locally installed patch.
+    /// You should do it manually using `is_sync` method
+    pub fn revert<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, force: bool) -> Result<bool, Error> {
+        match patch_version.to_version() {
+            Some(version) => {
+                let temp_dir = self.get_temp_path();
+                let patch_folder = format!("{}/{}", self.folder, version.to_plain_string());
+
+                // Verify that the patch folder exists (it can not be synced)
+                if !Path::new(&patch_folder).exists() {
+                    return Err(Error::new(ErrorKind::Other, format!("Corresponding patch folder doesn't exist: {}", patch_folder)));
+                }
+
+                // Create temp folder
+                fs::create_dir(&temp_dir)?;
+
+                // Copy patch files there
+                let mut options = fs_extra::dir::CopyOptions::default();
+
+                options.content_only = true; // Don't copy e.g. "270" folder, just its content
+
+                if let Err(err) = fs_extra::dir::copy(patch_folder, &temp_dir, &options) {
+                    return Err(Error::new(ErrorKind::Other, format!("Failed to copy patch to the temp folder: {}", err)));
+                }
+
+                let revert_file = format!("{}/patch_revert.sh", temp_dir);
+
+                // Remove files timestamps checks if it's needed
+                if force {
+                    // Update patch_revert.sh file
+                    fs::write(
+                        &revert_file,
+                        fs::read_to_string(&revert_file)?
+                            .replace("difftime=$", "difftime=0 #difftime=$")
+                    )?;
+                }
+
+                // Execute patch_revert.sh from the game folder
+                let output = Command::new("bash")
+                    .arg(revert_file)
+                    .current_dir(game_path.to_string())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .output()?;
+
+                // Remove temp patch folder
+                fs::remove_dir_all(temp_dir)?;
+
+                // Return patching status
+                Ok(!String::from_utf8_lossy(&output.stdout).contains("ERROR: "))
+            },
+            None => Err(Error::new(ErrorKind::Other, "Failed to get patch version"))
         }
     }
 }

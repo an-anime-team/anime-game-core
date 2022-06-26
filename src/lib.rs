@@ -18,7 +18,7 @@ pub mod linux_patch;
 
 pub mod prelude {
     pub use super::consts::*;
-    pub use super::version::Version;
+    pub use super::version::*;
     pub use super::api::API;
     pub use super::curl::fetch;
     pub use super::game::Game;

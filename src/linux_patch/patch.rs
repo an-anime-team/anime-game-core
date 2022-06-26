@@ -1,4 +1,4 @@
-use crate::version::Version;
+use crate::version::{Version, ToVersion};
 use crate::curl::fetch;
 use crate::api::API;
 
@@ -230,6 +230,17 @@ impl Patch {
 
             Patch::Testing { player_hash, .. } => Ok(player_hash.is_applied(hash)),
             Patch::Available { player_hash, .. } => Ok(player_hash.is_applied(hash))
+        }
+    }
+}
+
+impl ToVersion for Patch {
+    fn to_version(&self) -> Option<Version> {
+        match self {
+            Patch::Preparation { version, .. } |
+            Patch::Testing { version, .. } |
+            Patch::Available { version, .. } => Some(*version),
+            _ => None
         }
     }
 }

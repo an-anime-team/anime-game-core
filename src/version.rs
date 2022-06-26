@@ -1,20 +1,9 @@
 use std::fmt;
+use std::io::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Version {
     pub version: [u8; 3]
-}
-
-impl fmt::Debug for Version {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}.{}", self.version[0], self.version[1], self.version[2])
-    }
-}
-
-impl fmt::Display for Version {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}.{}", self.version[0], self.version[1], self.version[2])
-    }
 }
 
 impl Version {
@@ -52,6 +41,18 @@ impl Version {
     }
 }
 
+impl fmt::Debug for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.version[0], self.version[1], self.version[2])
+    }
+}
+
+impl fmt::Display for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.version[0], self.version[1], self.version[2])
+    }
+}
+
 impl PartialEq<String> for Version {
     fn eq(&self, other: &String) -> bool {
         &self.to_string() == other
@@ -61,5 +62,15 @@ impl PartialEq<String> for Version {
 impl PartialEq<Version> for String {
     fn eq(&self, other: &Version) -> bool {
         self == &other.to_string()
+    }
+}
+
+pub trait ToVersion {
+    fn to_version(&self) -> Option<Version>;
+}
+
+impl<T> ToVersion for T where T: ToString {
+    fn to_version(&self) -> Option<Version> {
+        Some(Version::from_str(self.to_string()))
     }
 }
