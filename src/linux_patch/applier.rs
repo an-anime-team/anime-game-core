@@ -30,7 +30,52 @@ impl PatchApplier {
     }
 
     /// Verify that the folder contains latest patch
-    pub fn is_sync<T: ToString>(&self, remote: T) -> Result<bool, Error> {
+    /// 
+    /// To check only specific remote use `is_sync_with`
+    pub fn is_sync<T: IntoIterator<Item = F>, F: ToString>(&self, remotes: T) -> Result<bool, Error> {
+        if !Path::new(&self.folder).exists() {
+            return Ok(false)
+        }
+
+        // FIXME: git ref-parse doesn't check removed files
+
+        let head = Command::new("git")
+            .arg("rev-parse")
+            .arg("HEAD")
+            .current_dir(&self.folder)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()?;
+
+        for remote in remotes {
+            Command::new("git")
+                .arg("remote")
+                .arg("set-url")
+                .arg("origin")
+                .arg(remote.to_string())
+                .current_dir(&self.folder)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .output()?;
+
+            let remote = Command::new("git")
+                .arg("rev-parse")
+                .arg("origin/HEAD")
+                .current_dir(&self.folder)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()?;
+
+            if head.stdout == remote.stdout {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Verify that the folder contains latest patch
+    pub fn is_sync_with<T: ToString>(&self, remote: T) -> Result<bool, Error> {
         if !Path::new(&self.folder).exists() {
             return Ok(false)
         }
@@ -67,7 +112,7 @@ impl PatchApplier {
     }
 
     /// Fetch patch updates from the git repository
-    pub fn sync<T: ToString>(&self, remote: T) -> Result<(), Error> {
+    pub fn sync<T: ToString>(&self, remote: T) -> Result<bool, Error> {
         /*self.repository.remote_set_url("origin", &remote.to_string())?;
 
         let mut remote = self.repository.find_remote("origin")?;
@@ -107,19 +152,21 @@ impl PatchApplier {
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .output()?;
+
+                Ok(true)
             },
             false => {
-                Command::new("git")
+                let output = Command::new("git")
                     .arg("clone")
                     .arg(remote.to_string())
                     .arg(&self.folder)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .output()?;
+
+                Ok(output.status.success())
             }
         }
-
-        Ok(())
     }
 
     fn get_temp_path(&self) -> String {
