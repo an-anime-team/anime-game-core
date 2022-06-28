@@ -12,6 +12,8 @@ use crate::json_schemas::versions::{
     VoicePack as RemoteVoicePack
 };
 use crate::consts::get_voice_package_path;
+
+#[cfg(feature = "install")]
 use crate::installer::diff::{VersionDiff, TryGetDiff};
 
 /// Find voice package with specified locale from list of packages
@@ -234,6 +236,7 @@ impl VoicePackage {
     }
 }
 
+#[cfg(feature = "install")]
 impl TryGetDiff for VoicePackage {
     fn try_get_diff(&self) -> Result<VersionDiff, Error> {
         match API::try_fetch_json() {
