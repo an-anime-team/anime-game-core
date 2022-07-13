@@ -199,12 +199,11 @@ impl VoicePackage {
 
                                 curr = (
                                     Version::from_str(response.data.game.latest.version),
-                                    latest_voice_pack.size.parse::<u64>().unwrap(),
+                                    latest_voice_pack.size.parse::<u64>().unwrap() - CONSTANT_OF_STUPIDITY,
                                     0
                                 );
 
                                 // We have to use it here because e.g. (2 - 3) can cause u64 overflow
-                                curr.1 = max(curr.1, CONSTANT_OF_STUPIDITY) - min(curr.1, CONSTANT_OF_STUPIDITY);
                                 curr.2 = max(package_size, curr.1) - min(package_size, curr.1);
 
                                 // API works this way:
@@ -216,6 +215,8 @@ impl VoicePackage {
                                 // that absolute [2.6.0] version size is [latest (2.8.0)] absolute size - [2.7.0] relative size - [2.6.0] relative size
                                 // That's being said we need to substract each diff.size from the latest.size
                                 let mut voice_pack_size = curr.1;
+
+                                // println!("[{}][2.8.0] diff: {}", self.locale().to_name(), curr.2);
 
                                 // List through other versions of the game
                                 for diff in response.data.game.diffs {
@@ -238,11 +239,13 @@ impl VoicePackage {
                                     // 2.7.0 size: 1989050587  (clearly update size, so relative)
                                     // 2.6.0 size: 15531165534 (clearly absolute size)
                                     else {
-                                        voice_pack_size = relative_size;
+                                        voice_pack_size = max(relative_size, CONSTANT_OF_STUPIDITY) - min(relative_size, CONSTANT_OF_STUPIDITY);
                                     }
 
                                     // Calculate difference with an actual size
                                     let size_diff = max(package_size, voice_pack_size) - min(package_size, voice_pack_size);
+
+                                    // println!("[{}][{}] diff: {}", self.locale().to_name(), diff.version, size_diff);
 
                                     // If this version has lower size difference - then it's likely
                                     // an actual version we have
