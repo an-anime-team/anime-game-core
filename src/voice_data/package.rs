@@ -207,13 +207,41 @@ impl VoicePackage {
                                 curr.1 = max(curr.1, CONSTANT_OF_STUPIDITY) - min(curr.1, CONSTANT_OF_STUPIDITY);
                                 curr.2 = max(package_size, curr.1) - min(package_size, curr.1);
 
+                                // API works this way:
+                                // We have [latest] field that contains absolute voice package with its real, absolute size
+                                // and we have [diff] fields that contains relative incremental changes with relative sizes
+                                // Since we're approximating packages versions by the real, so absolute folder sizes, we need to calculate
+                                // absolute folder sizes for differences
+                                // Since this is not an option in the API we have second approximation: lets say
+                                // that absolute [2.6.0] version size is [latest (2.8.0)] absolute size - [2.7.0] relative size - [2.6.0] relative size
+                                // That's being said we need to substract each diff.size from the latest.size
+                                let mut voice_pack_size = curr.1;
+
                                 // List through other versions of the game
                                 for diff in response.data.game.diffs {
                                     let voice_pack = find_voice_pack(diff.voice_packs, *locale);
-                                    let mut voice_pack_size = voice_pack.size.parse::<u64>().unwrap();
 
-                                    voice_pack_size = max(voice_pack_size, CONSTANT_OF_STUPIDITY) - min(voice_pack_size, CONSTANT_OF_STUPIDITY);
+                                    // Approximate this diff absolute folder size
+                                    let relative_size = voice_pack.size.parse::<u64>().unwrap();
 
+                                    if relative_size < 4 * 1024 * 1024 * 1024 {
+                                        voice_pack_size -= voice_pack.size.parse::<u64>().unwrap();
+                                    }
+
+                                    // For no reason API's size field in the [diff] can contain
+                                    // its absolute size. Let's say if size is more than 4 GB then it's only
+                                    // update size, so difference, so relative size. Otherwise it's absolute size
+                                    // 
+                                    // Example (Japanese):
+                                    // 
+                                    // 2.8.0 size: 18736543170 (latest, so absolute size)
+                                    // 2.7.0 size: 1989050587  (clearly update size, so relative)
+                                    // 2.6.0 size: 15531165534 (clearly absolute size)
+                                    else {
+                                        voice_pack_size = relative_size;
+                                    }
+
+                                    // Calculate difference with an actual size
                                     let size_diff = max(package_size, voice_pack_size) - min(package_size, voice_pack_size);
 
                                     // If this version has lower size difference - then it's likely
