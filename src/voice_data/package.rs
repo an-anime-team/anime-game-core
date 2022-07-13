@@ -187,7 +187,7 @@ impl VoicePackage {
 
                                 curr = (
                                     Version::from_str(response.data.game.latest.version),
-                                    latest_voice_pack.package_size.parse().unwrap(),
+                                    latest_voice_pack.size.parse().unwrap(),
                                     0
                                 );
 
@@ -197,7 +197,7 @@ impl VoicePackage {
                                 // List through other versions of the game
                                 for diff in response.data.game.diffs {
                                     let voice_pack = find_voice_pack(diff.voice_packs, *locale);
-                                    let voice_pack_size = voice_pack.package_size.parse().unwrap();
+                                    let voice_pack_size = voice_pack.size.parse().unwrap();
 
                                     let size_diff = max(package_size, voice_pack_size) - min(package_size, voice_pack_size);
 
@@ -213,10 +213,10 @@ impl VoicePackage {
                                 }
 
                                 // If the difference is too big - we expect this voice package
-                                // to be like really old, and we can't predict its version
-                                // for now this difference is 3 GB. Idk which value is better
-                                // This one should work fine for 2.5.0 - 2.7.0 versions window
-                                if curr.2 < 3072000000 {
+                                // to be like really old, and we can't predict its version.
+                                // For now this difference is 8 GB. Idk which value is better
+                                // This one should work fine for 2.5.0 - 2.8.0 versions window
+                                if curr.2 < 8 * 1024 * 1024 * 1024 {
                                     Some(curr.0)
                                 }
 
