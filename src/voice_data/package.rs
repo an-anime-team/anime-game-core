@@ -187,19 +187,32 @@ impl VoicePackage {
                             Ok(response) => {
                                 let latest_voice_pack = find_voice_pack(response.data.game.latest.voice_packs, *locale);
 
+                                // This constant found its origin in the change of the voice packages format.
+                                // When the Anime Company decided that they know better how their game should work
+                                // and changed voice files names to some random numbers it caused issue when
+                                // old files aren't being replaced by the new ones, obviously because now they have
+                                // different names. When you download new voice package - its size will be something like 9 GB.
+                                // But Company's API returns double of this size, so like 18 GB, because their API also
+                                // messed folder where they store unpacked voice packages.
+                                // That's why we have to substract this approximate value from all the packages sizes
+                                const CONSTANT_OF_STUPIDITY: u64 = (9.37 * 1024.0 * 1024.0 * 1024.0) as u64;
+
                                 curr = (
                                     Version::from_str(response.data.game.latest.version),
-                                    latest_voice_pack.size.parse().unwrap(),
+                                    latest_voice_pack.size.parse::<u64>().unwrap(),
                                     0
                                 );
 
                                 // We have to use it here because e.g. (2 - 3) can cause u64 overflow
+                                curr.1 = max(curr.1, CONSTANT_OF_STUPIDITY) - min(curr.1, CONSTANT_OF_STUPIDITY);
                                 curr.2 = max(package_size, curr.1) - min(package_size, curr.1);
 
                                 // List through other versions of the game
                                 for diff in response.data.game.diffs {
                                     let voice_pack = find_voice_pack(diff.voice_packs, *locale);
-                                    let voice_pack_size = voice_pack.size.parse().unwrap();
+                                    let mut voice_pack_size = voice_pack.size.parse::<u64>().unwrap();
+
+                                    voice_pack_size = max(voice_pack_size, CONSTANT_OF_STUPIDITY) - min(voice_pack_size, CONSTANT_OF_STUPIDITY);
 
                                     let size_diff = max(package_size, voice_pack_size) - min(package_size, voice_pack_size);
 
