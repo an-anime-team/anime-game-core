@@ -82,6 +82,7 @@ impl Archive {
         }
     }
 
+    /// Tar archives may forbid you to extract them if you call this method
     pub fn get_entries(&mut self) -> Vec<Entry> {
         let mut entries = Vec::new();
 
@@ -144,8 +145,6 @@ impl Archive {
         entries
     }
 
-    // TODO: progress callback
-    // TODO: errors
     pub fn extract<T: ToString>(&mut self, folder: T) {
         match self {
             Archive::Zip(_, zip) => {
