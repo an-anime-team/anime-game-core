@@ -80,7 +80,7 @@ impl VoicePackage {
 
                 Some(Self::NotInstalled {
                     locale,
-                    version: Version::from_str(latest.version),
+                    version: Version::from_str(latest.version).unwrap(),
                     data: find_voice_pack(latest.voice_packs, locale),
                     game_path: None
                 })
@@ -135,7 +135,7 @@ impl VoicePackage {
                 match response.try_json::<ApiResponse>() {
                     Ok(response) => {
                         let mut packages = Vec::new();
-                        let version = Version::from_str(response.data.game.latest.version);
+                        let version = Version::from_str(response.data.game.latest.version).unwrap();
 
                         for package in response.data.game.latest.voice_packs {
                             packages.push(Self::NotInstalled {
@@ -254,7 +254,7 @@ impl VoicePackage {
                                     // Actual folder size can be +- the same as in API response
                                     // Let's say +-250 MB is ok
                                     if package_size > size - 250 * 1024 * 1024 {
-                                        package_version = Some(Version::from_str(version));
+                                        package_version = Some(Version::from_str(version).unwrap());
                                     }
                                 }
 
@@ -289,7 +289,7 @@ impl TryGetDiff for VoicePackage {
 
                                         return Ok(VersionDiff::Diff {
                                             current,
-                                            latest: Version::from_str(response.data.game.latest.version),
+                                            latest: Version::from_str(response.data.game.latest.version).unwrap(),
                                             url: diff.path,
                                             download_size: diff.size.parse::<u64>().unwrap(),
                                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
@@ -303,7 +303,7 @@ impl TryGetDiff for VoicePackage {
         
                                 Ok(VersionDiff::Outdated {
                                     current,
-                                    latest: Version::from_str(response.data.game.latest.version)
+                                    latest: Version::from_str(response.data.game.latest.version).unwrap()
                                 })
                             }
                         },
@@ -315,7 +315,7 @@ impl TryGetDiff for VoicePackage {
                     let latest = find_voice_pack(response.data.game.latest.voice_packs, self.locale());
 
                     Ok(VersionDiff::NotInstalled {
-                        latest: Version::from_str(response.data.game.latest.version),
+                        latest: Version::from_str(response.data.game.latest.version).unwrap(),
                         url: latest.path,
                         download_size: latest.size.parse::<u64>().unwrap(),
                         unpacked_size: latest.package_size.parse::<u64>().unwrap(),

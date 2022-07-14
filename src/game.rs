@@ -34,7 +34,7 @@ impl Game {
     /// Try to get latest game version
     pub fn try_get_latest_version() -> Option<Version> {
         match API::try_fetch_json() {
-            Ok(response) => Some(Version::from_str(response.data.game.latest.version)),
+            Ok(response) => Version::from_str(response.data.game.latest.version),
             Err(_) => None
         }
     }
@@ -147,7 +147,7 @@ impl TryGetDiff for Game {
                             if diff.version == current {
                                 return Ok(VersionDiff::Diff {
                                     current,
-                                    latest: Version::from_str(response.data.game.latest.version),
+                                    latest: Version::from_str(response.data.game.latest.version).unwrap(),
                                     url: diff.path,
                                     download_size: diff.size.parse::<u64>().unwrap(),
                                     unpacked_size: diff.package_size.parse::<u64>().unwrap(),
@@ -158,7 +158,7 @@ impl TryGetDiff for Game {
 
                         Ok(VersionDiff::Outdated {
                             current,
-                            latest: Version::from_str(response.data.game.latest.version)
+                            latest: Version::from_str(response.data.game.latest.version).unwrap()
                         })
                     }
                 },
@@ -170,7 +170,7 @@ impl TryGetDiff for Game {
             let latest = response.data.game.latest;
 
             Ok(VersionDiff::NotInstalled {
-                latest: Version::from_str(&latest.version),
+                latest: Version::from_str(&latest.version).unwrap(),
                 url: latest.path,
                 download_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),

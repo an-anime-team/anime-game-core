@@ -85,10 +85,10 @@ impl Patch {
         
         match response.try_json::<crate::json_schemas::versions::Response>() {
             Ok(response) => {
-                let mut versions = vec![Version::from_str(response.data.game.latest.version)];
+                let mut versions = vec![Version::from_str(response.data.game.latest.version).unwrap()];
 
                 for diff in response.data.game.diffs {
-                    versions.push(Version::from_str(diff.version));
+                    versions.push(Version::from_str(diff.version).unwrap());
                 }
 
                 for version in versions {

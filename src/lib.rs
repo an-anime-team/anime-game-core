@@ -7,6 +7,9 @@ pub mod game;
 pub mod voice_data;
 pub mod external;
 
+#[cfg(test)]
+mod tests;
+
 #[cfg(feature = "install")]
 pub mod installer;
 
