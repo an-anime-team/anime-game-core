@@ -73,20 +73,16 @@ impl VoicePackage {
     /// 
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
     /// technically it can be installed. This method just don't know the game's path
-    pub fn with_locale(locale: VoiceLocale) -> Option<Self> {
-        match API::try_fetch_json() {
-            Ok(response) => {
-                let latest = response.data.game.latest;
+    pub fn with_locale(locale: VoiceLocale) -> Result<Self, Error> {
+        let response = API::try_fetch_json()?;
+        let latest = response.data.game.latest;
 
-                Some(Self::NotInstalled {
-                    locale,
-                    version: Version::from_str(latest.version).unwrap(),
-                    data: find_voice_pack(latest.voice_packs, locale),
-                    game_path: None
-                })
-            },
-            Err(_) => None
-        }
+        Ok(Self::NotInstalled {
+            locale,
+            version: Version::from_str(latest.version).unwrap(),
+            data: find_voice_pack(latest.voice_packs, locale),
+            game_path: None
+        })
     }
 
     // TODO: find_in(game_path: String, locale: VoiceLocale)
@@ -129,30 +125,22 @@ impl VoicePackage {
     }
 
     /// Get list of latest voice packages
-    pub fn list_latest() -> Option<Vec<VoicePackage>> {
-        match API::try_fetch() {
-            Ok(response) => {
-                match response.try_json::<ApiResponse>() {
-                    Ok(response) => {
-                        let mut packages = Vec::new();
-                        let version = Version::from_str(response.data.game.latest.version).unwrap();
+    pub fn list_latest() -> Result<Vec<VoicePackage>, Error> {
+        let response = API::try_fetch_json()?;
 
-                        for package in response.data.game.latest.voice_packs {
-                            packages.push(Self::NotInstalled {
-                                locale: VoiceLocale::from_str(&package.language).unwrap(),
-                                version: version.clone(),
-                                data: package,
-                                game_path: None
-                            });
-                        }
+        let mut packages = Vec::new();
+        let version = Version::from_str(response.data.game.latest.version).unwrap();
 
-                        Some(packages)
-                    },
-                    Err(_) => None
-                }
-            },
-            Err(_) => None
+        for package in response.data.game.latest.voice_packs {
+            packages.push(Self::NotInstalled {
+                locale: VoiceLocale::from_str(&package.language).unwrap(),
+                version: version.clone(),
+                data: package,
+                game_path: None
+            });
         }
+
+        Ok(packages)
     }
 
     /// Get voice package locale
@@ -168,9 +156,9 @@ impl VoicePackage {
     /// contain voice package files
     /// 
     /// TODO: maybe some errors output
-    pub fn try_get_version(&self) -> Option<Version> {
+    pub fn try_get_version(&self) -> Result<Version, Error> {
         match &self {
-            Self::NotInstalled { locale: _, version, data: _, game_path: _} => Some(*version),
+            Self::NotInstalled { locale: _, version, data: _, game_path: _} => Ok(*version),
             Self::Installed { path, locale } => {
                 // self.path is Some(...) if self.version is None
                 // this means that this struct was made from some currently installed path
@@ -181,89 +169,86 @@ impl VoicePackage {
                         // size of the voice package directory and compare it with all the
                         // remotely available voice packages sizes
 
-                        match API::try_fetch_json() {
-                            Ok(response) => {
-                                let latest_voice_pack = find_voice_pack(response.data.game.latest.voice_packs, *locale);
+                        let response = API::try_fetch_json()?;
 
-                                // This constant found its origin in the change of the voice packages format.
-                                // When the Anime Company decided that they know better how their game should work
-                                // and changed voice files names to some random numbers it caused issue when
-                                // old files aren't being replaced by the new ones, obviously because now they have
-                                // different names. When you download new voice package - its size will be something like 9 GB.
-                                // But Company's API returns double of this size, so like 18 GB, because their API also
-                                // messed folder where they store unpacked voice packages.
-                                // That's why we have to substract this approximate value from all the packages sizes
+                        let latest_voice_pack = find_voice_pack(response.data.game.latest.voice_packs, *locale);
 
-                                let CONSTANT_OF_STUPIDITY: u64 = match self.locale() {
-                                    VoiceLocale::English  => 8593687434, // 8 GB
-                                    VoiceLocale::Japanese => 9373182378, // 8.72 GB
-                                    VoiceLocale::Korean   => 8804682956, // 8.2 GB, not calculated (approximation)
-                                    VoiceLocale::Chinese  => 8804682956  // 8.2 GB, not calculated (approximation)
-                                };
+                        // This constant found its origin in the change of the voice packages format.
+                        // When the Anime Company decided that they know better how their game should work
+                        // and changed voice files names to some random numbers it caused issue when
+                        // old files aren't being replaced by the new ones, obviously because now they have
+                        // different names. When you download new voice package - its size will be something like 9 GB.
+                        // But Company's API returns double of this size, so like 18 GB, because their API also
+                        // messed folder where they store unpacked voice packages.
+                        // That's why we have to substract this approximate value from all the packages sizes
 
-                                // println!("Actual package size: {}", package_size);
+                        let CONSTANT_OF_STUPIDITY: u64 = match self.locale() {
+                            VoiceLocale::English  => 8593687434, // 8 GB
+                            VoiceLocale::Japanese => 9373182378, // 8.72 GB
+                            VoiceLocale::Korean   => 8804682956, // 8.2 GB, not calculated (approximation)
+                            VoiceLocale::Chinese  => 8804682956  // 8.2 GB, not calculated (approximation)
+                        };
 
-                                // API works this way:
-                                // We have [latest] field that contains absolute voice package with its real, absolute size
-                                // and we have [diff] fields that contains relative incremental changes with relative sizes
-                                // Since we're approximating packages versions by the real, so absolute folder sizes, we need to calculate
-                                // absolute folder sizes for differences
-                                // Since this is not an option in the API we have second approximation: lets say
-                                // that absolute [2.6.0] version size is [latest (2.8.0)] absolute size - [2.7.0] relative size - [2.6.0] relative size
-                                // That's being said we need to substract each diff.size from the latest.size
+                        // println!("Actual package size: {}", package_size);
 
-                                let mut voice_pack_size = latest_voice_pack.size.parse::<u64>().unwrap() - CONSTANT_OF_STUPIDITY;
-                                let mut packages = VecDeque::from(vec![(response.data.game.latest.version, voice_pack_size)]);
+                        // API works this way:
+                        // We have [latest] field that contains absolute voice package with its real, absolute size
+                        // and we have [diff] fields that contains relative incremental changes with relative sizes
+                        // Since we're approximating packages versions by the real, so absolute folder sizes, we need to calculate
+                        // absolute folder sizes for differences
+                        // Since this is not an option in the API we have second approximation: lets say
+                        // that absolute [2.6.0] version size is [latest (2.8.0)] absolute size - [2.7.0] relative size - [2.6.0] relative size
+                        // That's being said we need to substract each diff.size from the latest.size
 
-                                // println!(" 2.8.0 package size: {}", voice_pack_size);
+                        let mut voice_pack_size = latest_voice_pack.size.parse::<u64>().unwrap() - CONSTANT_OF_STUPIDITY;
+                        let mut packages = VecDeque::from(vec![(response.data.game.latest.version.clone(), voice_pack_size)]);
 
-                                // List through other versions of the game
-                                for diff in response.data.game.diffs {
-                                    let voice_package = find_voice_pack(diff.voice_packs, *locale);
+                        // println!(" 2.8.0 package size: {}", voice_pack_size);
 
-                                    // Approximate this diff absolute folder size
-                                    let relative_size = voice_package.size.parse::<u64>().unwrap();
+                        // List through other versions of the game
+                        for diff in response.data.game.diffs {
+                            let voice_package = find_voice_pack(diff.voice_packs, *locale);
 
-                                    if relative_size < 4 * 1024 * 1024 * 1024 {
-                                        voice_pack_size -= voice_package.size.parse::<u64>().unwrap();
-                                    }
+                            // Approximate this diff absolute folder size
+                            let relative_size = voice_package.size.parse::<u64>().unwrap();
 
-                                    // For no reason API's size field in the [diff] can contain
-                                    // its absolute size. Let's say if size is more than 4 GB then it's only
-                                    // update size, so difference, so relative size. Otherwise it's absolute size
-                                    // 
-                                    // Example (Japanese):
-                                    // 
-                                    // 2.8.0 size: 18736543170 (latest, so absolute size)
-                                    // 2.7.0 size: 1989050587  (clearly update size, so relative)
-                                    // 2.6.0 size: 15531165534 (clearly absolute size)
-                                    else {
-                                        voice_pack_size = max(relative_size, CONSTANT_OF_STUPIDITY) - min(relative_size, CONSTANT_OF_STUPIDITY);
-                                    }
+                            if relative_size < 4 * 1024 * 1024 * 1024 {
+                                voice_pack_size -= voice_package.size.parse::<u64>().unwrap();
+                            }
 
-                                    // println!(" {} package size: {}", diff.version, voice_pack_size);
+                            // For no reason API's size field in the [diff] can contain
+                            // its absolute size. Let's say if size is more than 4 GB then it's only
+                            // update size, so difference, so relative size. Otherwise it's absolute size
+                            // 
+                            // Example (Japanese):
+                            // 
+                            // 2.8.0 size: 18736543170 (latest, so absolute size)
+                            // 2.7.0 size: 1989050587  (clearly update size, so relative)
+                            // 2.6.0 size: 15531165534 (clearly absolute size)
+                            else {
+                                voice_pack_size = max(relative_size, CONSTANT_OF_STUPIDITY) - min(relative_size, CONSTANT_OF_STUPIDITY);
+                            }
 
-                                    packages.push_front((diff.version, voice_pack_size));
-                                }
+                            // println!(" {} package size: {}", diff.version, voice_pack_size);
 
-                                // To approximate the version let's say if an actual folder weights less
-                                // than API says some version should weight - then it's definitely not this version
-                                let mut package_version = None;
-
-                                for (version, size) in packages {
-                                    // Actual folder size can be +- the same as in API response
-                                    // Let's say +-250 MB is ok
-                                    if package_size > size - 250 * 1024 * 1024 {
-                                        package_version = Some(Version::from_str(version).unwrap());
-                                    }
-                                }
-
-                                package_version
-                            },
-                            Err(_) => None
+                            packages.push_front((diff.version, voice_pack_size));
                         }
+
+                        // To approximate the version let's say if an actual folder weights less
+                        // than API says some version should weight - then it's definitely not this version
+                        let mut package_version = Version::from_str(response.data.game.latest.version).unwrap();
+
+                        for (version, size) in packages {
+                            // Actual folder size can be +- the same as in API response
+                            // Let's say +-250 MB is ok
+                            if package_size > size - 250 * 1024 * 1024 {
+                                package_version = Version::from_str(version).unwrap();
+                            }
+                        }
+
+                        Ok(package_version)
                     },
-                    Err(_) => None
+                    Err(err) => Err(Error::new(ErrorKind::Other, err.to_string()))
                 }
             }
         }
@@ -276,38 +261,35 @@ impl TryGetDiff for VoicePackage {
         match API::try_fetch_json() {
             Ok(response) => {
                 if self.is_installed() {
-                    match self.try_get_version() {
-                        Some(current) => {
-                            if response.data.game.latest.version == current {
-                                Ok(VersionDiff::Latest(current))
-                            }
-        
-                            else {
-                                for diff in response.data.game.diffs {
-                                    if diff.version == current {
-                                        let diff = find_voice_pack(diff.voice_packs, self.locale());
+                    let current = self.try_get_version()?;
 
-                                        return Ok(VersionDiff::Diff {
-                                            current,
-                                            latest: Version::from_str(response.data.game.latest.version).unwrap(),
-                                            url: diff.path,
-                                            download_size: diff.size.parse::<u64>().unwrap(),
-                                            unpacked_size: diff.package_size.parse::<u64>().unwrap(),
-                                            unpacking_path: match self {
-                                                VoicePackage::Installed { .. } => None,
-                                                VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
-                                            }
-                                        })
-                                    }
-                                }
-        
-                                Ok(VersionDiff::Outdated {
+                    if response.data.game.latest.version == current {
+                        Ok(VersionDiff::Latest(current))
+                    }
+
+                    else {
+                        for diff in response.data.game.diffs {
+                            if diff.version == current {
+                                let diff = find_voice_pack(diff.voice_packs, self.locale());
+
+                                return Ok(VersionDiff::Diff {
                                     current,
-                                    latest: Version::from_str(response.data.game.latest.version).unwrap()
+                                    latest: Version::from_str(response.data.game.latest.version).unwrap(),
+                                    url: diff.path,
+                                    download_size: diff.size.parse::<u64>().unwrap(),
+                                    unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                    unpacking_path: match self {
+                                        VoicePackage::Installed { .. } => None,
+                                        VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
+                                    }
                                 })
                             }
-                        },
-                        None => Err(Error::new(ErrorKind::Other, "Failed to get voice package version"))
+                        }
+
+                        Ok(VersionDiff::Outdated {
+                            current,
+                            latest: Version::from_str(response.data.game.latest.version).unwrap()
+                        })
                     }
                 }
                 
