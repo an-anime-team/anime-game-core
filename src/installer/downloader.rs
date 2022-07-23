@@ -4,10 +4,19 @@ use std::fs::File;
 
 use curl::easy::Easy;
 
+/// Default amount of bytes `Downloader::download_to` method will store in memory
+/// before writing them onto the disk
+pub const DEFAULT_DOWNLOADING_CHUNK: usize = 64 * 1024 * 1024;
+
 #[derive(Debug)]
 pub struct Downloader {
     length: Option<u64>,
-    curl: Easy
+    curl: Easy,
+
+    /// Amount of bytes `download_to` method will store in memory before
+    /// writing them onto the disk. Uses `DEFAULT_DOWNLOADING_CHUNK` value
+    /// by default
+    pub downloading_chunk: usize
 }
 
 impl Downloader {
@@ -28,7 +37,8 @@ impl Downloader {
             if length >= 0.0 {
                 return Ok(Self {
                     length: Some(length.ceil() as u64),
-                    curl
+                    curl,
+                    downloading_chunk: DEFAULT_DOWNLOADING_CHUNK
                 });
             }
         }
@@ -37,7 +47,8 @@ impl Downloader {
             if length >= 0.0 {
                 return Ok(Self {
                     length: Some(length.ceil() as u64),
-                    curl
+                    curl,
+                    downloading_chunk: DEFAULT_DOWNLOADING_CHUNK
                 });
             }
         }
@@ -70,22 +81,30 @@ impl Downloader {
                 0 => None,
                 len => Some(len)
             },
-            curl
+            curl,
+            downloading_chunk: DEFAULT_DOWNLOADING_CHUNK
         })
     }
 
-    /// Try to get content length
-    pub fn try_get_length(&self) -> Option<u64> {
+    /// Get content length
+    pub fn length(&self) -> Option<u64> {
         self.length
+    }
+
+    /// Set downloading chunk size
+    pub fn set_downloading_chunk(mut self, size: usize) -> Self {
+        self.downloading_chunk = size;
+
+        self
     }
 
     // TODO: verify available free space before starting downloading
     // TODO: somehow use FnOnce instead of Fn
 
-    pub fn download<Fd, Fp>(&mut self, downloader: Fd, progress: Fp) -> Result<(), curl::Error>
+    pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), curl::Error>
     where
         // array of bytes
-        Fd: Fn(&[u8]) -> Result<usize, curl::easy::WriteError> + Send + 'static,
+        Fd: FnMut(&[u8]) -> Result<usize, curl::easy::WriteError> + Send + 'static,
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
@@ -116,34 +135,22 @@ impl Downloader {
 
         match File::create(Path::new(path.as_str())) {
             Ok(mut file) => {
-                let (send, recv) = std::sync::mpsc::channel::<Vec<u8>>();
+                let downloading_chunk = self.downloading_chunk;
+                let total = self.length().unwrap_or(0) as usize;
 
-                // TODO: downloading speed may be higher than disk writing speed, so
-                //       this thread can store lots of data in memory before pushing it
-                //       to the disk which can lead to some issues
-                //       it's better to somehow pause downloading if the queue is full
+                let mut bytes = Vec::new();
+                let mut curr = 0_usize;
 
-                std::thread::spawn(move || {
-                    let mut bytes = Vec::new();
-
-                    while let Ok(mut data) = recv.recv_timeout(std::time::Duration::from_secs(5)) {
-                        bytes.append(&mut data);
-
-                        // Write data by 8 MB chunks
-                        if bytes.len() > 8 * 1024 * 1024 {
-                            file.write_all(&bytes);
-
-                            bytes.clear();
-                        }
-                    }
-
-                    if bytes.len() > 0 {
-                        file.write_all(&bytes);
-                    }
-                });
-        
                 self.download(move |data| {
-                    send.send(data.to_vec());
+                    curr += data.len();
+                    bytes.extend_from_slice(data);
+
+                    // FIXME: (0_usize - x_usize), where x > 0, will cause usize overflow and panic
+                    if bytes.len() >= downloading_chunk || total - curr <= downloading_chunk {
+                        file.write_all(&bytes).expect("Failed to write data");
+
+                        bytes.clear();
+                    }
 
                     Ok(data.len())
                 }, progress)

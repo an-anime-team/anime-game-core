@@ -25,15 +25,29 @@ pub enum Update {
 #[derive(Debug)]
 pub struct Installer {
     downloader: Downloader,
-    url: String
+    url: String,
+
+    /// Path to the temp folder used to store archive before unpacking
+    pub temp_folder: String
 }
 
 impl Installer {
     pub fn new<T: ToString>(url: T) -> Result<Self, curl::Error> {
         match Downloader::new(url.to_string()) {
-            Ok(downloader) => Ok(Self { downloader, url: url.to_string() }),
+            Ok(downloader) => Ok(Self {
+                downloader,
+                url: url.to_string(),
+                temp_folder: temp_dir().to_str().unwrap().to_string()
+            }),
             Err(err) => Err(err)
         }
+    }
+
+    /// Specify path to the temp folder used to store archive before unpacking
+    pub fn set_temp_folder<T: ToString>(mut self, path: T) -> Self {
+        self.temp_folder = path.to_string();
+
+        self
     }
 
     /// Get name of downloading file from uri
@@ -51,11 +65,8 @@ impl Installer {
         }
     }
 
-    // TODO: ability to specify temp folder
     fn get_temp_path(&self) -> String {
-        let temp_file = temp_dir().to_str().unwrap().to_string();
-
-        format!("{}/.{}-{}", temp_file, Uuid::new_v4().to_string(), self.get_filename())
+        format!("{}/.{}-{}", self.temp_folder, Uuid::new_v4().to_string(), self.get_filename())
     }
 
     /// Download archive from specified uri and unpack it
