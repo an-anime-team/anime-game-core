@@ -124,11 +124,22 @@ impl Downloader {
                 //       it's better to somehow pause downloading if the queue is full
 
                 std::thread::spawn(move || {
-                    while let Ok(data) = recv.recv_timeout(std::time::Duration::from_secs(5)) {
-                        file.write(&data);
+                    let mut bytes = Vec::new();
+
+                    while let Ok(mut data) = recv.recv_timeout(std::time::Duration::from_secs(5)) {
+                        bytes.append(&mut data);
+
+                        // Write data by 8 MB chunks
+                        if bytes.len() > 8 * 1024 * 1024 {
+                            file.write_all(&bytes);
+
+                            bytes.clear();
+                        }
                     }
 
-                    file.flush();
+                    if bytes.len() > 0 {
+                        file.write_all(&bytes);
+                    }
                 });
         
                 self.download(move |data| {
