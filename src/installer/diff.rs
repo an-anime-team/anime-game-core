@@ -112,15 +112,10 @@ impl VersionDiff {
             VersionDiff::Outdated { current: _, latest: _ } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { unpacking_path, .. } => {
-                match unpacking_path {
-                    Some(unpacking_path) => self.install_to(unpacking_path, updater),
-                    None => Err(DiffDownloadError::PathNotSpecified)
-                }
-            },
+            VersionDiff::Diff { unpacking_path, .. } |
             VersionDiff::NotInstalled { unpacking_path, .. } => {
                 match unpacking_path {
-                    Some(unpacking_path) => self.install_to(unpacking_path, updater),
+                    Some(unpacking_path) => self.install_to_by(unpacking_path, None, updater),
                     None => Err(DiffDownloadError::PathNotSpecified)
                 }
             }
@@ -134,6 +129,26 @@ impl VersionDiff {
         T: ToString,
         F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
+        match self {
+            // Can't be downloaded
+            VersionDiff::Latest(_) => Err(DiffDownloadError::AlreadyLatest),
+            VersionDiff::Outdated { current: _, latest: _ } => Err(DiffDownloadError::Outdated),
+
+            // Can be downloaded
+            VersionDiff::Diff { .. } |
+            VersionDiff::NotInstalled { .. } => self.install_to_by(path, None, updater)
+        }
+    }
+
+    /// Try to install the difference by specified location and temp folder
+    /// 
+    /// Same as `install_to` method if `temp_path` specified as `None` (uses default system temp folder)
+    #[cfg(feature = "install")]
+    pub fn install_to_by<T, F>(&self, path: T, temp_path: Option<T>, updater: F) -> Result<(), DiffDownloadError>
+    where
+        T: ToString,
+        F: Fn(InstallerUpdate) + Clone + Send + 'static
+    {
         let url;
 
         match self {
@@ -142,12 +157,16 @@ impl VersionDiff {
             VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { url: diff_url, .. } => url = diff_url.clone(),
+            VersionDiff::Diff { url: diff_url, .. } |
             VersionDiff::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
         }
 
         match Installer::new(url) {
             Ok(mut installer) => {
+                if let Some(temp_path) = temp_path {
+                    installer = installer.set_temp_folder(temp_path.to_string());
+                }
+
                 installer.install(path.to_string(), updater);
 
                 // TODO: https://gitlab.com/an-anime-team/an-anime-game-launcher/-/blob/main/src/ts/launcher/states/ApplyChanges.ts
