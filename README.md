@@ -40,13 +40,3 @@ Feature: `linux-patch`
 * [x] Fetch remote patch info
 * [x] Identify installed patch info
 * [x] Apply / revert patch
-
-Feature: `wine`
-
-* [ ] Manage wine installations (download, remove)
-* [ ] Create prefix
-
-Feature: `dxvk`
-
-* [ ] Manage DXVKs installations (download, remove)
-* [ ] Apply DXVK

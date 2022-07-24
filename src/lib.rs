@@ -31,7 +31,7 @@ pub mod prelude {
     pub use super::installer::prelude::*;
 
     #[cfg(feature = "install")]
-    pub use super::external::hdiff;
+    pub use super::external::hpatchz;
 
     #[cfg(feature = "install")]
     pub use super::repairer;

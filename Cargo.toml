@@ -7,26 +7,27 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-curl = { version = "0.4.43", features = ["rustls"] }  # `static-curl` and `static-ssl` for static linking
+curl = { version = "0.4" }  # `static-curl` and `static-ssl` for static linking
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 fs_extra = "1.2.0"
 
 # Install feature
-uuid = { version = "1.1.2", features = ["v4", "fast-rng"], optional = true }
-zip = { version = "0.6.2", optional = true }
-tar = { version = "0.4.38", optional = true }
+uuid = { version = "1.1", features = ["v4", "fast-rng"], optional = true }
+zip = { version = "0.6", optional = true }
+tar = { version = "0.4", optional = true }
 
 # Compression types for tar
-xz = { version = "0.1.0", optional = true }
-bzip2 = { version = "0.4.3", optional = true }
-flate2 = { version = "1.0.24", optional = true }
+xz = { version = "0.1", optional = true }
+bzip2 = { version = "0.4", optional = true }
+flate2 = { version = "1.0", optional = true }
 
 # Linux patch feature
-md5 = { version = "0.7.0", optional = true }
+md5 = { version = "0.7", optional = true }
 # git2 = { version = "0.14.4", optional = true }
 
 [features]
 install = ["dep:uuid", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2"]
 linux-patch = ["dep:md5"] # , "dep:git2"
 all = ["install", "linux-patch"]
+static = ["curl/rustls", "curl/static-curl"]

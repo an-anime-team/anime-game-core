@@ -4,12 +4,15 @@ use std::io::Error;
 use crate::version::Version;
 
 #[cfg(feature = "install")]
-use crate::installer::{
-    downloader::Downloader,
+use crate::{
     installer::{
-        Installer,
-        Update as InstallerUpdate
-    }
+        downloader::Downloader,
+        installer::{
+            Installer,
+            Update as InstallerUpdate
+        }
+    },
+    external::hpatchz
 };
 
 #[derive(Debug, Clone)]
@@ -23,6 +26,9 @@ pub enum DiffDownloadError {
 
     /// Failed to fetch remove data. Redirected from `Downloader`
     Curl(curl::Error),
+
+    // Failed to apply hdiff patch
+    HdiffPatch(String),
 
     /// Installation path wasn't specified. This could happen when you
     /// try to call `install` method on `VersionDiff` that was generated
@@ -79,7 +85,7 @@ impl VersionDiff {
         match self {
             // Can't be downloaded
             VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
+            VersionDiff::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
             VersionDiff::Diff { url: diff_url, .. } => url = diff_url.clone(),
@@ -109,7 +115,7 @@ impl VersionDiff {
         match self {
             // Can't be downloaded
             VersionDiff::Latest(_) => Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => Err(DiffDownloadError::Outdated),
+            VersionDiff::Outdated { .. } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
             VersionDiff::Diff { unpacking_path, .. } |
@@ -132,7 +138,7 @@ impl VersionDiff {
         match self {
             // Can't be downloaded
             VersionDiff::Latest(_) => Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => Err(DiffDownloadError::Outdated),
+            VersionDiff::Outdated { .. } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
             VersionDiff::Diff { .. } |
@@ -154,7 +160,7 @@ impl VersionDiff {
         match self {
             // Can't be downloaded
             VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { current: _, latest: _ } => return Err(DiffDownloadError::Outdated),
+            VersionDiff::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
             VersionDiff::Diff { url: diff_url, .. } |
@@ -169,18 +175,38 @@ impl VersionDiff {
 
                 installer.install(path.to_string(), updater);
 
-                // TODO: https://gitlab.com/an-anime-team/an-anime-game-launcher/-/blob/main/src/ts/launcher/states/ApplyChanges.ts
-                // TODO: update states for patches applying and removing of outdated files
+                // Apply hdiff patches
+                // We're ignoring Err because in practice it means that hdifffiles.txt is missing
+                if let Ok(files) = read_to_string(format!("{}/hdifffiles.txt", path.to_string())) {
+                    // {"remoteName": "AnimeGame_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/Japanese/1001.pck"}
+                    for file in files.lines().collect::<Vec<&str>>() {
+                        let file = format!("{}/{}", path.to_string(), &file[16..file.len() - 2]);
+                        let patch = format!("{}.hdiff", &file);
+                        let output = format!("{}.hdiff_patched", &file);
+
+                        if let Err(err) = hpatchz::patch(&file, &patch, &output) {
+                            return Err(DiffDownloadError::HdiffPatch(err.to_string()));
+                        }
+
+                        remove_file(&file).expect(&format!("Failed to remove hdiff patch: {}", &file));
+                        remove_file(&patch).expect(&format!("Failed to remove hdiff patch: {}", &patch));
+
+                        std::fs::rename(&output, &file).expect(&format!("Failed to rename hdiff patch: {}", &file));
+                    }
+
+                    remove_file(format!("{}/hdifffiles.txt", path.to_string()))
+                        .expect("Failed to remove hdifffiles.txt");
+                }
 
                 // Remove outdated files
                 // We're ignoring Err because in practice it means that deletefiles.txt is missing
                 if let Ok(files) = read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
                     for file in files.lines().collect::<Vec<&str>>() {
-                        // TODO: add errors handling
-                        remove_file(file).expect("Failed to remove outdated file");
+                        remove_file(&file).expect(&format!("Failed to remove outdated file: {}", file));
                     }
 
-                    remove_file(format!("{}/deletefiles.txt", path.to_string())).expect("Failed to remove deletefiles.txt");
+                    remove_file(format!("{}/deletefiles.txt", path.to_string()))
+                        .expect("Failed to remove deletefiles.txt");
                 }
                 
                 Ok(())
@@ -194,10 +220,10 @@ impl VersionDiff {
         match self {
             // Can't be downloaded
             VersionDiff::Latest(_) => None,
-            VersionDiff::Outdated { current: _, latest: _ } => None,
+            VersionDiff::Outdated { .. } => None,
 
             // Can be downloaded
-            VersionDiff::Diff { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size)),
+            VersionDiff::Diff { download_size, unpacked_size, .. } |
             VersionDiff::NotInstalled { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size))
         }
     }
@@ -207,7 +233,7 @@ impl VersionDiff {
         match self {
             // Can't be downloaded
             VersionDiff::Latest(_) => None,
-            VersionDiff::Outdated { current: _, latest: _ } => None,
+            VersionDiff::Outdated { .. } => None,
 
             // Can be downloaded
             VersionDiff::Diff { unpacking_path, .. } => unpacking_path.clone(),

@@ -1,1 +1,1 @@
-pub mod hdiff;
+pub mod hpatchz;
