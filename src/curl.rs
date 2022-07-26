@@ -34,6 +34,7 @@ impl Response {
 
         let (send, recv) = mpsc::channel();
 
+        #[allow(unused_must_use)]
         self.curl.write_function(move |data| {
             send.send(data.to_vec());
 
@@ -64,6 +65,7 @@ pub fn fetch<T: ToString>(url: T) -> Result<Response, curl::Error> {
 
     let (send, recv) = mpsc::channel();
 
+    #[allow(unused_must_use)]
     curl.header_function(move |data| {
         send.send(String::from_utf8_lossy(data).to_string());
 

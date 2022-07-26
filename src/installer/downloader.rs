@@ -59,6 +59,7 @@ impl Downloader {
             let header = String::from_utf8_lossy(header);
 
             // Content-Length: 8899
+            #[allow(unused_must_use)]
             if header.len() > 16 && &header[..16] == "Content-Length: " {
                 send.send(header[16..header.len() - 2].parse::<u64>().unwrap());
             }

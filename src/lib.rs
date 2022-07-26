@@ -5,7 +5,6 @@ pub mod version;
 pub mod curl;
 pub mod game;
 pub mod voice_data;
-pub mod external;
 
 #[cfg(test)]
 mod tests;
@@ -19,6 +18,9 @@ pub mod repairer;
 #[cfg(feature = "linux-patch")]
 pub mod linux_patch;
 
+#[cfg(feature = "external")]
+pub mod external;
+
 pub mod prelude {
     pub use super::consts::*;
     pub use super::version::*;
@@ -31,13 +33,13 @@ pub mod prelude {
     pub use super::installer::prelude::*;
 
     #[cfg(feature = "install")]
-    pub use super::external::hpatchz;
-
-    #[cfg(feature = "install")]
     pub use super::repairer;
 
     #[cfg(feature = "linux-patch")]
     pub use super::linux_patch::prelude::*;
+
+    #[cfg(feature = "external")]
+    pub use super::external;
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

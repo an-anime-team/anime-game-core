@@ -1,6 +1,6 @@
 [package]
 name = "anime-game-core"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Nikita Podvirnyy <suimin.tu.mu.ga.mi@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"
@@ -26,8 +26,13 @@ flate2 = { version = "1.0", optional = true }
 md5 = { version = "0.7", optional = true }
 # git2 = { version = "0.14.4", optional = true }
 
+# External feature
+kinda-virtual-fs = { version = "0.1.1", optional = true }
+lazy_static = { version = "1.4.0", optional = true }
+
 [features]
 install = ["dep:uuid", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2"]
 linux-patch = ["dep:md5"] # , "dep:git2"
-all = ["install", "linux-patch"]
+external = ["dep:kinda-virtual-fs", "dep:lazy_static"]
+all = ["install", "linux-patch", "external"]
 static = ["curl/rustls", "curl/static-curl"]

@@ -48,6 +48,7 @@ impl<'a> API {
 
                     curl.url(API_URI)?;
 
+                    #[allow(unused_must_use)]
                     curl.write_function(move |data| {
                         sender.send(Vec::from(data));
 

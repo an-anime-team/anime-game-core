@@ -8,10 +8,7 @@ use fs_extra::dir::get_size;
 use super::locale::VoiceLocale;
 use crate::version::Version;
 use crate::api::API;
-use crate::json_schemas::versions::{
-    Response as ApiResponse,
-    VoicePack as RemoteVoicePack
-};
+use crate::json_schemas::versions::VoicePack as RemoteVoicePack;
 use crate::consts::get_voice_package_path;
 
 #[cfg(feature = "install")]
@@ -182,6 +179,7 @@ impl VoicePackage {
                         // messed folder where they store unpacked voice packages.
                         // That's why we have to substract this approximate value from all the packages sizes
 
+                        #[allow(non_snake_case)]
                         let CONSTANT_OF_STUPIDITY: u64 = match self.locale() {
                             VoiceLocale::English  => 8593687434, // 8 GB
                             VoiceLocale::Japanese => 9373182378, // 8.72 GB
