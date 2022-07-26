@@ -6,6 +6,8 @@ pub mod curl;
 pub mod game;
 pub mod voice_data;
 
+pub use ::curl as curl_sys;
+
 #[cfg(test)]
 mod tests;
 
