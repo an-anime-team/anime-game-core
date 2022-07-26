@@ -39,3 +39,5 @@ pub mod prelude {
     #[cfg(feature = "linux-patch")]
     pub use super::linux_patch::prelude::*;
 }
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
