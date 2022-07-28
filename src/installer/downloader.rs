@@ -8,6 +8,10 @@ use curl::easy::Easy;
 /// before writing them onto the disk
 pub const DEFAULT_DOWNLOADING_CHUNK: usize = 64 * 1024 * 1024;
 
+/// Default amount of progress updates that will be skipped each time
+/// before calling progress function
+pub const DEFAULT_DOWNLOADING_UPDATES_FREQUENCE: usize = 4000;
+
 #[derive(Debug)]
 pub struct Downloader {
     length: Option<u64>,
@@ -16,7 +20,11 @@ pub struct Downloader {
     /// Amount of bytes `download_to` method will store in memory before
     /// writing them onto the disk. Uses `DEFAULT_DOWNLOADING_CHUNK` value
     /// by default
-    pub downloading_chunk: usize
+    pub downloading_chunk: usize,
+
+    /// Amount of progress updates that will be skipped each time
+    /// before calling progress function
+    pub downloading_updates_frequence: usize
 }
 
 impl Downloader {
@@ -38,7 +46,8 @@ impl Downloader {
                 return Ok(Self {
                     length: Some(length.ceil() as u64),
                     curl,
-                    downloading_chunk: DEFAULT_DOWNLOADING_CHUNK
+                    downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
+                    downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
                 });
             }
         }
@@ -48,7 +57,8 @@ impl Downloader {
                 return Ok(Self {
                     length: Some(length.ceil() as u64),
                     curl,
-                    downloading_chunk: DEFAULT_DOWNLOADING_CHUNK
+                    downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
+                    downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
                 });
             }
         }
@@ -83,7 +93,8 @@ impl Downloader {
                 len => Some(len)
             },
             curl,
-            downloading_chunk: DEFAULT_DOWNLOADING_CHUNK
+            downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
+            downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
         })
     }
 
@@ -117,8 +128,22 @@ impl Downloader {
 
         let content_length = self.length.clone();
 
+        let downloading_chunk = self.downloading_chunk as u64;
+        let updates_frequence = self.downloading_updates_frequence;
+
+        let mut i = 0_usize;
+
         self.curl.progress_function(move |expected_total, downloaded, _, _| {
-            (progress)(downloaded.ceil() as u64, content_length.unwrap_or(expected_total.ceil() as u64));
+            let curr = downloaded.ceil() as u64;
+            let total = content_length.unwrap_or(expected_total.ceil() as u64);
+
+            i += 1;
+
+            if i == updates_frequence || total - curr <= downloading_chunk {
+                (progress)(curr, total);
+
+                i = 0;
+            }
 
             true
         })?;

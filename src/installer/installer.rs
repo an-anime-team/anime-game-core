@@ -24,7 +24,7 @@ pub enum Update {
 
 #[derive(Debug)]
 pub struct Installer {
-    downloader: Downloader,
+    pub downloader: Downloader,
     url: String,
 
     /// Path to the temp folder used to store archive before unpacking
