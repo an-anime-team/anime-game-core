@@ -151,8 +151,6 @@ impl VoicePackage {
     /// This method can fail to parse this package version.
     /// It also can mean that the corresponding folder doesn't
     /// contain voice package files
-    /// 
-    /// TODO: maybe some errors output
     pub fn try_get_version(&self) -> Result<Version, Error> {
         match &self {
             Self::NotInstalled { locale: _, version, data: _, game_path: _} => Ok(*version),
@@ -250,6 +248,51 @@ impl VoicePackage {
                 }
             }
         }
+    }
+
+    /// Try to delete voice package
+    /// 
+    /// FIXME:
+    /// ! May fail on Chinese version due to paths differences
+    pub fn delete(&self) -> std::io::Result<()> {
+        match self {
+            VoicePackage::Installed { path, .. } => {
+                let mut game_path = Path::new(path);
+
+                for _ in 0..6 {
+                    game_path = match game_path.parent() {
+                        Some(game_path) => game_path,
+                        None => return Err(Error::new(ErrorKind::Other, "Failed to find game directory"))
+                    };
+                }
+
+                self.delete_in(game_path.to_string_lossy())
+            },
+            VoicePackage::NotInstalled { game_path, .. } => {
+                match game_path {
+                    Some(game_path) => self.delete_in(game_path),
+                    None => return Err(Error::new(ErrorKind::Other, "Failed to find game directory"))
+                }
+            }
+        }
+    }
+
+    /// Try to delete voice package from specific game directory
+    /// 
+    /// FIXME:
+    /// ! May fail on Chinese version due to paths differences
+    pub fn delete_in<T: ToString>(&self, game_path: T) -> std::io::Result<()> {
+        let locale = match self {
+            VoicePackage::Installed { locale, .. } |
+            VoicePackage::NotInstalled { locale, .. } => locale
+        };
+
+        // GenshinImpact_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/<locale folder>
+        // Audio_<locale folder>_pkg_version
+        std::fs::remove_dir_all(format!("{}/GenshinImpact_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/{}", game_path.to_string(), locale.to_folder()))?;
+        std::fs::remove_file(format!("{}/Audio_{}_pkg_version", game_path.to_string(), locale.to_folder()))?;
+
+        Ok(())
     }
 }
 

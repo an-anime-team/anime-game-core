@@ -4,7 +4,7 @@ Common library to control the Anime Game installation, written in Rust
 
 ## Roadmap to 1.0.0
 
-* [ ] Game
+* [x] Game
   * [x] Get current version
   * [x] Calculate difference with the latest version
 
@@ -16,7 +16,7 @@ Common library to control the Anime Game installation, written in Rust
     * [x] Apply hdiff changes
   * [x] Repair game files
 
-* [ ] Voice packages
+* [x] Voice packages
   * [x] List installed packages
   * [x] Get packages versions
   * [x] List available packages
@@ -25,11 +25,11 @@ Common library to control the Anime Game installation, written in Rust
   Feature: `install`
 
   * [x] Install the difference
-  * [ ] Apply changes for updates
+  * [x] Apply changes for updates
     * [x] Remove outdated files
-    * [ ] Apply hdiff changes
-  * [ ] Delete voice packages
-  * [ ] Repair broken packages
+    * [x] Apply hdiff changes
+  * [x] Delete voice packages
+  * [x] Repair broken packages
 
 Feature: `telemetry`
 

@@ -70,8 +70,6 @@ impl Installer {
     }
 
     /// Download archive from specified uri and unpack it
-    /// 
-    /// This does not freeze current thread
     pub fn install<T, F>(&mut self, unpack_to: T, updater: F)
     where
         T: ToString,
