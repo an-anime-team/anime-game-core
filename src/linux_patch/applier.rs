@@ -182,7 +182,7 @@ impl PatchApplier {
     /// 
     /// It's recommended to run this method with `use_root = true` to append telemetry entries to the hosts file.
     /// The patch script will be run with `pkexec` and this ask for root password
-    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> Result<bool, Error> {
+    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> Result<(), Error> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -230,7 +230,7 @@ impl PatchApplier {
                         .arg(format!("\"cd '{}' ; bash '{}'\"", game_path.to_string(), patch_file))
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
-                        .stderr(Stdio::null())
+                        .stderr(Stdio::piped())
                         .spawn()?
                 } else {
                     Command::new("bash")
@@ -238,7 +238,7 @@ impl PatchApplier {
                         .current_dir(game_path.to_string())
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
-                        .stderr(Stdio::null())
+                        .stderr(Stdio::piped())
                         .spawn()?
                 };
 
@@ -252,7 +252,13 @@ impl PatchApplier {
                 fs::remove_dir_all(temp_dir)?;
 
                 // Return patching status
-                Ok(String::from_utf8_lossy(&output.stdout).contains("Patch applied!"))
+                if String::from_utf8_lossy(&output.stdout).contains("Patch applied!") {
+                    Ok(())
+                }
+
+                else {
+                    Err(Error::new(ErrorKind::Other, String::from_utf8_lossy(&output.stderr)))
+                }
             },
             None => Err(Error::new(ErrorKind::Other, "Failed to get patch version"))
         }
