@@ -227,7 +227,7 @@ impl PatchApplier {
                     Command::new("pkexec")
                         .arg("bash")
                         .arg("-c")
-                        .arg(format!("\"cd '{}' ; bash '{}'\"", game_path.to_string(), patch_file))
+                        .arg(format!("cd '{}' ; bash '{}'", game_path.to_string(), patch_file))
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .stderr(Stdio::piped())
