@@ -17,10 +17,25 @@ pub struct IntegrityFile {
 }
 
 impl IntegrityFile {
-    /// Compare file hashes
+    /// Compare files' sizes and (if needed) hashes
     pub fn verify<T: ToString>(&self, game_path: T) -> bool {
-        match std::fs::read(format!("{}/{}", game_path.to_string(), self.path)) {
-            Ok(hash) => format!("{:x}", md5::compute(hash)) == self.md5,
+        let file_path = format!("{}/{}", game_path.to_string(), self.path);
+
+        // Compare files' sizes. If they're different - they 100% different
+        match std::fs::metadata(&file_path) {
+            Ok(metadata) => {
+                if metadata.len() != self.size {
+                    false
+                }
+
+                else {
+                    // And if files' sizes are same we should compare their hashes
+                    match std::fs::read(&file_path) {
+                        Ok(hash) => format!("{:x}", md5::compute(hash)) == self.md5,
+                        Err(_) => false
+                    }
+                }
+            },
             Err(_) => false
         }
     }
