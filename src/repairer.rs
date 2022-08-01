@@ -40,6 +40,14 @@ impl IntegrityFile {
         }
     }
 
+    /// Compare files' sizes and do not compare files' hashes. Works lots faster than `verify`
+    pub fn fast_verify<T: ToString>(&self, game_path: T) -> bool {
+        match std::fs::metadata(format!("{}/{}", game_path.to_string(), self.path)) {
+            Ok(metadata) => metadata.len() == self.size,
+            Err(_) => false
+        }
+    }
+
     /// Replace remote file with the latest one
     /// 
     /// This method doesn't compare them, so you should do it manually
