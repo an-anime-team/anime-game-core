@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::version::{Version, ToVersion};
@@ -6,7 +7,9 @@ use crate::api::API;
 
 /// If this line is commented in the `patch.sh` file, then it's stable version.
 /// Otherwise it's in testing phase
-const STABILITY_MARK: &'static str = "#echo \"If you would like to test this patch, modify this script and remove the line below this one.\"";
+const STABILITY_MARK: &str = "#echo \"If you would like to test this patch, modify this script and remove the line below this one.\"";
+
+static mut PATCH_RESPONSES: Option<HashMap<(String, Version), Patch>> = None;
 
 #[derive(Debug, Clone)]
 pub enum Regions {
@@ -115,6 +118,20 @@ impl Patch {
     /// 
     /// Never returns `Some(Patch::Outdated)` because doesn't check the latest game version
     pub fn try_fetch_version<T: ToString>(host: T, version: Version, timeout: Option<Duration>) -> Result<Self, curl::Error> {
+        // Return cached value if it exists
+        unsafe {
+            if let Some(responses) = &PATCH_RESPONSES {
+                if let Some(response) = responses.get(&(host.to_string(), version)) {
+                    return Ok(response.clone());
+                }
+            }
+
+            else {
+                PATCH_RESPONSES = Some(HashMap::new());
+            }
+        }
+
+        // Otherwise gather patch info
         let response = fetch(format!("{}/raw/master/{}/README.txt", host.to_string(), version.to_plain_string()), timeout)?;
 
         // Preparation / Testing / Available
@@ -168,52 +185,86 @@ impl Patch {
                     _ => unreachable!()
                 };
 
-                match player_hash {
+                let patch = match player_hash {
                     Some(player_hash) => {
                         // If patch.sh contains STABILITY_MARK - then it's stable version
                         if body.contains(STABILITY_MARK) {
-                            Ok(Self::Available {
+                            Self::Available {
                                 version,
                                 host: host.to_string(),
                                 player_hash
-                            })
+                            }
                         }
 
                         // Otherwise it's in testing
                         else {
-                            Ok(Self::Testing {
+                            Self::Testing {
                                 version,
                                 host: host.to_string(),
                                 player_hash
-                            })
+                            }
                         }
                     },
 
                     // Failed to parse UnityPlayer.dll hashes -> likely in preparation state
                     // but also could be changed file structure, or something else
-                    None => Ok(Self::Preparation {
+                    None => Self::Preparation {
                         version,
                         host: host.to_string()
-                    })
+                    }
+                };
+
+                // Cache result
+                unsafe {
+                    let responses = PATCH_RESPONSES.as_mut().unwrap();
+
+                    responses.insert((host.to_string(), version), patch.clone());
                 }
+
+                // Return patch
+                Ok(patch)
             }
 
             // This file is not found so it should be preparation state
             else if response.status == Some(404) {
-                Ok(Self::Preparation {
+                let patch = Self::Preparation {
                     version,
                     host: host.to_string()
-                })
+                };
+
+                unsafe {
+                    let responses = PATCH_RESPONSES.as_mut().unwrap();
+
+                    responses.insert((host.to_string(), version), patch.clone());
+                }
+
+                Ok(patch)
             }
 
             // Server is not available
             else {
+                let patch = Self::NotAvailable;
+
+                unsafe {
+                    let responses = PATCH_RESPONSES.as_mut().unwrap();
+
+                    responses.insert((host.to_string(), version), patch.clone());
+                }
+
                 Ok(Self::NotAvailable)
             }
         }
 
         // Not found / server is not available / ...
         else {
+            let patch = Self::NotAvailable;
+
+            unsafe {
+                let responses = PATCH_RESPONSES.as_mut().unwrap();
+
+                responses.insert((host.to_string(), version), patch.clone());
+            }
+
             Ok(Self::NotAvailable)
         }
     }
