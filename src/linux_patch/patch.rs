@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::version::{Version, ToVersion};
 use crate::curl::fetch;
 use crate::api::API;
@@ -79,8 +81,8 @@ impl Patch {
     /// and return it. This means that if the first host contains outdated version, and the second - updated,
     /// this method will return outdated version
     /// 
-    /// TODO: this should be changed in future
-    pub fn try_fetch<T: ToString>(hosts: Vec<T>) -> Result<Self, curl::Error> {
+    /// Timeout is applied to all the requests separately, so the whole operation can take more than `Some(timeout)`
+    pub fn try_fetch<T: ToString>(hosts: Vec<T>, timeout: Option<Duration>) -> Result<Self, curl::Error> {
         let response = API::try_fetch()?;
         
         match response.try_json::<crate::json_schemas::versions::Response>() {
@@ -93,7 +95,7 @@ impl Patch {
 
                 for version in versions {
                     for host in &hosts {
-                        match Self::try_fetch_version(host.to_string(), version) {
+                        match Self::try_fetch_version(host.to_string(), version, timeout) {
                             Ok(Patch::NotAvailable) => continue,
                             Err(_) => continue,
 
@@ -112,16 +114,16 @@ impl Patch {
     /// Try to fetch the patch with specified game version
     /// 
     /// Never returns `Some(Patch::Outdated)` because doesn't check the latest game version
-    pub fn try_fetch_version<T: ToString>(host: T, version: Version) -> Result<Self, curl::Error> {
-        let response = fetch(format!("{}/raw/master/{}/README.txt", host.to_string(), version.to_plain_string()))?;
+    pub fn try_fetch_version<T: ToString>(host: T, version: Version, timeout: Option<Duration>) -> Result<Self, curl::Error> {
+        let response = fetch(format!("{}/raw/master/{}/README.txt", host.to_string(), version.to_plain_string()), timeout)?;
 
         // Preparation / Testing / Available
         if response.is_ok() {
-            let response = fetch(format!("{}/raw/master/{}/patch_files/unityplayer_patch_os.vcdiff", host.to_string(), version.to_plain_string()))?;
-            
+            let response = fetch(format!("{}/raw/master/{}/patch_files/unityplayer_patch_os.vcdiff", host.to_string(), version.to_plain_string()), timeout)?;
+
             // Testing / Available
             if response.is_ok() {
-                let mut response = fetch(format!("{}/raw/master/{}/patch.sh", host.to_string(), version.to_plain_string()))?;
+                let mut response = fetch(format!("{}/raw/master/{}/patch.sh", host.to_string(), version.to_plain_string()), timeout)?;
 
                 let body = response.get_body()?;
                 let body = String::from_utf8_lossy(&body);

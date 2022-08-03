@@ -33,6 +33,7 @@ Common library to control the Anime Game installation, written in Rust
 
 Feature: `telemetry`
 
+* [x] Check if disabled
 * [ ] Disable / enable
 
 Feature: `linux-patch`

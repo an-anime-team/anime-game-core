@@ -60,8 +60,9 @@ fn try_get_some_integrity_files<T: ToString>(file_name: T) -> std::io::Result<Ve
     let response = API::try_fetch_json()?;
 
     let decompressed_path = response.data.game.latest.decompressed_path;
-    
-    let mut pkg_version = fetch(format!("{}/{}", &decompressed_path, file_name.to_string()))?;
+
+    // TODO: add timeout
+    let mut pkg_version = fetch(format!("{}/{}", &decompressed_path, file_name.to_string()), None)?;
     let pkg_version = pkg_version.get_body()?;
 
     let mut files = Vec::new();

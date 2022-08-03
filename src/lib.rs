@@ -23,6 +23,9 @@ pub mod linux_patch;
 #[cfg(feature = "external")]
 pub mod external;
 
+#[cfg(feature = "telemetry")]
+pub mod telemetry;
+
 pub mod prelude {
     pub use super::consts::*;
     pub use super::version::*;
@@ -42,6 +45,9 @@ pub mod prelude {
 
     #[cfg(feature = "external")]
     pub use super::external;
+
+    #[cfg(feature = "telemetry")]
+    pub use super::telemetry;
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,4 +1,5 @@
 use std::sync::mpsc;
+use std::time::Duration;
 
 use curl::easy::Easy;
 
@@ -56,12 +57,16 @@ impl Response {
 /// Try to fetch remote data
 /// 
 /// TODO: add request timeout
-pub fn fetch<T: ToString>(url: T) -> Result<Response, curl::Error> {
+pub fn fetch<T: ToString>(url: T, timeout: Option<Duration>) -> Result<Response, curl::Error> {
     let mut curl = Easy::new();
 
     curl.url(&url.to_string())?;
     curl.follow_location(true)?;
     curl.nobody(true)?;
+
+    if let Some(timeout) = timeout {
+        curl.timeout(timeout)?;
+    }
 
     let (send, recv) = mpsc::channel();
 

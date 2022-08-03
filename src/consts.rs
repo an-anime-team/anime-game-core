@@ -1,7 +1,13 @@
 use super::voice_data::locale::VoiceLocale;
 
 // TODO: encode this string to something
-pub const API_URI: &'static str = "https://sdk-os-static.hoyoverse.com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10";
+pub const API_URI: &str = "https://sdk-os-static.hoyoverse.com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10";
+
+#[cfg(feature = "telemetry")]
+pub const TELEMETRY_SERVERS: &[&str] = &[
+    "log-upload-os.hoyoverse.com",
+    "overseauspider.yuanshen.com"
+];
 
 pub trait ToFolder {
     fn to_folder(&self) -> String;
