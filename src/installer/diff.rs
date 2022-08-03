@@ -6,11 +6,12 @@ use crate::version::Version;
 #[cfg(feature = "install")]
 use crate::{
     installer::{
-        downloader::Downloader,
+        downloader::{Downloader, DownloadingError},
         installer::{
             Installer,
             Update as InstallerUpdate
-        }
+        },
+        free_space
     },
     external::hpatchz
 };
@@ -25,7 +26,7 @@ pub enum DiffDownloadError {
     Outdated,
 
     /// Failed to fetch remove data. Redirected from `Downloader`
-    Curl(curl::Error),
+    DownloadingError(DownloadingError),
 
     // Failed to apply hdiff patch
     HdiffPatch(String),
@@ -36,6 +37,18 @@ pub enum DiffDownloadError {
     /// your game installation path and thus indicates that it doesn't know
     /// where this package needs to be installed
     PathNotSpecified
+}
+
+impl From<DownloadingError> for DiffDownloadError {
+    fn from(err: DownloadingError) -> Self {
+        Self::DownloadingError(err)
+    }
+}
+
+impl From<curl::Error> for DiffDownloadError {
+    fn from(err: curl::Error) -> Self {
+        Self::DownloadingError(err.into())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,14 +105,11 @@ impl VersionDiff {
             VersionDiff::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
         }
 
-        match Downloader::new(url) {
-            Ok(mut downloader) => {
-                match downloader.download_to(path, progress) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(DiffDownloadError::Curl(err))
-                }
-            },
-            Err(err) => Err(DiffDownloadError::Curl(err))
+        let mut downloader = Downloader::new(url)?;
+
+        match downloader.download_to(path, progress) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.into())
         }
     }
 
@@ -156,6 +166,8 @@ impl VersionDiff {
         F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
         let url;
+        let download_size;
+        let unpacked_size;
 
         match self {
             // Can't be downloaded
@@ -163,16 +175,58 @@ impl VersionDiff {
             VersionDiff::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { url: diff_url, .. } |
-            VersionDiff::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
+            VersionDiff::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } |
+            VersionDiff::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } => {
+                url = diff_url.clone();
+                download_size = *down_size;
+                unpacked_size = *unp_size;
+            }
         }
 
         match Installer::new(url) {
             Ok(mut installer) => {
+                // Set temp folder if specified
                 if let Some(temp_path) = temp_path {
                     installer = installer.set_temp_folder(temp_path.to_string());
                 }
 
+                let path = path.to_string();
+
+                // Check available free space for archive itself
+                match free_space::available(&installer.temp_folder) {
+                    Some(space) => {
+                        // We can possibly store downloaded archive + unpacked data on the same disk
+                        let required = if free_space::is_same_disk(&installer.temp_folder, &path) {
+                            download_size + unpacked_size
+                        } else {
+                            download_size
+                        };
+
+                        if space < required {
+                            return Err(DownloadingError::NoSpaceAvailable(installer.temp_folder, required, space).into());
+                        }
+                    },
+                    None => return Err(DownloadingError::PathNotMounted(installer.temp_folder).into())
+                }
+
+                // Check available free space for unpacked archvie data
+                match free_space::available(&path) {
+                    Some(space) => {
+                        // We can possibly store downloaded archive + unpacked data on the same disk
+                        let required = if free_space::is_same_disk(&path, &installer.temp_folder) {
+                            unpacked_size + download_size
+                        } else {
+                            unpacked_size
+                        };
+
+                        if space < required {
+                            return Err(DownloadingError::NoSpaceAvailable(path, required, space).into());
+                        }
+                    },
+                    None => return Err(DownloadingError::PathNotMounted(path).into())
+                }
+
+                // Install data
                 installer.install(path.to_string(), updater);
 
                 // Apply hdiff patches
@@ -188,6 +242,7 @@ impl VersionDiff {
                             return Err(DiffDownloadError::HdiffPatch(err.to_string()));
                         }
 
+                        // FIXME: handle errors properly
                         remove_file(&file).expect(&format!("Failed to remove hdiff patch: {}", &file));
                         remove_file(&patch).expect(&format!("Failed to remove hdiff patch: {}", &patch));
 
@@ -211,7 +266,7 @@ impl VersionDiff {
                 
                 Ok(())
             },
-            Err(err) => Err(DiffDownloadError::Curl(err))
+            Err(err) => Err(err.into())
         }
     }
 

@@ -4,6 +4,8 @@ use std::fs::File;
 
 use curl::easy::Easy;
 
+use super::free_space;
+
 /// Default amount of bytes `Downloader::download_to` method will store in memory
 /// before writing them onto the disk
 pub const DEFAULT_DOWNLOADING_CHUNK: usize = 64 * 1024 * 1024;
@@ -11,6 +13,28 @@ pub const DEFAULT_DOWNLOADING_CHUNK: usize = 64 * 1024 * 1024;
 /// Default amount of progress updates that will be skipped each time
 /// before calling progress function
 pub const DEFAULT_DOWNLOADING_UPDATES_FREQUENCE: usize = 4000;
+
+#[derive(Debug, Clone)]
+pub enum DownloadingError {
+    /// Specified downloading path is not available in system
+    /// 
+    /// `(path)`
+    PathNotMounted(String),
+
+    /// No free space available under specified path
+    /// 
+    /// `(path, required, available)`
+    NoSpaceAvailable(String, u64, u64),
+
+    /// Curl downloading error
+    Curl(curl::Error)
+}
+
+impl From<curl::Error> for DownloadingError {
+    fn from(err: curl::Error) -> Self {
+        Self::Curl(err)
+    }
+}
 
 #[derive(Debug)]
 pub struct Downloader {
@@ -110,10 +134,9 @@ impl Downloader {
         self
     }
 
-    // TODO: verify available free space before starting downloading
     // TODO: somehow use FnOnce instead of Fn
 
-    pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), curl::Error>
+    pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), DownloadingError>
     where
         // array of bytes
         Fd: FnMut(&[u8]) -> Result<usize, curl::easy::WriteError> + Send + 'static,
@@ -148,10 +171,13 @@ impl Downloader {
             true
         })?;
 
-        self.curl.perform()
+        match self.curl.perform() {
+            Ok(_) => Ok(()),
+            Err(err) => Err(DownloadingError::Curl(err))
+        }
     }
 
-    pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), curl::Error>
+    pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DownloadingError>
     where
         T: ToString,
         // (curr, total)
@@ -159,6 +185,19 @@ impl Downloader {
     {
         let path = path.to_string();
 
+        // Check available free space
+        match free_space::available(&path) {
+            Some(space) => {
+                if let Some(required) = self.length() {
+                    if space < required {
+                        return Err(DownloadingError::NoSpaceAvailable(path, required, space));
+                    }
+                }
+            },
+            None => return Err(DownloadingError::PathNotMounted(path))
+        }
+
+        // Download file
         match File::create(Path::new(path.as_str())) {
             Ok(mut file) => {
                 let downloading_chunk = self.downloading_chunk;

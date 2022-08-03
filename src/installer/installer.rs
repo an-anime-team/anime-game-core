@@ -2,24 +2,37 @@ use std::env::temp_dir;
 
 use uuid::Uuid;
 
-use super::downloader::Downloader;
+use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
+use super::free_space;
 
 #[derive(Debug, Clone)]
 pub enum Update {
-    /// (temp path)
-    DownloadingStarted(String),
-    /// (current bytes, total bytes)
-    DownloadingProgress(u64, u64),
-    DownloadingFinished,
-    DownloadingError(curl::Error),
+    CheckingFreeSpace(String),
 
-    /// (unpacking path)
+    /// `(temp path)`
+    DownloadingStarted(String),
+
+    /// `(current bytes, total bytes)`
+    DownloadingProgress(u64, u64),
+
+    DownloadingFinished,
+    DownloadingError(DownloadingError),
+
+    /// `(unpacking path)`
     UnpackingStarted(String),
-    /// (current bytes, total bytes)
+
+    /// `(current bytes, total bytes)`
     UnpackingProgress(u64, u64),
+
     UnpackingFinished,
     UnpackingError
+}
+
+impl From<DownloadingError> for Update {
+    fn from(err: DownloadingError) -> Self {
+        Self::DownloadingError(err)
+    }
 }
 
 #[derive(Debug)]
@@ -76,6 +89,63 @@ impl Installer {
         F: Fn(Update) + Clone + Send + 'static
     {
         let temp_path = self.get_temp_path();
+        let unpack_to = unpack_to.to_string();
+
+        // Check available free space for archive itself
+        (updater)(Update::CheckingFreeSpace(temp_path.clone()));
+
+        match free_space::available(&temp_path) {
+            Some(space) => {
+                if let Some(required) = self.downloader.length() {
+                    // We can possibly store downloaded archive + unpacked data on the same disk
+                    let required = if free_space::is_same_disk(&temp_path, &unpack_to) {
+                        (required as f64 * 2.5).ceil() as u64
+                    } else {
+                        required
+                    };
+
+                    if space < required {
+                        (updater)(DownloadingError::NoSpaceAvailable(temp_path, required, space).into());
+
+                        return;
+                    }
+                }
+            },
+            None => {
+                (updater)(DownloadingError::PathNotMounted(temp_path).into());
+
+                return;
+            }
+        }
+
+        // Check available free space for unpacked archvie data (archive size * 1.5)
+        (updater)(Update::CheckingFreeSpace(unpack_to.clone()));
+
+        match free_space::available(&unpack_to) {
+            Some(space) => {
+                if let Some(required) = self.downloader.length() {
+                    // We can possibly store downloaded archive + unpacked data on the same disk
+                    let required = if free_space::is_same_disk(&unpack_to, &temp_path) {
+                        (required as f64 * 2.5).ceil() as u64
+                    } else {
+                        (required as f64 * 1.5).ceil() as u64
+                    };
+
+                    if space < required {
+                        (updater)(DownloadingError::NoSpaceAvailable(unpack_to, required, space).into());
+
+                        return;
+                    }
+                }
+            },
+            None => {
+                (updater)(DownloadingError::PathNotMounted(unpack_to).into());
+
+                return;
+            }
+        }
+
+        // Download archive
         let download_progress_updater = updater.clone();
 
         (updater)(Update::DownloadingStarted(temp_path.clone()));
@@ -85,8 +155,6 @@ impl Installer {
         }) {
             Ok(_) => {
                 (updater)(Update::DownloadingFinished);
-
-                let unpack_to = unpack_to.to_string();
 
                 match Archive::open(&temp_path) {
                     Some(mut archive) => {
