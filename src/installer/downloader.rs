@@ -36,6 +36,16 @@ impl From<curl::Error> for DownloadingError {
     }
 }
 
+impl Into<std::io::Error> for DownloadingError {
+    fn into(self) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::Other, match self {
+            DownloadingError::PathNotMounted(path) => format!("Path is not mounted: {path}"),
+            DownloadingError::NoSpaceAvailable(path, required, available) => format!("No free space availale for specified path: {path} (requires {required}, available {available})"),
+            DownloadingError::Curl(curl) => format!("Curl error: {curl}")
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct Downloader {
     length: Option<u64>,
