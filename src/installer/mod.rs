@@ -5,7 +5,7 @@ pub mod diff;
 pub mod free_space;
 
 pub mod prelude {
-    pub use super::downloader::Downloader;
+    pub use super::downloader::{Downloader, DownloadingError};
     pub use super::archives::Archive;
     pub use super::installer::{
         Installer,
