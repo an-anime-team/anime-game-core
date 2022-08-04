@@ -51,6 +51,19 @@ impl From<curl::Error> for DiffDownloadError {
     }
 }
 
+impl Into<std::io::Error> for DiffDownloadError {
+    fn into(self) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::Other, match self {
+            Self::DownloadingError(err) => return err.into(),
+
+            Self::AlreadyLatest => "Component version is already latest".to_string(),
+            Self::Outdated => "Components version is too outdated and can't be updated".to_string(),
+            Self::HdiffPatch(err) => format!("Failed to apply hdiff patch: {err}"),
+            Self::PathNotSpecified => "Path to the component's downloading folder is not specified".to_string()
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VersionDiff {
     Latest(Version),
