@@ -26,6 +26,11 @@ pub enum DownloadingError {
     /// `(path, required, available)`
     NoSpaceAvailable(String, u64, u64),
 
+    /// Failed to create output file
+    /// 
+    /// `(path, error message)`
+    OutputFileError(String, String),
+
     /// Curl downloading error
     Curl(curl::Error)
 }
@@ -39,9 +44,10 @@ impl From<curl::Error> for DownloadingError {
 impl Into<std::io::Error> for DownloadingError {
     fn into(self) -> std::io::Error {
         std::io::Error::new(std::io::ErrorKind::Other, match self {
-            DownloadingError::PathNotMounted(path) => format!("Path is not mounted: {path}"),
-            DownloadingError::NoSpaceAvailable(path, required, available) => format!("No free space availale for specified path: {path} (requires {required}, available {available})"),
-            DownloadingError::Curl(curl) => format!("Curl error: {curl}")
+            Self::PathNotMounted(path) => format!("Path is not mounted: {path}"),
+            Self::NoSpaceAvailable(path, required, available) => format!("No free space availale for specified path: {path} (requires {required}, available {available})"),
+            Self::OutputFileError(path, err) => format!("Failed to create output file {path}: {err}"),
+            Self::Curl(curl) => format!("Curl error: {curl}")
         })
     }
 }
@@ -230,10 +236,7 @@ impl Downloader {
                     Ok(data.len())
                 }, progress)
             },
-            Err(_) => {
-                // FIXME
-                panic!("Failed to create output file");
-            }
+            Err(err) => Err(DownloadingError::OutputFileError(path, err.to_string()))
         }
     }
 }

@@ -9,7 +9,7 @@ pub fn available(path: &str) -> Option<u64> {
     for disk in system.disks() {
         let disk_path = disk.mount_point().as_os_str();
 
-        if &path[..disk_path.len()] == disk_path {
+        if path.len() >= disk_path.len() && &path[..disk_path.len()] == disk_path {
             return Some(disk.available_space());
         }
     }
@@ -24,7 +24,11 @@ pub fn is_same_disk(path1: &str, path2: &str) -> bool {
     for disk in system.disks() {
         let disk_path = disk.mount_point().as_os_str();
 
-        if &path1[..disk_path.len()] == disk_path && &path2[..disk_path.len()] == disk_path {
+        if path1.len() > disk_path.len() &&
+           path2.len() > disk_path.len() &&
+           &path1[..disk_path.len()] == disk_path &&
+           &path2[..disk_path.len()] == disk_path
+        {
             return true;
         }
     }
