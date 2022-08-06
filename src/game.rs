@@ -3,7 +3,7 @@ use std::io::{Error, ErrorKind, Read};
 use std::path::Path;
 
 use super::voice_data::package::VoicePackage;
-use super::consts::{get_voice_package_path, get_voice_packages_path};
+use super::consts::{GameEdition, get_data_folder_name, get_voice_package_path, get_voice_packages_path};
 use super::version::Version;
 use super::api::API;
 
@@ -125,6 +125,24 @@ impl Game {
             .collect();
 
         Ok(packages)
+    }
+
+    /// Try to get game's edition from its folder
+    /// 
+    /// Will return `None` if the game is not installed
+    pub fn get_edition(&self) -> Option<GameEdition> {
+        if !Path::new(&self.path).exists() {
+            return None;
+        }
+
+        for edition in [GameEdition::Global, GameEdition::China] {
+            if Path::new(&format!("{}/{}", self.path, get_data_folder_name(edition))).exists() {
+                return Some(edition);
+            }
+        }
+
+        // Should be unreachable!() instead of None to catch possible future errors
+        unreachable!()
     }
 }
 

@@ -15,7 +15,9 @@ use crate::consts::TELEMETRY_SERVERS;
 /// }
 /// ```
 pub fn is_disabled(timeout: Option<Duration>) -> Option<String> {
-    for server in TELEMETRY_SERVERS {
+    let servers = unsafe { TELEMETRY_SERVERS };
+
+    for server in servers {
         if let Ok(_) = fetch(server, timeout) {
             return Some(server.to_string());
         }
