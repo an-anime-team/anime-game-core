@@ -287,9 +287,8 @@ impl VoicePackage {
             VoicePackage::NotInstalled { locale, .. } => locale
         };
 
-        // GenshinImpact_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/<locale folder>
         // Audio_<locale folder>_pkg_version
-        std::fs::remove_dir_all(format!("{}/GenshinImpact_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/{}", game_path.to_string(), locale.to_folder()))?;
+        std::fs::remove_dir_all(get_voice_package_path(game_path.to_string(), locale.clone()))?;
         std::fs::remove_file(format!("{}/Audio_{}_pkg_version", game_path.to_string(), locale.to_folder()))?;
 
         Ok(())

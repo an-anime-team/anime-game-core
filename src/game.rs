@@ -3,7 +3,7 @@ use std::io::{Error, ErrorKind, Read};
 use std::path::Path;
 
 use super::voice_data::package::VoicePackage;
-use super::consts::{GameEdition, get_data_folder_name, get_voice_package_path, get_voice_packages_path};
+use super::consts::*;
 use super::version::Version;
 use super::api::API;
 
@@ -51,7 +51,7 @@ impl Game {
             num
         }
 
-        match File::open(format!("{}/GenshinImpact_Data/globalgamemanagers", &self.path)) {
+        match File::open(format!("{}/{}/globalgamemanagers", &self.path, unsafe { DATA_FOLDER_NAME })) {
             Ok(file) => {
                 // [0..9, .]
                 let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];
