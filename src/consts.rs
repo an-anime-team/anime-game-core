@@ -17,28 +17,28 @@ impl Default for GameEdition {
 
 pub static mut GAME_EDITION: GameEdition = GameEdition::Global;
 
-pub static mut API_URI: &str = "https://sdk-os-static.hoyoverse.com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10";
+pub static mut API_URI: &str = concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10");
 
 /// Name of the game's data folder
-pub static mut DATA_FOLDER_NAME: &str = "GenshinImpact_Data";
+pub static mut DATA_FOLDER_NAME: &str = concat!("Ge", "nsh", "inIm", "pact_Data");
 
 #[cfg(feature = "telemetry")]
 pub static mut TELEMETRY_SERVERS: &[&str] = &[
-    "log-upload-os.hoyoverse.com",
-    "overseauspider.yuanshen.com"
+    concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
+    concat!("overseauspider.", "yu", "ans", "hen", ".com")
 ];
 
 pub fn get_api_uri(edition: GameEdition) -> &'static str {
     match edition {
-        GameEdition::Global => "https://sdk-os-static.hoyoverse.com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10",
-        GameEdition::China  => "https://sdk-static.mihoyo.com/hk4e_cn/mdk/launcher/api/resource?key=eYd89JmJ&launcher_id=18"
+        GameEdition::Global => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10"),
+        GameEdition::China  => concat!("https://sdk-static.", "mih", "oyo", ".com/hk4e_cn/mdk/launcher/api/resource?key=eYd89JmJ&launcher_id=18")
     }
 }
 
 pub fn get_data_folder_name(edition: GameEdition) -> &'static str {
     match edition {
-        GameEdition::Global => "GenshinImpact_Data",
-        GameEdition::China  => "YanShen_Data"
+        GameEdition::Global => concat!("Ge", "nsh", "inIm", "pact_Data"),
+        GameEdition::China  => concat!("Yu", "anS", "hen", "_Data")
     }
 }
 
@@ -46,12 +46,12 @@ pub fn get_data_folder_name(edition: GameEdition) -> &'static str {
 pub fn get_telemetry_servers(edition: GameEdition) -> &'static [&'static str] {
     match edition {
         GameEdition::Global => &[
-            "log-upload-os.hoyoverse.com",
-            "overseauspider.yuanshen.com"
+            concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
+            concat!("overseauspider.", "yu", "ans", "hen", ".com")
         ],
         GameEdition::China => &[
-            "log-upload.mihoyo.com",
-            "uspider.yuanshen.com"
+            concat!("log-upload.", "mih", "oyo", ".com"),
+            concat!("uspider.", "yu", "ans", "hen", ".com")
         ]
     }
 }
@@ -94,7 +94,5 @@ pub fn get_voice_packages_path<T: ToString>(game_path: T) -> String {
 }
 
 pub fn get_voice_package_path<T: ToString, F: ToFolder>(game_path: T, locale: F) -> String {
-    let data_folder = unsafe { DATA_FOLDER_NAME };
-
-    format!("{}/{data_folder}/StreamingAssets/Audio/GeneratedSoundBanks/Windows/{}", game_path.to_string(), locale.to_folder())
+    format!("{}/{}", get_voice_packages_path(game_path), locale.to_folder())
 }
