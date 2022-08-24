@@ -179,10 +179,10 @@ impl VoicePackage {
 
                         #[allow(non_snake_case)]
                         let CONSTANT_OF_STUPIDITY: u64 = match self.locale() {
-                            VoiceLocale::English  => 8593687434, // 8 GB
-                            VoiceLocale::Japanese => 9373182378, // 8.72 GB
-                            VoiceLocale::Korean   => 8804682956, // 8.2 GB, not calculated (approximation)
-                            VoiceLocale::Chinese  => 8804682956  // 8.2 GB, not calculated (approximation)
+                            VoiceLocale::English  => 8593687434 + 750 * 1024 * 1024, // 8 GB    (2.8.0)                                 + 750 MB (3.0.0)
+                            VoiceLocale::Japanese => 9373182378 + 750 * 1024 * 1024, // 8.72 GB (2.8.0)                                 + 750 MB (3.0.0)
+                            VoiceLocale::Korean   => 8804682956 + 750 * 1024 * 1024, // 8.2 GB  (2.8.0, not calculated (approximation)) + 750 MB (3.0.0)
+                            VoiceLocale::Chinese  => 8804682956 + 750 * 1024 * 1024, // 8.2 GB  (2.8.0, not calculated (approximation)) + 750 MB (3.0.0)
                         };
 
                         // println!("Actual package size: {}", package_size);
@@ -199,7 +199,7 @@ impl VoicePackage {
                         let mut voice_pack_size = latest_voice_pack.size.parse::<u64>().unwrap() - CONSTANT_OF_STUPIDITY;
                         let mut packages = VecDeque::from(vec![(response.data.game.latest.version.clone(), voice_pack_size)]);
 
-                        // println!(" 2.8.0 package size: {}", voice_pack_size);
+                        // println!(" 3.0.0 package size: {}", voice_pack_size);
 
                         // List through other versions of the game
                         for diff in response.data.game.diffs {
@@ -209,7 +209,7 @@ impl VoicePackage {
                             let relative_size = voice_package.size.parse::<u64>().unwrap();
 
                             if relative_size < 4 * 1024 * 1024 * 1024 {
-                                voice_pack_size -= voice_package.size.parse::<u64>().unwrap();
+                                voice_pack_size -= relative_size;
                             }
 
                             // For no reason API's size field in the [diff] can contain
@@ -222,7 +222,11 @@ impl VoicePackage {
                             // 2.7.0 size: 1989050587  (clearly update size, so relative)
                             // 2.6.0 size: 15531165534 (clearly absolute size)
                             else {
-                                voice_pack_size = max(relative_size, CONSTANT_OF_STUPIDITY) - min(relative_size, CONSTANT_OF_STUPIDITY);
+                                voice_pack_size = relative_size;
+
+                                if voice_pack_size > CONSTANT_OF_STUPIDITY {
+                                    voice_pack_size -= CONSTANT_OF_STUPIDITY;
+                                }
                             }
 
                             // println!(" {} package size: {}", diff.version, voice_pack_size);
@@ -236,8 +240,8 @@ impl VoicePackage {
 
                         for (version, size) in packages {
                             // Actual folder size can be +- the same as in API response
-                            // Let's say +-250 MB is ok
-                            if package_size > size - 250 * 1024 * 1024 {
+                            // Let's say +-512 MB is ok
+                            if package_size > size - 512 * 1024 * 1024 {
                                 package_version = Version::from_str(version).unwrap();
                             }
                         }

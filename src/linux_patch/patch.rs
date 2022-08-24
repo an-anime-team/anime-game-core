@@ -90,7 +90,7 @@ impl Patch {
         
         match response.try_json::<crate::json_schemas::versions::Response>() {
             Ok(response) => {
-                let mut versions = vec![Version::from_str(response.data.game.latest.version).unwrap()];
+                let mut versions = vec![Version::from_str(&response.data.game.latest.version).unwrap()];
 
                 for diff in response.data.game.diffs {
                     versions.push(Version::from_str(diff.version).unwrap());
@@ -102,7 +102,17 @@ impl Patch {
                             Ok(Patch::NotAvailable) => continue,
                             Err(_) => continue,
 
-                            Ok(status) => return Ok(status)
+                            Ok(status) => {
+                                return if Some(version) == Version::from_str(&response.data.game.latest.version) {
+                                    Ok(status)
+                                } else {
+                                    Ok(Self::Outdated {
+                                        current: version,
+                                        latest: Version::from_str(&response.data.game.latest.version).unwrap(),
+                                        host: host.to_string()
+                                    })
+                                }
+                            }
                         }
                     }
                 }

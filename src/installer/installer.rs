@@ -1,4 +1,5 @@
 use std::env::temp_dir;
+use std::os::unix::prelude::PermissionsExt;
 
 use uuid::Uuid;
 
@@ -165,12 +166,25 @@ impl Installer {
 
                         for entry in &entries {
                             total += entry.size.get_size();
+
+                            let path = format!("{}/{}", &unpack_to, entry.name);
+
+                            // Failed to change permissions => likely patch-related file and was made by the sudo, so root
+                            #[allow(unused_must_use)]
+                            if let Err(_) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)) {
+                                // For weird reason we can delete files made by root, but can't modify their permissions
+                                // We're not checking its result because if it's error - then it's either couldn't be removed (which is not the case)
+                                // or the file doesn't exist, which we obviously can just ignore
+                                std::fs::remove_file(&path);
+                            }
                         }
 
                         let unpacking_path = unpack_to.clone();
                         let unpacking_updater = updater.clone();
 
-                        std::thread::spawn(move || {
+                        let now = std::time::SystemTime::now();
+
+                        let handle_2 = std::thread::spawn(move || {
                             let mut entries = entries.into_iter()
                                 .map(|entry| (format!("{}/{}", unpacking_path, entry.name), entry.size.get_size(), true))
                                 .collect::<Vec<_>>();
@@ -186,10 +200,26 @@ impl Installer {
                                     if *remained {
                                         empty = false;
 
-                                        if std::path::Path::new(path).exists() {
-                                            *remained = false;
+                                        let path = std::path::Path::new(path);
 
-                                            unpacked += *size;
+                                        if let Ok(metadata) = path.metadata() {
+                                            match metadata.modified() {
+                                                Ok(time) => {
+                                                    // Mark file as downloaded only if it was modified recently
+                                                    if time > now {
+                                                        *remained = false;
+
+                                                        unpacked += *size;
+                                                    }
+                                                },
+
+                                                // Some systems may not have this parameter
+                                                Err(_) => {
+                                                    *remained = false;
+
+                                                    unpacked += *size;
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -203,7 +233,7 @@ impl Installer {
                         });
 
                         // Run archive extraction in another thread to not to freeze the current one
-                        std::thread::spawn(move || {
+                        let handle_1 = std::thread::spawn(move || {
                             (updater)(Update::UnpackingStarted(unpack_to.clone()));
 
                             // We have to create new instance of Archive here
@@ -215,6 +245,9 @@ impl Installer {
                             // TODO error handling
                             std::fs::remove_file(temp_path).expect("Failed to remove temporary file");
                         });
+
+                        handle_1.join().unwrap();
+                        handle_2.join().unwrap();
                     },
                     None => {
                         (updater)(Update::UnpackingError);

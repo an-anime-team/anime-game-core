@@ -269,8 +269,11 @@ impl VersionDiff {
                 // Remove outdated files
                 // We're ignoring Err because in practice it means that deletefiles.txt is missing
                 if let Ok(files) = read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
+                    // AnimeGame_Data/Plugins/metakeeper.dll
                     for file in files.lines().collect::<Vec<&str>>() {
-                        remove_file(&file).expect(&format!("Failed to remove outdated file: {}", file));
+                        let file = format!("{}/{file}", path.to_string());
+
+                        remove_file(&file).expect(&format!("Failed to remove outdated file: {file}"));
                     }
 
                     remove_file(format!("{}/deletefiles.txt", path.to_string()))
