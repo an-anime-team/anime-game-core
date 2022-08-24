@@ -5,7 +5,6 @@ use std::fs;
 use std::env::temp_dir;
 
 use uuid::Uuid;
-// use git2::{Repository, ResetType, Error};
 
 use crate::version::ToVersion;
 
@@ -17,13 +16,6 @@ pub struct PatchApplier {
 
 impl PatchApplier {
     pub fn new<T: ToString>(folder: T) -> Self {
-        /*Ok(Self {
-            repository: match Path::new(&folder.to_string()).exists() {
-                true => Repository::open(folder.to_string())?,
-                false => Repository::init(folder.to_string())?
-            }
-        })*/
-
         Self {
             folder: folder.to_string()
         }
@@ -100,6 +92,14 @@ impl PatchApplier {
             .stderr(Stdio::null())
             .output()?;
 
+        Command::new("git")
+            .arg("fetch")
+            .arg("origin")
+            .current_dir(&self.folder)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .output()?;
+
         let remote = Command::new("git")
             .arg("rev-parse")
             .arg("origin/HEAD")
@@ -113,59 +113,47 @@ impl PatchApplier {
 
     /// Fetch patch updates from the git repository
     pub fn sync<T: ToString>(&self, remote: T) -> Result<bool, Error> {
-        /*self.repository.remote_set_url("origin", &remote.to_string())?;
+        if Path::new(&self.folder).exists() {
+            Command::new("git")
+                .arg("remote")
+                .arg("set-url")
+                .arg("origin")
+                .arg(remote.to_string())
+                .current_dir(&self.folder)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .output()?;
+            
+            Command::new("git")
+                .arg("fetch")
+                .arg("origin")
+                .current_dir(&self.folder)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .output()?;
 
-        let mut remote = self.repository.find_remote("origin")?;
+            Command::new("git")
+                .arg("reset")
+                .arg("--hard")
+                .arg("origin/master")
+                .current_dir(&self.folder)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .output()?;
 
-        remote.fetch(&["master"], None, None)?;
+            Ok(true)
+        }
 
-        self.repository.reset(&["master"], ResetType::Hard, None);
+        else {
+            let output = Command::new("git")
+                .arg("clone")
+                .arg(remote.to_string())
+                .arg(&self.folder)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .output()?;
 
-        Ok(())*/
-
-        // FIXME: errors handling
-        match Path::new(&self.folder).exists() {
-            true => {
-                Command::new("git")
-                    .arg("remote")
-                    .arg("set-url")
-                    .arg("origin")
-                    .arg(remote.to_string())
-                    .current_dir(&self.folder)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .output()?;
-                
-                Command::new("git")
-                    .arg("fetch")
-                    .arg("--all")
-                    .current_dir(&self.folder)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .output()?;
-
-                Command::new("git")
-                    .arg("reset")
-                    .arg("--hard")
-                    .arg("origin/master")
-                    .current_dir(&self.folder)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .output()?;
-
-                Ok(true)
-            },
-            false => {
-                let output = Command::new("git")
-                    .arg("clone")
-                    .arg(remote.to_string())
-                    .arg(&self.folder)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .output()?;
-
-                Ok(output.status.success())
-            }
+            Ok(output.status.success())
         }
     }
 
