@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::path::Path;
-use std::cmp::{max, min};
 use std::io::{Error, ErrorKind};
 
 use fs_extra::dir::get_size;
