@@ -4,8 +4,6 @@ use std::io::{Error, ErrorKind, Write};
 use std::fs;
 use std::env::temp_dir;
 
-use uuid::Uuid;
-
 use crate::version::ToVersion;
 
 pub struct PatchApplier {
@@ -160,7 +158,7 @@ impl PatchApplier {
     fn get_temp_path(&self) -> String {
         let temp_file = temp_dir().to_str().unwrap().to_string();
 
-        format!("{}/.{}-patch-applying", temp_file, Uuid::new_v4().to_string())
+        format!("{temp_file}/.patch-applying")
     }
 
     /// Apply the linux patch to the game
@@ -181,8 +179,13 @@ impl PatchApplier {
                     return Err(Error::new(ErrorKind::Other, format!("Corresponding patch folder doesn't exist: {}", patch_folder)));
                 }
 
+                // Remove temp folder if it is for some reason already exists
+                if Path::new(&temp_dir).exists() {
+                    fs::remove_dir_all(&temp_dir)?;
+                }
+
                 // Create temp folder
-                fs::create_dir(&temp_dir)?;
+                fs::create_dir_all(&temp_dir)?;
 
                 // Copy patch files there
                 let mut options = fs_extra::dir::CopyOptions::default();

@@ -1,8 +1,6 @@
 use std::env::temp_dir;
 use std::os::unix::prelude::PermissionsExt;
 
-use uuid::Uuid;
-
 use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
 use super::free_space;
@@ -80,7 +78,7 @@ impl Installer {
     }
 
     fn get_temp_path(&self) -> String {
-        format!("{}/.{}-{}", self.temp_folder, Uuid::new_v4().to_string(), self.get_filename())
+        format!("{}/{}", self.temp_folder, self.get_filename())
     }
 
     /// Download archive from specified uri and unpack it

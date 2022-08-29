@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Write, Seek};
 use std::path::Path;
 use std::fs::File;
 
@@ -26,10 +26,17 @@ pub enum DownloadingError {
     /// `(path, required, available)`
     NoSpaceAvailable(String, u64, u64),
 
-    /// Failed to create output file
+    /// Failed to create or open output file
     /// 
     /// `(path, error message)`
     OutputFileError(String, String),
+
+    /// Couldn't get metadata of existing output file
+    /// 
+    /// This metadata supposed to be used to continue downloading of the file
+    /// 
+    /// `(path, error message)`
+    OutputFileMetadataError(String, String),
 
     /// Curl downloading error
     Curl(curl::Error)
@@ -47,6 +54,7 @@ impl Into<std::io::Error> for DownloadingError {
             Self::PathNotMounted(path) => format!("Path is not mounted: {path}"),
             Self::NoSpaceAvailable(path, required, available) => format!("No free space availale for specified path: {path} (requires {required}, available {available})"),
             Self::OutputFileError(path, err) => format!("Failed to create output file {path}: {err}"),
+            Self::OutputFileMetadataError(path, err) => format!("Failed to read metadata of the output file {path}: {err}"),
             Self::Curl(curl) => format!("Curl error: {curl}")
         })
     }
@@ -213,8 +221,38 @@ impl Downloader {
             None => return Err(DownloadingError::PathNotMounted(path))
         }
 
-        // Download file
-        match File::create(Path::new(path.as_str())) {
+        // Set downloading from beginning
+        if let Err(err) = self.curl.resume_from(0) {
+            return Err(DownloadingError::Curl(err));
+        }
+
+        // Open or create output file
+        let file = if Path::new(&path).exists() {
+            let mut file = std::fs::OpenOptions::new().write(true).open(&path);
+
+            // Continue downloading if the file exists and can be opened
+            if let Ok(file) = &mut file {
+                match file.metadata() {
+                    Ok(metadata) => {
+                        if let Err(err) = self.curl.resume_from(metadata.len()) {
+                            return Err(DownloadingError::Curl(err));
+                        }
+
+                        if let Err(err) = file.seek(std::io::SeekFrom::Start(metadata.len())) {
+                            return Err(DownloadingError::OutputFileError(path, err.to_string()));
+                        }
+                    },
+                    Err(err) => return Err(DownloadingError::OutputFileMetadataError(path, err.to_string()))
+                }
+            }
+
+            file
+        } else {
+            File::create(&path)
+        };
+
+        // Download data
+        match file {
             Ok(mut file) => {
                 let downloading_chunk = self.downloading_chunk;
                 let total = self.length().unwrap_or(0) as usize;

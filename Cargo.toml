@@ -1,6 +1,6 @@
 [package]
 name = "anime-game-core"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Nikita Podvirnyy <suimin.tu.mu.ga.mi@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"
@@ -13,7 +13,6 @@ serde_json = "1.0"
 fs_extra = "1.2.0"
 
 # Install feature
-uuid = { version = "1.1", features = ["v4", "fast-rng"], optional = true }
 zip = { version = "0.6", optional = true }
 tar = { version = "0.4", optional = true }
 sysinfo = { version = "0.25.1", optional = true }
@@ -32,7 +31,7 @@ kinda-virtual-fs = { version = "0.1.1", optional = true }
 lazy_static = { version = "1.4.0", optional = true }
 
 [features]
-install = ["external", "dep:uuid", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2", "dep:sysinfo"]
+install = ["external", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2", "dep:sysinfo"]
 linux-patch = ["dep:md5"] # , "dep:git2"
 external = ["dep:kinda-virtual-fs", "dep:lazy_static"]
 telemetry = []
