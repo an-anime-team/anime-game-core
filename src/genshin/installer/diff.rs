@@ -5,7 +5,7 @@ use crate::version::Version;
 
 #[cfg(feature = "install")]
 use crate::{
-    installer::{
+    genshin::installer::{
         downloader::{Downloader, DownloadingError},
         installer::{
             Installer,
@@ -313,8 +313,7 @@ impl VersionDiff {
     }
 }
 
-// TODO: probably use "type Error" instead of io::Error
 pub trait TryGetDiff {
     /// Try to get difference between currently installed version and the latest available
-    fn try_get_diff(&self) -> Result<VersionDiff, Error>;
+    fn try_get_diff(&self) -> anyhow::Result<VersionDiff>;
 }

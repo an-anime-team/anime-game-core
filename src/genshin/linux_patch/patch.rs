@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::version::{Version, ToVersion};
+use crate::version::*;
 use crate::curl::fetch;
-use crate::api::API;
+
+use crate::genshin::api;
 
 /// If this line is commented in the `patch.sh` file, then it's stable version.
 /// Otherwise it's in testing phase
@@ -85,43 +86,38 @@ impl Patch {
     /// this method will return outdated version
     /// 
     /// Timeout is applied to all the requests separately, so the whole operation can take more than `Some(timeout)`
-    pub fn try_fetch<T: ToString>(hosts: Vec<T>, timeout: Option<Duration>) -> Result<Self, curl::Error> {
-        let response = API::try_fetch()?;
-        
-        match response.try_json::<crate::json_schemas::versions::Response>() {
-            Ok(response) => {
-                let mut versions = vec![Version::from_str(&response.data.game.latest.version).unwrap()];
+    pub fn try_fetch<T: ToString>(hosts: Vec<T>, timeout: Option<Duration>) -> anyhow::Result<Self> {
+        let response = api::try_fetch_json()?;
 
-                for diff in response.data.game.diffs {
-                    versions.push(Version::from_str(diff.version).unwrap());
-                }
+        let mut versions = vec![Version::from_str(&response.data.game.latest.version).unwrap()];
 
-                for version in versions {
-                    for host in &hosts {
-                        match Self::try_fetch_version(host.to_string(), version, timeout) {
-                            Ok(Patch::NotAvailable) => continue,
-                            Err(_) => continue,
+        for diff in response.data.game.diffs {
+            versions.push(Version::from_str(diff.version).unwrap());
+        }
 
-                            Ok(status) => {
-                                return if Some(version) == Version::from_str(&response.data.game.latest.version) {
-                                    Ok(status)
-                                } else {
-                                    Ok(Self::Outdated {
-                                        current: version,
-                                        latest: Version::from_str(&response.data.game.latest.version).unwrap(),
-                                        host: host.to_string()
-                                    })
-                                }
-                            }
+        for version in versions {
+            for host in &hosts {
+                match Self::try_fetch_version(host.to_string(), version, timeout) {
+                    Ok(Patch::NotAvailable) => continue,
+                    Err(_) => continue,
+
+                    Ok(status) => {
+                        return if Some(version) == Version::from_str(&response.data.game.latest.version) {
+                            Ok(status)
+                        } else {
+                            Ok(Self::Outdated {
+                                current: version,
+                                latest: Version::from_str(&response.data.game.latest.version).unwrap(),
+                                host: host.to_string()
+                            })
                         }
                     }
                 }
-                
-                // No useful outputs from all the hosts
-                Ok(Patch::NotAvailable)
-            },
-            Err(_) => panic!("Failed to decode json server response") // FIXME
+            }
         }
+        
+        // No useful outputs from all the hosts
+        Ok(Patch::NotAvailable)
     }
 
     /// Try to fetch the patch with specified game version

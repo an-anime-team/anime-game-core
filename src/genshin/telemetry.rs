@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use crate::curl::fetch;
-use crate::consts::TELEMETRY_SERVERS;
+
+use super::consts::TELEMETRY_SERVERS;
 
 /// Check whether telemetry servers disabled
 /// 

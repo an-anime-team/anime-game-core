@@ -1,9 +1,10 @@
 use serde_json::{from_str, Value};
 
-use crate::api::API;
 use crate::curl::fetch;
-use crate::installer::downloader::{Downloader, DownloadingError};
-use crate::voice_data::locale::VoiceLocale;
+
+use super::api;
+use super::installer::downloader::{Downloader, DownloadingError};
+use super::voice_data::locale::VoiceLocale;
 
 // {"remoteName": "UnityPlayer.dll", "md5": "8c8c3d845b957e4cb84c662bed44d072", "fileSize": 33466104}
 #[derive(Debug, Clone)]
@@ -56,13 +57,13 @@ impl IntegrityFile {
     }
 }
 
-fn try_get_some_integrity_files<T: ToString>(file_name: T) -> std::io::Result<Vec<IntegrityFile>> {
-    let response = API::try_fetch_json()?;
+fn try_get_some_integrity_files<T: ToString>(file_name: T) -> anyhow::Result<Vec<IntegrityFile>> {
+    let response = api::try_fetch_json()?;
 
     let decompressed_path = response.data.game.latest.decompressed_path;
 
     // TODO: add timeout
-    let mut pkg_version = fetch(format!("{}/{}", &decompressed_path, file_name.to_string()), None)?;
+    let mut pkg_version = fetch(format!("{decompressed_path}/{}", file_name.to_string()), None)?;
     let pkg_version = pkg_version.get_body()?;
 
     let mut files = Vec::new();
@@ -82,11 +83,11 @@ fn try_get_some_integrity_files<T: ToString>(file_name: T) -> std::io::Result<Ve
 }
 
 /// Try to list latest game files
-pub fn try_get_integrity_files() -> std::io::Result<Vec<IntegrityFile>> {
+pub fn try_get_integrity_files() -> anyhow::Result<Vec<IntegrityFile>> {
     Ok(try_get_some_integrity_files("pkg_version")?)
 }
 
 /// Try to list latest voice package files
-pub fn try_get_voice_integrity_files(locale: VoiceLocale) -> std::io::Result<Vec<IntegrityFile>> {
+pub fn try_get_voice_integrity_files(locale: VoiceLocale) -> anyhow::Result<Vec<IntegrityFile>> {
     Ok(try_get_some_integrity_files(format!("Audio_{}_pkg_version", locale.to_folder()))?)
 }

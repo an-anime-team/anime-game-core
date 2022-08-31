@@ -1,53 +1,28 @@
-pub mod consts;
-pub mod api;
-pub mod json_schemas;
+#[cfg(feature = "genshin")]
+pub mod genshin;
+
+#[cfg(feature = "honkai")]
+pub mod honkai;
+
 pub mod version;
 pub mod curl;
-pub mod game;
-pub mod voice_data;
+pub mod api;
 
 pub use ::curl as curl_sys;
-
-#[cfg(test)]
-mod tests;
-
-#[cfg(feature = "install")]
-pub mod installer;
-
-#[cfg(feature = "install")]
-pub mod repairer;
-
-#[cfg(feature = "linux-patch")]
-pub mod linux_patch;
 
 #[cfg(feature = "external")]
 pub mod external;
 
-#[cfg(feature = "telemetry")]
-pub mod telemetry;
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod prelude {
-    pub use super::consts::*;
     pub use super::version::*;
-    pub use super::api::API;
     pub use super::curl::fetch;
-    pub use super::game::Game;
-    pub use super::voice_data::prelude::*;
+    pub use super::api;
 
-    #[cfg(feature = "install")]
-    pub use super::installer::prelude::*;
+    #[cfg(feature = "genshin")]
+    pub use super::genshin::prelude as genshin;
 
-    #[cfg(feature = "install")]
-    pub use super::repairer;
-
-    #[cfg(feature = "linux-patch")]
-    pub use super::linux_patch::prelude::*;
-
-    #[cfg(feature = "external")]
-    pub use super::external;
-
-    #[cfg(feature = "telemetry")]
-    pub use super::telemetry;
+    #[cfg(feature = "honkai")]
+    pub use super::honkai::prelude as honkai;
 }
-
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");

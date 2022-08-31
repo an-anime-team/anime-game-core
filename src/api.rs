@@ -4,12 +4,7 @@ use std::sync::mpsc;
 use curl::easy::Easy;
 use serde::Deserialize;
 
-use super::consts::API_URI;
-use crate::json_schemas::versions::Response as ApiResponse;
-
-static mut RESPONSE_CACHE: Option<Response> = None;
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Response {
     data: Vec<u8>
 }
@@ -34,51 +29,32 @@ impl<'a> Response {
     }
 }
 
-pub struct API;
+/// Try to fetch data from the game's api
+#[cached::proc_macro::cached]
+pub fn try_fetch(uri: &'static str) -> Result<Response, curl::Error> {
+    let mut curl = Easy::new();
+    let (sender, receiver) = mpsc::channel();
 
-impl<'a> API {
-    /// Try to fetch data from the game's api
-    pub fn try_fetch() -> Result<Response, curl::Error> {
-        unsafe {
-            match &RESPONSE_CACHE {
-                Some(cache) => Ok(cache.clone()),
-                None => {
-                    let mut curl = Easy::new();
-                    let (sender, receiver) = mpsc::channel();
+    curl.url(uri)?;
 
-                    curl.url(API_URI)?;
+    #[allow(unused_must_use)]
+    curl.write_function(move |data| {
+        sender.send(Vec::from(data));
 
-                    #[allow(unused_must_use)]
-                    curl.write_function(move |data| {
-                        sender.send(Vec::from(data));
+        Ok(data.len())
+    })?;
 
-                        Ok(data.len())
-                    })?;
+    curl.perform()?;
 
-                    curl.perform()?;
+    let mut result = Vec::new();
 
-                    let mut result = Vec::new();
-
-                    while let Ok(mut data) = receiver.try_recv() {
-                        result.append(&mut data);
-                    }
-
-                    let response = Response {
-                        data: result
-                    };
-
-                    RESPONSE_CACHE = Some(response.clone());
-
-                    Ok(response)
-                }
-            }
-        }
+    while let Ok(mut data) = receiver.try_recv() {
+        result.append(&mut data);
     }
 
-    /// Try to fetch data from the game's api and decode it from the json format
-    pub fn try_fetch_json() -> Result<ApiResponse, std::io::Error> {
-        let response = Self::try_fetch()?;
+    let response = Response {
+        data: result
+    };
 
-        Ok(response.try_json::<ApiResponse>()?)
-    }
+    Ok(response)
 }

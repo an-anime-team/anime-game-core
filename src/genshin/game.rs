@@ -1,11 +1,12 @@
 use std::fs::File;
-use std::io::{Error, ErrorKind, Read};
+use std::io::Read;
 use std::path::Path;
 
+use crate::version::Version;
+
+use super::api;
 use super::voice_data::package::VoicePackage;
 use super::consts::*;
-use super::version::Version;
-use super::api::API;
 
 #[cfg(feature = "install")]
 use super::installer::diff::{VersionDiff, TryGetDiff};
@@ -32,15 +33,13 @@ impl Game {
     }
 
     /// Try to get latest game version
-    pub fn try_get_latest_version() -> Option<Version> {
-        match API::try_fetch_json() {
-            Ok(response) => Version::from_str(response.data.game.latest.version),
-            Err(_) => None
-        }
+    pub fn try_get_latest_version() -> anyhow::Result<Version> {
+        // I assume game's API can't return incorrect version format right? Right?
+        Ok(Version::from_str(api::try_fetch_json()?.data.game.latest.version).unwrap())
     }
 
     /// Try to get installed game version
-    pub fn try_get_version(&self) -> Result<Version, Error> {
+    pub fn try_get_version(&self) -> anyhow::Result<Version> {
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
             let mut num: u8 = 0;
         
@@ -51,68 +50,62 @@ impl Game {
             num
         }
 
-        match File::open(format!("{}/{}/globalgamemanagers", &self.path, unsafe { DATA_FOLDER_NAME })) {
-            Ok(file) => {
-                // [0..9, .]
-                let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];
+        let file = File::open(format!("{}/{}/globalgamemanagers", &self.path, unsafe { DATA_FOLDER_NAME }))?;
 
-                let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
-                let mut version_ptr: usize = 0;
-                let mut correct = true;
+        // [0..9, .]
+        let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];
 
-                for byte in file.bytes() {
-                    match byte {
-                        Ok(byte) => {
-                            match byte {
-                                0 => {
-                                    version = [vec![], vec![], vec![]];
-                                    version_ptr = 0;
-                                    correct = true;
-                                },
+        let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
+        let mut version_ptr: usize = 0;
+        let mut correct = true;
 
-                                46 => {
-                                    version_ptr += 1;
+        for byte in file.bytes() {
+            if let Ok(byte) = byte {
+                match byte {
+                    0 => {
+                        version = [vec![], vec![], vec![]];
+                        version_ptr = 0;
+                        correct = true;
+                    }
 
-                                    if version_ptr > 2 {
-                                        correct = false;
-                                    }
-                                },
+                    46 => {
+                        version_ptr += 1;
 
-                                95 => {
-                                    if correct && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
-                                        return Ok(Version::new(
-                                            bytes_to_num(&version[0]),
-                                            bytes_to_num(&version[1]),
-                                            bytes_to_num(&version[2])
-                                        ))
-                                    }
-        
-                                    correct = false;
-                                },
+                        if version_ptr > 2 {
+                            correct = false;
+                        }
+                    }
 
-                                _ => {
-                                    if correct && allowed.contains(&byte) {
-                                        version[version_ptr].push(byte);
-                                    }
-            
-                                    else {
-                                        correct = false;
-                                    }
-                                }
-                            }
-                        },
-                        Err(_) => {}
+                    95 => {
+                        if correct && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
+                            return Ok(Version::new(
+                                bytes_to_num(&version[0]),
+                                bytes_to_num(&version[1]),
+                                bytes_to_num(&version[2])
+                            ))
+                        }
+
+                        correct = false;
+                    }
+
+                    _ => {
+                        if correct && allowed.contains(&byte) {
+                            version[version_ptr].push(byte);
+                        }
+
+                        else {
+                            correct = false;
+                        }
                     }
                 }
-
-                Err(Error::new(ErrorKind::NotFound, "Version's bytes sequence wasn't found"))
-            },
-            Err(err) => Err(err)
+            }
         }
+
+        Err(anyhow::anyhow!("Version's bytes sequence wasn't found"))
     }
 
     /// Get list of installed voice packages
-    pub fn get_voice_packages(&self) -> Result<Vec<VoicePackage>, Error> {
+    pub fn get_voice_packages(&self) -> anyhow::Result<Vec<VoicePackage>> {
         let content = std::fs::read_dir(get_voice_packages_path(&self.path))?;
 
         let packages = content.into_iter()
@@ -150,8 +143,8 @@ impl Game {
 
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
-    fn try_get_diff(&self) -> Result<VersionDiff, Error> {
-        let response = API::try_fetch_json()?;
+    fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
+        let response = api::try_fetch_json()?;
 
         if self.is_installed() {
             match self.try_get_version() {
