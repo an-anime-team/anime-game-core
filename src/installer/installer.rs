@@ -82,7 +82,7 @@ impl Installer {
     }
 
     /// Download archive from specified uri and unpack it
-    pub fn install<T, F>(&mut self, unpack_to: T, updater: F)
+    pub fn install<T, F>(mut self, unpack_to: T, updater: F)
     where
         T: ToString,
         F: Fn(Update) + Clone + Send + 'static

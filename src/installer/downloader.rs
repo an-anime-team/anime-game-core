@@ -1,6 +1,7 @@
 use std::io::{Write, Seek};
 use std::path::Path;
 use std::fs::File;
+use std::sync::mpsc;
 
 use curl::easy::Easy;
 
@@ -60,6 +61,64 @@ impl Into<std::io::Error> for DownloadingError {
     }
 }
 
+pub struct DownloadingStatusUpdater {
+    downloader: Downloader,
+    progress_recv: mpsc::Receiver<(u64, u64)>,
+    pause_sender: mpsc::Sender<()>,
+    progress: (u64, u64),
+    paused: bool
+}
+
+impl DownloadingStatusUpdater {
+    pub fn new(downloader: Downloader, progress_recv: mpsc::Receiver<(u64, u64)>, pause_sender: mpsc::Sender<()>) -> Self {
+        Self {
+            downloader,
+            progress_recv,
+            pause_sender,
+
+            // This likely will be used in percent calculation (curr / total * 100),
+            // so I set total as 1 to avoid dividing by 0
+            progress: (0, 1),
+
+            paused: false
+        }
+    }
+
+    pub fn progress(&mut self) -> (u64, u64) {
+        while let Ok(recvd) = self.progress_recv.try_recv() {
+            self.progress = recvd;
+        }
+
+        self.progress
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn pause(&mut self) -> Result<(), mpsc::SendError<()>> {
+        match self.pause_sender.send(()) {
+            Ok(_) => {
+                self.paused = true;
+
+                Ok(())
+            },
+            Err(err) => Err(err)
+        }
+    }
+
+    pub fn resume(&mut self) -> Result<(), curl::Error> {
+        match self.downloader.curl.unpause_write() {
+            Ok(_) => {
+                self.paused = false;
+
+                Ok(())
+            },
+            Err(err) => Err(err)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Downloader {
     length: Option<u64>,
@@ -111,14 +170,14 @@ impl Downloader {
             }
         }
         
-        let (send, recv) = std::sync::mpsc::channel::<u64>();
+        let (send, recv) = mpsc::channel::<u64>();
 
         curl.header_function(move |header| {
-            let header = String::from_utf8_lossy(header);
+            let header = String::from_utf8_lossy(header).to_lowercase();
 
             // Content-Length: 8899
             #[allow(unused_must_use)]
-            if header.len() > 16 && &header[..16] == "Content-Length: " {
+            if header.len() > 16 && &header[..16] == "content-length: " {
                 send.send(header[16..header.len() - 2].parse::<u64>().unwrap());
             }
 
@@ -160,7 +219,7 @@ impl Downloader {
 
     // TODO: somehow use FnOnce instead of Fn
 
-    pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), DownloadingError>
+    pub fn download<Fd, Fp>(mut self, mut downloader: Fd, progress: Fp) -> Result<DownloadingStatusUpdater, DownloadingError>
     where
         // array of bytes
         Fd: FnMut(&[u8]) -> Result<usize, curl::easy::WriteError> + Send + 'static,
@@ -169,8 +228,14 @@ impl Downloader {
     {
         self.curl.nobody(false)?;
 
+        let (progress_send, progress_recv) = mpsc::channel();
+        let (pause_send, pause_recv) = mpsc::channel();
+
         self.curl.write_function(move |data| {
-            (downloader)(data)
+            match pause_recv.try_recv() {
+                Ok(_) => Err(curl::easy::WriteError::Pause),
+                Err(_) => (downloader)(data)
+            }
         })?;
 
         let content_length = self.length.clone();
@@ -186,8 +251,11 @@ impl Downloader {
 
             i += 1;
 
+            #[allow(unused_must_use)]
             if i == updates_frequence || total - curr <= downloading_chunk {
                 (progress)(curr, total);
+
+                progress_send.send((curr, total));
 
                 i = 0;
             }
@@ -196,12 +264,12 @@ impl Downloader {
         })?;
 
         match self.curl.perform() {
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(DownloadingStatusUpdater::new(self, progress_recv, pause_send)),
             Err(err) => Err(DownloadingError::Curl(err))
         }
     }
 
-    pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DownloadingError>
+    pub fn download_to<T, Fp>(mut self, path: T, progress: Fp) -> Result<DownloadingStatusUpdater, DownloadingError>
     where
         T: ToString,
         // (curr, total)
