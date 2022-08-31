@@ -1,11 +1,10 @@
 use std::fs::{read_to_string, remove_file};
-use std::io::Error;
 
 use crate::version::Version;
 
 #[cfg(feature = "install")]
 use crate::{
-    genshin::installer::{
+    installer::{
         downloader::{Downloader, DownloadingError},
         installer::{
             Installer,

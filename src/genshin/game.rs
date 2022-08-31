@@ -9,7 +9,7 @@ use super::voice_data::package::VoicePackage;
 use super::consts::*;
 
 #[cfg(feature = "install")]
-use super::installer::diff::{VersionDiff, TryGetDiff};
+use crate::installer::diff::{VersionDiff, TryGetDiff};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {

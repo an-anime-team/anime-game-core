@@ -13,7 +13,7 @@ use crate::genshin::{
 };
 
 #[cfg(feature = "install")]
-use crate::genshin::installer::diff::{VersionDiff, TryGetDiff};
+use crate::installer::diff::{VersionDiff, TryGetDiff};
 
 /// Find voice package with specified locale from list of packages
 fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {

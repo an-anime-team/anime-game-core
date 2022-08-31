@@ -1,19 +1,27 @@
-#[cfg(feature = "genshin")]
-pub mod genshin;
-
-#[cfg(feature = "honkai")]
-pub mod honkai;
-
 pub mod version;
 pub mod curl;
 pub mod api;
 
 pub use ::curl as curl_sys;
 
+// Games-specific functionality
+
+#[cfg(feature = "genshin")]
+pub mod genshin;
+
+#[cfg(feature = "honkai")]
+pub mod honkai;
+
+// Core functionality
+
 #[cfg(feature = "external")]
 pub mod external;
 
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+#[cfg(feature = "install")]
+pub mod installer;
+
+#[cfg(feature = "install")]
+pub mod repairer;
 
 pub mod prelude {
     pub use super::version::*;
@@ -25,4 +33,9 @@ pub mod prelude {
 
     #[cfg(feature = "honkai")]
     pub use super::honkai::prelude as honkai;
+
+    #[cfg(feature = "install")]
+    pub use super::installer::prelude::*;
 }
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

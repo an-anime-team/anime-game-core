@@ -1,75 +1,19 @@
-use serde_json::{from_str, Value};
+use std::time::Duration;
 
+use crate::repairer::IntegrityFile;
 use crate::curl::fetch;
 
 use super::api;
-use super::installer::downloader::{Downloader, DownloadingError};
 use super::voice_data::locale::VoiceLocale;
 
-// {"remoteName": "UnityPlayer.dll", "md5": "8c8c3d845b957e4cb84c662bed44d072", "fileSize": 33466104}
-#[derive(Debug, Clone)]
-pub struct IntegrityFile {
-    pub path: String,
-    pub md5: String,
-    pub size: u64,
-    base_url: String
-}
-
-impl IntegrityFile {
-    /// Compare files' sizes and (if needed) hashes
-    pub fn verify<T: ToString>(&self, game_path: T) -> bool {
-        let file_path = format!("{}/{}", game_path.to_string(), self.path);
-
-        // Compare files' sizes. If they're different - they 100% different
-        match std::fs::metadata(&file_path) {
-            Ok(metadata) => {
-                if metadata.len() != self.size {
-                    false
-                }
-
-                else {
-                    // And if files' sizes are same we should compare their hashes
-                    match std::fs::read(&file_path) {
-                        Ok(hash) => format!("{:x}", md5::compute(hash)) == self.md5,
-                        Err(_) => false
-                    }
-                }
-            },
-            Err(_) => false
-        }
-    }
-
-    /// Compare files' sizes and do not compare files' hashes. Works lots faster than `verify`
-    pub fn fast_verify<T: ToString>(&self, game_path: T) -> bool {
-        match std::fs::metadata(format!("{}/{}", game_path.to_string(), self.path)) {
-            Ok(metadata) => metadata.len() == self.size,
-            Err(_) => false
-        }
-    }
-
-    /// Replace remote file with the latest one
-    /// 
-    /// This method doesn't compare them, so you should do it manually
-    pub fn repair<T: ToString>(&self, game_path: T) -> Result<(), DownloadingError> {
-        let mut downloader = Downloader::new(format!("{}/{}", self.base_url, self.path))?;
-
-        Ok(downloader.download_to(format!("{}/{}", game_path.to_string(), self.path), |_, _| {})?)
-    }
-}
-
-fn try_get_some_integrity_files<T: ToString>(file_name: T) -> anyhow::Result<Vec<IntegrityFile>> {
-    let response = api::try_fetch_json()?;
-
-    let decompressed_path = response.data.game.latest.decompressed_path;
-
-    // TODO: add timeout
-    let mut pkg_version = fetch(format!("{decompressed_path}/{}", file_name.to_string()), None)?;
-    let pkg_version = pkg_version.get_body()?;
+fn try_get_some_integrity_files<T: ToString>(file_name: T, timeout: Duration) -> anyhow::Result<Vec<IntegrityFile>> {
+    let decompressed_path = api::try_fetch_json()?.data.game.latest.decompressed_path;
+    let pkg_version = fetch(format!("{decompressed_path}/{}", file_name.to_string()), Some(timeout))?.get_body()?;
 
     let mut files = Vec::new();
 
     for line in String::from_utf8_lossy(&pkg_version).lines() {
-        if let Ok(value) = from_str::<Value>(line) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
             files.push(IntegrityFile {
                 path: value["remoteName"].as_str().unwrap().to_string(),
                 md5: value["md5"].as_str().unwrap().to_string(),
@@ -83,11 +27,11 @@ fn try_get_some_integrity_files<T: ToString>(file_name: T) -> anyhow::Result<Vec
 }
 
 /// Try to list latest game files
-pub fn try_get_integrity_files() -> anyhow::Result<Vec<IntegrityFile>> {
-    Ok(try_get_some_integrity_files("pkg_version")?)
+pub fn try_get_integrity_files(timeout: Duration) -> anyhow::Result<Vec<IntegrityFile>> {
+    try_get_some_integrity_files("pkg_version", timeout)
 }
 
 /// Try to list latest voice package files
-pub fn try_get_voice_integrity_files(locale: VoiceLocale) -> anyhow::Result<Vec<IntegrityFile>> {
-    Ok(try_get_some_integrity_files(format!("Audio_{}_pkg_version", locale.to_folder()))?)
+pub fn try_get_voice_integrity_files(locale: VoiceLocale, timeout: Duration) -> anyhow::Result<Vec<IntegrityFile>> {
+    try_get_some_integrity_files(format!("Audio_{}_pkg_version", locale.to_folder()), timeout)
 }
