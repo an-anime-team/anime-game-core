@@ -1,8 +1,6 @@
 use std::env::temp_dir;
 use std::os::unix::prelude::PermissionsExt;
 
-use crate::prelude::genshin::ToFolder;
-
 use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
 use super::free_space;
@@ -246,16 +244,16 @@ impl Installer {
 
                                         (updater)(Update::UnpackingFinished);
                                     },
-                                    Err(err) => (updater)(Update::UnpackingError(err.to_folder()))
+                                    Err(err) => (updater)(Update::UnpackingError(err.to_string()))
                                 },
-                                Err(err) => (updater)(Update::UnpackingError(err.to_folder()))
+                                Err(err) => (updater)(Update::UnpackingError(err.to_string()))
                             }
                         });
 
                         handle_1.join().unwrap();
                         handle_2.join().unwrap();
                     },
-                    Err(err) => (updater)(Update::UnpackingError(err.to_folder()))
+                    Err(err) => (updater)(Update::UnpackingError(err.to_string()))
                 }
             },
             Err(err) => {
