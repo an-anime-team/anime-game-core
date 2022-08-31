@@ -1,6 +1,7 @@
 use std::env::temp_dir;
 use std::os::unix::prelude::PermissionsExt;
-use std::rc::Rc;
+
+use crate::prelude::genshin::ToFolder;
 
 use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
@@ -26,7 +27,7 @@ pub enum Update {
     UnpackingProgress(u64, u64),
 
     UnpackingFinished,
-    UnpackingError(Rc<anyhow::Error>)
+    UnpackingError(String)
 }
 
 impl From<DownloadingError> for Update {
@@ -245,16 +246,16 @@ impl Installer {
 
                                         (updater)(Update::UnpackingFinished);
                                     },
-                                    Err(err) => (updater)(Update::UnpackingError(Rc::new(err)))
+                                    Err(err) => (updater)(Update::UnpackingError(err.to_folder()))
                                 },
-                                Err(err) => (updater)(Update::UnpackingError(Rc::new(err)))
+                                Err(err) => (updater)(Update::UnpackingError(err.to_folder()))
                             }
                         });
 
                         handle_1.join().unwrap();
                         handle_2.join().unwrap();
                     },
-                    Err(err) => (updater)(Update::UnpackingError(Rc::new(err)))
+                    Err(err) => (updater)(Update::UnpackingError(err.to_folder()))
                 }
             },
             Err(err) => {
