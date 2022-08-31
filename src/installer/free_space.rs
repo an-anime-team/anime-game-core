@@ -1,5 +1,7 @@
 use sysinfo::{System, SystemExt, DiskExt};
 
+// TODO: support for relative paths
+
 /// Get available free disk space by specified path
 /// 
 /// Can return `None` if path is not prefixed by any available disk

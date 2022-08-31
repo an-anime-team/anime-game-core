@@ -54,7 +54,7 @@ impl GameBasics for Game {
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes() {
+        for byte in file.bytes().skip(4000).take(10000) {
             if let Ok(byte) = byte {
                 match byte {
                     0 => {

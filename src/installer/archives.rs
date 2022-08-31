@@ -1,8 +1,11 @@
 use std::path::Path;
 use std::fs::File;
+use std::process::{Command, Stdio};
 
 use zip::ZipArchive;
 use tar::Archive as TarArchive;
+// use sevenz_rust::SevenZReader as SevenzArchive;
+
 use xz::read::XzDecoder as XzReader;
 use bzip2::read::BzDecoder as Bz2Reader;
 use flate2::read::GzDecoder as GzReader;
@@ -38,47 +41,41 @@ pub enum Archive {
     Tar(String, TarArchive<File>),
     TarXz(String, TarArchive<XzReader<File>>),
     TarGz(String, TarArchive<GzReader<File>>),
-    TarBz2(String, TarArchive<Bz2Reader<File>>)
+    TarBz2(String, TarArchive<Bz2Reader<File>>),
+    SevenZ(String/*, SevenzArchive<File>*/)
 }
 
 impl Archive {
-    pub fn open<T: ToString>(path: T) -> Option<Self> {
-        match File::open(Path::new(path.to_string().as_str())) {
-            Ok(file) => {
-                if let Ok(zip) = ZipArchive::new(file) {
-                    Some(Archive::Zip(path.to_string(), zip))
-                }
+    pub fn open<T: ToString>(path: T) -> anyhow::Result<Self> {
+        let path = path.to_string();
+        let file = File::open(Path::new(&path))?;
 
-                else {
-                    let mut tar = TarArchive::new(File::open(Path::new(path.to_string().as_str())).unwrap());
+        if &path[path.len() - 4..] == ".zip" {
+            Ok(Archive::Zip(path, ZipArchive::new(file)?))
+        }
 
-                    if let Ok(_) = tar.entries() {
-                        let path = path.to_string();
-                        let file = File::open(Path::new(path.to_string().as_str())).unwrap();
+        else if &path[path.len() - 7..] == ".tar.xz" {
+            Ok(Archive::TarXz(path, TarArchive::new(XzReader::new(file))))
+        }
 
-                        if &path[path.len() - 7..] == ".tar.xz" {
-                            Some(Archive::TarXz(path.to_string(), TarArchive::new(XzReader::new(file))))
-                        }
+        else if &path[path.len() - 7..] == ".tar.gz" {
+            Ok(Archive::TarGz(path, TarArchive::new(GzReader::new(file))))
+        }
 
-                        else if &path[path.len() - 7..] == ".tar.gz" {
-                            Some(Archive::TarGz(path.to_string(), TarArchive::new(GzReader::new(file))))
-                        }
+        else if &path[path.len() - 8..] == ".tar.bz2" {
+            Ok(Archive::TarBz2(path, TarArchive::new(Bz2Reader::new(file))))
+        }
 
-                        else if &path[path.len() - 8..] == ".tar.bz2" {
-                            Some(Archive::TarBz2(path.to_string(), TarArchive::new(Bz2Reader::new(file))))
-                        }
+        else if &path[path.len() - 3..] == ".7z" {
+            Ok(Archive::SevenZ(path.clone()/*, SevenzArchive::open(path, &[])?*/))
+        }
 
-                        else {
-                            Some(Archive::Tar(path.to_string(), tar))
-                        }
-                    }
-                    
-                    else {
-                        None
-                    }
-                }
-            },
-            Err(_) => None
+        else if &path[path.len() - 4..] == ".tar" {
+            Ok(Archive::Tar(path, TarArchive::new(file)))
+        }
+
+        else {
+            Err(anyhow::anyhow!("Archive format is not supported: {}", path))
         }
     }
 
@@ -99,7 +96,8 @@ impl Archive {
                         }
                     });
                 }
-            },
+            }
+
             Archive::Tar(_, tar) => {
                 for entry in tar.entries().unwrap() {
                     if let Ok(entry) = entry {
@@ -109,7 +107,8 @@ impl Archive {
                         });
                     }
                 }
-            },
+            }
+
             Archive::TarXz(_, tar) => {
                 for entry in tar.entries().unwrap() {
                     if let Ok(entry) = entry {
@@ -119,7 +118,8 @@ impl Archive {
                         });
                     }
                 }
-            },
+            }
+
             Archive::TarGz(_, tar) => {
                 for entry in tar.entries().unwrap() {
                     if let Ok(entry) = entry {
@@ -129,13 +129,67 @@ impl Archive {
                         });
                     }
                 }
-            },
+            }
+
             Archive::TarBz2(_, tar) => {
                 for entry in tar.entries().unwrap() {
                     if let Ok(entry) = entry {
                         entries.push(Entry {
                             name: entry.path().unwrap().to_str().unwrap().to_string(),
                             size: Size::Compressed(entry.size())
+                        });
+                    }
+                }
+            }
+
+            #[allow(unused_must_use)]
+            Archive::SevenZ(path) => {
+                /*let (send, recv) = std::sync::mpsc::channel();
+
+                sz.for_each_entries(move |entry, _| {
+                    send.send(Entry {
+                        name: entry.name.clone(),
+                        size: Size::Both {
+                            compressed: entry.compressed_size,
+                            uncompressed: entry.size
+                        }
+                    });
+
+                    Ok(true)
+                });
+
+                while let Ok(entry) = recv.recv() {
+                    entries.push(entry);
+                }*/
+
+                let output = Command::new("7z")
+                    .arg("l")
+                    .arg(path)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .output()
+                    .unwrap();
+
+                let output = String::from_utf8(output.stdout).unwrap();
+
+                let output = output.split("-------------------").collect::<Vec<&str>>();
+                let output = output[1..output.len() - 1].join("-------------------");
+
+                for line in output.split("\n").collect::<Vec<&str>>() {
+                    if &line[..1] != "-" && &line[..2] != " -" {
+                        let words = line.split("  ").filter_map(|word| {
+                            let word = word.trim();
+
+                            if word == "" {
+                                None
+                            } else {
+                                Some(word)
+                            }
+                        }).collect::<Vec<&str>>();
+
+                        entries.push(Entry {
+                            name: words[words.len() - 1].to_string(),
+                            size: Size::Uncompressed(words[1].parse::<u64>().unwrap())
                         });
                     }
                 }
@@ -145,23 +199,42 @@ impl Archive {
         entries
     }
 
-    pub fn extract<T: ToString>(&mut self, folder: T) {
+    pub fn extract<T: ToString>(&mut self, folder: T) -> anyhow::Result<()> {
         match self {
             Archive::Zip(_, zip) => {
-                zip.extract(folder.to_string()).expect("Failed to extract zip archive");
-            },
+                zip.extract(folder.to_string())?;
+            }
+
             Archive::Tar(_, tar) => {
-                tar.unpack(folder.to_string()).expect("Failed to extract tar archive");
-            },
+                tar.unpack(folder.to_string())?;
+            }
+
             Archive::TarXz(_, tar) => {
-                tar.unpack(folder.to_string()).expect("Failed to extract tar xz archive");
-            },
+                tar.unpack(folder.to_string())?;
+            }
+
             Archive::TarGz(_, tar) => {
-                tar.unpack(folder.to_string()).expect("Failed to extract tar gz archive");
-            },
+                tar.unpack(folder.to_string())?;
+            }
+
             Archive::TarBz2(_, tar) => {
-                tar.unpack(folder.to_string()).expect("Failed to extract tar bz2 archive");
+                tar.unpack(folder.to_string())?;
+            }
+
+            Archive::SevenZ(archive) => {
+                // sevenz_rust::decompress_file(archive, folder.to_string())?;
+
+                Command::new("7z")
+                    .arg("x")
+                    .arg(archive)
+                    .arg(format!("-o{}", folder.to_string()))
+                    .arg("-aoa")
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .output()?;
             }
         }
+
+        Ok(())
     }
 }

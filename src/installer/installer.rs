@@ -1,5 +1,6 @@
 use std::env::temp_dir;
 use std::os::unix::prelude::PermissionsExt;
+use std::rc::Rc;
 
 use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
@@ -25,7 +26,7 @@ pub enum Update {
     UnpackingProgress(u64, u64),
 
     UnpackingFinished,
-    UnpackingError
+    UnpackingError(Rc<anyhow::Error>)
 }
 
 impl From<DownloadingError> for Update {
@@ -156,7 +157,7 @@ impl Installer {
                 (updater)(Update::DownloadingFinished);
 
                 match Archive::open(&temp_path) {
-                    Some(mut archive) => {
+                    Ok(mut archive) => {
                         // Temporary workaround as we can't get archive extraction process
                         // directly - we'll spawn it in another thread and check this archive entries appearence in the filesystem
                         let mut total = 0;
@@ -165,7 +166,7 @@ impl Installer {
                         for entry in &entries {
                             total += entry.size.get_size();
 
-                            let path = format!("{}/{}", &unpack_to, entry.name);
+                            let path = format!("{unpack_to}/{}", entry.name);
 
                             // Failed to change permissions => likely patch-related file and was made by the sudo, so root
                             #[allow(unused_must_use)]
@@ -184,7 +185,7 @@ impl Installer {
 
                         let handle_2 = std::thread::spawn(move || {
                             let mut entries = entries.into_iter()
-                                .map(|entry| (format!("{}/{}", unpacking_path, entry.name), entry.size.get_size(), true))
+                                .map(|entry| (format!("{unpacking_path}/{}", entry.name), entry.size.get_size(), true))
                                 .collect::<Vec<_>>();
 
                             let mut unpacked = 0;
@@ -236,20 +237,24 @@ impl Installer {
 
                             // We have to create new instance of Archive here
                             // because otherwise it may not work after get_entries method call
-                            Archive::open(&temp_path).unwrap().extract(unpack_to);
+                            match Archive::open(&temp_path) {
+                                Ok(mut archive) => match archive.extract(unpack_to) {
+                                    Ok(_) => {
+                                        // TODO error handling
+                                        std::fs::remove_file(temp_path).expect("Failed to remove temporary file");
 
-                            (updater)(Update::UnpackingFinished);
-
-                            // TODO error handling
-                            std::fs::remove_file(temp_path).expect("Failed to remove temporary file");
+                                        (updater)(Update::UnpackingFinished);
+                                    },
+                                    Err(err) => (updater)(Update::UnpackingError(Rc::new(err)))
+                                },
+                                Err(err) => (updater)(Update::UnpackingError(Rc::new(err)))
+                            }
                         });
 
                         handle_1.join().unwrap();
                         handle_2.join().unwrap();
                     },
-                    None => {
-                        (updater)(Update::UnpackingError);
-                    }
+                    Err(err) => (updater)(Update::UnpackingError(Rc::new(err)))
                 }
             },
             Err(err) => {

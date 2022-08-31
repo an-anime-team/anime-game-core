@@ -5,5 +5,5 @@ pub mod game;
 
 pub mod prelude {
     pub use super::consts::*;
-    pub use super::game;
+    pub use super::game::Game;
 }

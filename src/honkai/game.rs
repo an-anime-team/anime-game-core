@@ -33,11 +33,6 @@ impl GameBasics for Game {
     }
 
     fn try_get_version(&self) -> anyhow::Result<Version> {
-
-        // TODO
-
-        return Ok(Version::new(5, 9, 1));
-
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
             let mut num: u8 = 0;
         
@@ -57,10 +52,18 @@ impl GameBasics for Game {
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes() {
+        for byte in file.bytes().skip(4000).take(10000) {
             if let Ok(byte) = byte {
                 match byte {
                     0 => {
+                        if correct && version_ptr == 2 && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
+                            return Ok(Version::new(
+                                bytes_to_num(&version[0]),
+                                bytes_to_num(&version[1]),
+                                bytes_to_num(&version[2])
+                            ))
+                        }
+
                         version = [vec![], vec![], vec![]];
                         version_ptr = 0;
                         correct = true;
@@ -72,18 +75,6 @@ impl GameBasics for Game {
                         if version_ptr > 2 {
                             correct = false;
                         }
-                    }
-
-                    95 => {
-                        if correct && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
-                            return Ok(Version::new(
-                                bytes_to_num(&version[0]),
-                                bytes_to_num(&version[1]),
-                                bytes_to_num(&version[2])
-                            ))
-                        }
-
-                        correct = false;
                     }
 
                     _ => {

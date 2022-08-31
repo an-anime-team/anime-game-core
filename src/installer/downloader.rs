@@ -226,6 +226,9 @@ impl Downloader {
             return Err(DownloadingError::Curl(err));
         }
 
+        // Current downloading progress
+        let mut curr = 0_usize;
+
         // Open or create output file
         let file = if Path::new(&path).exists() {
             let mut file = std::fs::OpenOptions::new().write(true).open(&path);
@@ -241,6 +244,8 @@ impl Downloader {
                         if let Err(err) = file.seek(std::io::SeekFrom::Start(metadata.len())) {
                             return Err(DownloadingError::OutputFileError(path, err.to_string()));
                         }
+
+                        curr = metadata.len() as usize;
                     },
                     Err(err) => return Err(DownloadingError::OutputFileMetadataError(path, err.to_string()))
                 }
@@ -258,8 +263,8 @@ impl Downloader {
                 let total = self.length().unwrap_or(0) as usize;
 
                 let mut bytes = Vec::new();
-                let mut curr = 0_usize;
 
+                // FIXME: technically curl continues downloading from specific offset, but still counts current progress from 0
                 self.download(move |data| {
                     curr += data.len();
                     bytes.extend_from_slice(data);
