@@ -1,12 +1,10 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
 
 use crate::version::Version;
 use crate::traits::game::GameBasics;
 
 use super::api;
-use super::voice_data::package::VoicePackage;
 use super::consts::*;
 
 #[cfg(feature = "install")]
@@ -35,6 +33,11 @@ impl GameBasics for Game {
     }
 
     fn try_get_version(&self) -> anyhow::Result<Version> {
+
+        // TODO
+
+        return Ok(Version::new(5, 9, 1));
+
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
             let mut num: u8 = 0;
         
@@ -100,80 +103,31 @@ impl GameBasics for Game {
     }
 }
 
-impl Game {
-    /// Get list of installed voice packages
-    pub fn get_voice_packages(&self) -> anyhow::Result<Vec<VoicePackage>> {
-        let content = std::fs::read_dir(get_voice_packages_path(&self.path))?;
-
-        let packages = content.into_iter()
-            .filter_map(|result| result.ok())
-            .filter_map(|entry| {
-                let path = get_voice_package_path(&self.path, entry.file_name().to_string_lossy());
-
-                VoicePackage::new(path)
-            })
-            .collect();
-
-        Ok(packages)
-    }
-
-    /// Try to get game's edition from its folder
-    /// 
-    /// Will return `None` if the game is not installed
-    pub fn get_edition(&self) -> Option<GameEdition> {
-        if !Path::new(&self.path).exists() {
-            return None;
-        }
-
-        for edition in [GameEdition::Global, GameEdition::China] {
-            if Path::new(&format!("{}/{}", self.path, get_data_folder_name(edition))).exists() {
-                return Some(edition);
-            }
-        }
-
-        // Should be unreachable!() instead of None to catch possible future errors
-        unreachable!()
-    }
-}
-
-// TODO: game predownloading
-
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
-        let response = api::try_fetch_json()?;
+        let latest = api::try_fetch_json()?.data.game.latest;
 
         if self.is_installed() {
             let current = self.try_get_version()?;
 
-            if response.data.game.latest.version == current {
+            if latest.version == current {
                 Ok(VersionDiff::Latest(current))
             }
 
             else {
-                for diff in response.data.game.diffs {
-                    if diff.version == current {
-                        return Ok(VersionDiff::Diff {
-                            current,
-                            latest: Version::from_str(response.data.game.latest.version).unwrap(),
-                            url: diff.path,
-                            download_size: diff.size.parse::<u64>().unwrap(),
-                            unpacked_size: diff.package_size.parse::<u64>().unwrap(),
-                            unpacking_path: Some(self.path.clone())
-                        })
-                    }
-                }
-
-                Ok(VersionDiff::Outdated {
+                Ok(VersionDiff::Diff {
                     current,
-                    latest: Version::from_str(response.data.game.latest.version).unwrap()
+                    latest: Version::from_str(latest.version).unwrap(),
+                    url: latest.path,
+                    download_size: latest.size.parse::<u64>().unwrap(),
+                    unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                    unpacking_path: Some(self.path.clone())
                 })
             }
         }
 
         else {
-            let latest = response.data.game.latest;
-
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
                 url: latest.path,

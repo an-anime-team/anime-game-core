@@ -1,7 +1,5 @@
 use super::voice_data::locale::VoiceLocale;
 
-// TODO: encode these strings to something
-
 // This enum is used in `Game::get_edition` method
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameEdition {

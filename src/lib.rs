@@ -2,6 +2,8 @@ pub mod version;
 pub mod curl;
 pub mod api;
 
+mod traits;
+
 pub use ::curl as curl_sys;
 
 // Games-specific functionality
@@ -28,6 +30,8 @@ pub mod prelude {
     pub use super::curl::fetch;
     pub use super::api;
 
+    pub use super::traits::prelude::*;
+
     #[cfg(feature = "genshin")]
     pub use super::genshin::prelude as genshin;
 
@@ -36,6 +40,9 @@ pub mod prelude {
 
     #[cfg(feature = "install")]
     pub use super::installer::prelude::*;
+
+    #[cfg(feature = "install")]
+    pub use super::repairer::IntegrityFile;
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
