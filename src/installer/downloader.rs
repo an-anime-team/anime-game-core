@@ -186,7 +186,7 @@ impl Downloader {
 
             i += 1;
 
-            if i == updates_frequence || total - curr <= downloading_chunk {
+            if i == updates_frequence || total.checked_sub(curr).unwrap_or(0) <= downloading_chunk {
                 (progress)(curr, total);
 
                 i = 0;
@@ -269,8 +269,7 @@ impl Downloader {
                     curr += data.len();
                     bytes.extend_from_slice(data);
 
-                    // FIXME: (0_usize - x_usize), where x > 0, will cause usize overflow and panic
-                    if bytes.len() >= downloading_chunk || total - curr <= downloading_chunk {
+                    if bytes.len() >= downloading_chunk || total.checked_sub(curr).unwrap_or(0) <= downloading_chunk {
                         file.write_all(&bytes).expect("Failed to write data");
 
                         bytes.clear();
