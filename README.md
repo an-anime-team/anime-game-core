@@ -2,42 +2,23 @@
 
 Common library to control the Anime Game installation, written in Rust
 
-## Roadmap to 1.0.0
+## Features
 
-* [x] Game
-  * [x] Get current version
-  * [x] Calculate difference with the latest version
+| Description | Feature |
+| - | - |
+| Manage games installations (parse versions, check for updates) | default |
+| Install games and download updates | `install` |
+| Manage voice packages, download and update them | `install` |
+| Repair game installations | `install` |
+| Check for telemetry | `telemetry` |
+| Apply linux patch | `linux-patch` |
+| Static binding of dependencies | `static` |
 
-  Feature: `install`
+## Supported games
 
-  * [x] Install the difference
-  * [x] Apply changes for updates
-    * [x] Remove outdated files
-    * [x] Apply hdiff changes
-  * [x] Repair game files
+| Name | Feature |
+| - | - |
+| [An Anime Game](https://github.com/an-anime-team/an-anime-game-launcher-gtk) | `gen-shin` (without dash) |
+| [Honkers](https://github.com/an-anime-team/honkers-launcher-gtk) | `hon-kai` (without dash) |
 
-* [x] Voice packages
-  * [x] List installed packages
-  * [x] Get packages versions
-  * [x] List available packages
-  * [x] Calculate difference with the latest version
-
-  Feature: `install`
-
-  * [x] Install the difference
-  * [x] Apply changes for updates
-    * [x] Remove outdated files
-    * [x] Apply hdiff changes
-  * [x] Delete voice packages
-  * [x] Repair broken packages
-
-Feature: `telemetry`
-
-* [x] Check if disabled
-* [ ] Disable / enable
-
-Feature: `linux-patch`
-
-* [x] Fetch remote patch info
-* [x] Identify installed patch info
-* [x] Apply / revert patch
+⚠️ This library does not bind 7z archives format support, and would require `7z` binary available in user's system. This format may be used in games like honkers
