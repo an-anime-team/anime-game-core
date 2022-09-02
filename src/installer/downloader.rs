@@ -118,7 +118,7 @@ impl Downloader {
 
             // Content-Length: 8899
             #[allow(unused_must_use)]
-            if header.len() > 16 && &header[..16] == "Content-Length: " {
+            if header.len() > 16 && header[..16].to_lowercase() == "content-length: " {
                 send.send(header[16..header.len() - 2].parse::<u64>().unwrap());
             }
 

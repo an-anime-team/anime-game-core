@@ -180,8 +180,6 @@ impl Installer {
                         let unpacking_path = unpack_to.clone();
                         let unpacking_updater = updater.clone();
 
-                        let now = std::time::SystemTime::now();
-
                         let handle_2 = std::thread::spawn(move || {
                             let mut entries = entries.into_iter()
                                 .map(|entry| (format!("{unpacking_path}/{}", entry.name), entry.size.get_size(), true))
@@ -198,26 +196,10 @@ impl Installer {
                                     if *remained {
                                         empty = false;
 
-                                        let path = std::path::Path::new(path);
+                                        if std::path::Path::new(path).exists() {
+                                            *remained = false;
 
-                                        if let Ok(metadata) = path.metadata() {
-                                            match metadata.modified() {
-                                                Ok(time) => {
-                                                    // Mark file as downloaded only if it was modified recently
-                                                    if time > now {
-                                                        *remained = false;
-
-                                                        unpacked += *size;
-                                                    }
-                                                },
-
-                                                // Some systems may not have this parameter
-                                                Err(_) => {
-                                                    *remained = false;
-
-                                                    unpacked += *size;
-                                                }
-                                            }
+                                            unpacked += *size;
                                         }
                                     }
                                 }
