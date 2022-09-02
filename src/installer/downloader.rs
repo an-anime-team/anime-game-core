@@ -264,8 +264,7 @@ impl Downloader {
 
                 let mut bytes = Vec::new();
 
-                // FIXME: technically curl continues downloading from specific offset, but still counts current progress from 0
-                self.download(move |data| {
+                let downloader = move |data: &[u8]| {
                     curr += data.len();
                     bytes.extend_from_slice(data);
 
@@ -276,7 +275,15 @@ impl Downloader {
                     }
 
                     Ok(data.len())
-                }, progress)
+                };
+
+                // I sadly couldn't write it better as move |..| and progress have different types
+                // and I cant' use them in if-else statement
+                if curr > 0 {
+                    self.download(downloader, move |c, t| progress(c + curr as u64, t))
+                } else {
+                    self.download(downloader, progress)
+                }
             },
             Err(err) => Err(DownloadingError::OutputFileError(path, err.to_string()))
         }
