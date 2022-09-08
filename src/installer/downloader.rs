@@ -152,10 +152,13 @@ impl Downloader {
     }
 
     /// Set downloading chunk size
-    pub fn set_downloading_chunk(mut self, size: usize) -> Self {
+    pub fn set_downloading_chunk(&mut self, size: usize) {
         self.downloading_chunk = size;
+    }
 
-        self
+    /// Set downloading speed limit, bytes per second
+    pub fn set_downloading_speed(&mut self, speed: u64) -> Result<(), curl::Error> {
+        Ok(self.curl.max_recv_speed(speed)?)
     }
 
     // TODO: somehow use FnOnce instead of Fn
