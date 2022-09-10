@@ -109,12 +109,12 @@ impl VersionDiff {
 
         match self {
             // Can't be downloaded
-            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { .. } => return Err(DiffDownloadError::Outdated),
+            Self::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
+            Self::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { url: diff_url, .. } => url = diff_url.clone(),
-            VersionDiff::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
+            Self::Diff { url: diff_url, .. } |
+            Self::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
         }
 
         let mut downloader = Downloader::new(url)?;
@@ -136,12 +136,12 @@ impl VersionDiff {
     {
         match self {
             // Can't be downloaded
-            VersionDiff::Latest(_) => Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { .. } => Err(DiffDownloadError::Outdated),
+            Self::Latest(_) => Err(DiffDownloadError::AlreadyLatest),
+            Self::Outdated { .. } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { unpacking_path, .. } |
-            VersionDiff::NotInstalled { unpacking_path, .. } => {
+            Self::Diff { unpacking_path, .. } |
+            Self::NotInstalled { unpacking_path, .. } => {
                 match unpacking_path {
                     Some(unpacking_path) => self.install_to_by(unpacking_path, None, updater),
                     None => Err(DiffDownloadError::PathNotSpecified)
@@ -159,12 +159,12 @@ impl VersionDiff {
     {
         match self {
             // Can't be downloaded
-            VersionDiff::Latest(_) => Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { .. } => Err(DiffDownloadError::Outdated),
+            Self::Latest(_) => Err(DiffDownloadError::AlreadyLatest),
+            Self::Outdated { .. } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { .. } |
-            VersionDiff::NotInstalled { .. } => self.install_to_by(path, None, updater)
+            Self::Diff { .. } |
+            Self::NotInstalled { .. } => self.install_to_by(path, None, updater)
         }
     }
 
@@ -183,12 +183,12 @@ impl VersionDiff {
 
         match self {
             // Can't be downloaded
-            VersionDiff::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
-            VersionDiff::Outdated { .. } => return Err(DiffDownloadError::Outdated),
+            Self::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
+            Self::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            VersionDiff::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } |
-            VersionDiff::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } => {
+            Self::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } |
+            Self::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } => {
                 url = diff_url.clone();
                 download_size = *down_size;
                 unpacked_size = *unp_size;
@@ -289,12 +289,12 @@ impl VersionDiff {
     pub fn get_size(&self) -> Option<(u64, u64)> {
         match self {
             // Can't be downloaded
-            VersionDiff::Latest(_) => None,
-            VersionDiff::Outdated { .. } => None,
+            Self::Latest(_) |
+            Self::Outdated { .. } => None,
 
             // Can be downloaded
-            VersionDiff::Diff { download_size, unpacked_size, .. } |
-            VersionDiff::NotInstalled { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size))
+            Self::Diff { download_size, unpacked_size, .. } |
+            Self::NotInstalled { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size))
         }
     }
 
@@ -302,12 +302,12 @@ impl VersionDiff {
     pub fn unpacking_path(&self) -> Option<String> {
         match self {
             // Can't be downloaded
-            VersionDiff::Latest(_) => None,
-            VersionDiff::Outdated { .. } => None,
+            Self::Latest(_) |
+            Self::Outdated { .. } => None,
 
             // Can be downloaded
-            VersionDiff::Diff { unpacking_path, .. } => unpacking_path.clone(),
-            VersionDiff::NotInstalled { unpacking_path, .. } => unpacking_path.clone()
+            Self::Diff { unpacking_path, .. } |
+            Self::NotInstalled { unpacking_path, .. } => unpacking_path.clone()
         }
     }
 }
