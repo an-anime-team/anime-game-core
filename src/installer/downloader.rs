@@ -161,8 +161,6 @@ impl Downloader {
         Ok(self.curl.max_recv_speed(speed)?)
     }
 
-    // TODO: somehow use FnOnce instead of Fn
-
     pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), DownloadingError>
     where
         // array of bytes

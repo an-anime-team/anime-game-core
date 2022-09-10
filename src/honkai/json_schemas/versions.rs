@@ -17,7 +17,7 @@ pub struct Data {
 
     // We're not talking about it here
 
-    // pub pre_download_game, // TODO
+    // pub pre_download_game,
 
     // pub deprecated_packages,
     // pub plugin: Plugin,

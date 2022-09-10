@@ -65,7 +65,24 @@ impl Into<std::io::Error> for DiffDownloadError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VersionDiff {
+    /// Latest version
     Latest(Version),
+
+    /// Component's update can be predownloaded, but you still can use it
+    Predownload {
+        current: Version,
+        latest: Version,
+        url: String,
+        download_size: u64,
+        unpacked_size: u64,
+
+        /// Path to the folder this difference should be installed by the `install` method
+        /// 
+        /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
+        unpacking_path: Option<String>
+    },
+
+    /// Component should be updated before using it
     Diff {
         current: Version,
         latest: Version,
@@ -78,11 +95,14 @@ pub enum VersionDiff {
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
         unpacking_path: Option<String>
     },
+
     /// Difference can't be calculated because installed version is too old
     Outdated {
         current: Version,
         latest: Version
     },
+
+    /// Component is not yet installed
     NotInstalled {
         latest: Version,
         url: String,
@@ -113,6 +133,7 @@ impl VersionDiff {
             Self::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
+            Self::Predownload { url: diff_url, .. } |
             Self::Diff { url: diff_url, .. } |
             Self::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
         }
@@ -140,6 +161,7 @@ impl VersionDiff {
             Self::Outdated { .. } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
+            Self::Predownload { unpacking_path, .. } |
             Self::Diff { unpacking_path, .. } |
             Self::NotInstalled { unpacking_path, .. } => {
                 match unpacking_path {
@@ -163,6 +185,7 @@ impl VersionDiff {
             Self::Outdated { .. } => Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
+            Self::Predownload { .. } |
             Self::Diff { .. } |
             Self::NotInstalled { .. } => self.install_to_by(path, None, updater)
         }
@@ -187,6 +210,7 @@ impl VersionDiff {
             Self::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
+            Self::Predownload { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } |
             Self::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } |
             Self::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } => {
                 url = diff_url.clone();
@@ -286,13 +310,14 @@ impl VersionDiff {
     }
 
     /// Returns (download_size, unpacked_size) pair if it exists in current enum value
-    pub fn get_size(&self) -> Option<(u64, u64)> {
+    pub fn size(&self) -> Option<(u64, u64)> {
         match self {
             // Can't be downloaded
             Self::Latest(_) |
             Self::Outdated { .. } => None,
 
             // Can be downloaded
+            Self::Predownload { download_size, unpacked_size, .. } |
             Self::Diff { download_size, unpacked_size, .. } |
             Self::NotInstalled { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size))
         }
@@ -306,6 +331,7 @@ impl VersionDiff {
             Self::Outdated { .. } => None,
 
             // Can be downloaded
+            Self::Predownload { unpacking_path, .. } |
             Self::Diff { unpacking_path, .. } |
             Self::NotInstalled { unpacking_path, .. } => unpacking_path.clone()
         }

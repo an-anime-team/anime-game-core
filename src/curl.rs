@@ -55,8 +55,6 @@ impl Response {
 }
 
 /// Try to fetch remote data
-/// 
-/// TODO: add request timeout
 pub fn fetch<T: ToString>(url: T, timeout: Option<Duration>) -> Result<Response, curl::Error> {
     let mut curl = Easy::new();
 

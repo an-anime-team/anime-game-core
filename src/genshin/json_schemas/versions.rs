@@ -14,10 +14,9 @@ pub struct Response {
 pub struct Data {
     pub web_url: String,
     pub game: Game,
+    pub pre_download_game: Option<Latest>,
 
     // We're not talking about it here
-    
-    // pub pre_download_game, // TODO
 
     // pub deprecated_packages,
     // pub plugin: Plugin,

@@ -136,8 +136,6 @@ impl Game {
     }
 }
 
-// TODO: game predownloading
-
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
@@ -147,7 +145,20 @@ impl TryGetDiff for Game {
             let current = self.try_get_version()?;
 
             if response.data.game.latest.version == current {
-                Ok(VersionDiff::Latest(current))
+                if let Some(predownload) = response.data.pre_download_game {
+                    Ok(VersionDiff::Predownload {
+                        current,
+                        latest: Version::from_str(predownload.version).unwrap(),
+                        url: predownload.path,
+                        download_size: predownload.size.parse::<u64>().unwrap(),
+                        unpacked_size: predownload.package_size.parse::<u64>().unwrap(),
+                        unpacking_path: Some(self.path.clone())
+                    })
+                }
+
+                else {
+                    Ok(VersionDiff::Latest(current))
+                }
             }
 
             else {
