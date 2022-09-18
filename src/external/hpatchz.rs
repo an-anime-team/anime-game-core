@@ -1,9 +1,10 @@
 use std::process::Command;
 use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::PermissionsExt;
+use std::path::PathBuf;
 
 /// Try to apply hdiff patch
-pub fn patch<T: ToString>(file: T, patch: T, output: T) -> std::io::Result<()> {
+pub fn patch<T: Into<PathBuf>>(file: T, patch: T, output: T) -> std::io::Result<()> {
     let hpatchz = super::STORAGE.map("hpatchz")?;
 
     // Allow to execute this binary
@@ -11,9 +12,9 @@ pub fn patch<T: ToString>(file: T, patch: T, output: T) -> std::io::Result<()> {
 
     let output = Command::new(hpatchz)
         .arg("-f")
-        .arg(file.to_string())
-        .arg(patch.to_string())
-        .arg(output.to_string())
+        .arg(file.into().as_os_str())
+        .arg(patch.into().as_os_str())
+        .arg(output.into().as_os_str())
         .output()?;
 
     if String::from_utf8_lossy(output.stdout.as_slice()).contains("patch ok!") {

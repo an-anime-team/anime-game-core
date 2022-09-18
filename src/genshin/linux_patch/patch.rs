@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
+use std::path::PathBuf;
 
 use crate::version::*;
 use crate::curl::fetch;
@@ -86,7 +87,7 @@ impl Patch {
     /// this method will return outdated version
     /// 
     /// Timeout is applied to all the requests separately, so the whole operation can take more than `Some(timeout)`
-    pub fn try_fetch<T: ToString>(hosts: Vec<T>, timeout: Option<Duration>) -> anyhow::Result<Self> {
+    pub fn try_fetch<T: ToString, F: IntoIterator<Item = T>>(hosts: F, timeout: Option<Duration>) -> anyhow::Result<Self> {
         let response = api::try_fetch_json()?;
 
         let mut versions = vec![Version::from_str(&response.data.game.latest.version).unwrap()];
@@ -95,9 +96,14 @@ impl Patch {
             versions.push(Version::from_str(diff.version).unwrap());
         }
 
+        let hosts = hosts
+            .into_iter()
+            .map(|host| host.to_string())
+            .collect::<Vec<String>>();
+
         for version in versions {
             for host in &hosts {
-                match Self::try_fetch_version(host.to_string(), version, timeout) {
+                match Self::try_fetch_version(host, version, timeout) {
                     Ok(Patch::NotAvailable) => continue,
                     Err(_) => continue,
 
@@ -108,7 +114,7 @@ impl Patch {
                             Ok(Self::Outdated {
                                 current: version,
                                 latest: Version::from_str(&response.data.game.latest.version).unwrap(),
-                                host: host.to_string()
+                                host: host.clone()
                             })
                         }
                     }
@@ -278,8 +284,8 @@ impl Patch {
     /// Check whether this patch is applied to the game
     /// 
     /// This method will return `Ok(false)` if the patch is not available, outdated or in preparation state
-    pub fn is_applied<T: ToString>(&self, game_path: T) -> Result<bool, std::io::Error> {
-        let dll = std::fs::read(format!("{}/UnityPlayer.dll", game_path.to_string()))?;
+    pub fn is_applied<T: Into<PathBuf>>(&self, game_path: T) -> Result<bool, std::io::Error> {
+        let dll = std::fs::read(game_path.into().join("UnityPlayer.dll"))?;
         let hash = format!("{:x}", md5::compute(dll));
 
         match self {

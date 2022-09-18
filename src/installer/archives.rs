@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::process::{Command, Stdio};
 
@@ -37,45 +37,45 @@ pub struct Entry {
 }
 
 pub enum Archive {
-    Zip(String, ZipArchive<File>),
-    Tar(String, TarArchive<File>),
-    TarXz(String, TarArchive<XzReader<File>>),
-    TarGz(String, TarArchive<GzReader<File>>),
-    TarBz2(String, TarArchive<Bz2Reader<File>>),
-    SevenZ(String/*, SevenzArchive<File>*/)
+    Zip(PathBuf, ZipArchive<File>),
+    Tar(PathBuf, TarArchive<File>),
+    TarXz(PathBuf, TarArchive<XzReader<File>>),
+    TarGz(PathBuf, TarArchive<GzReader<File>>),
+    TarBz2(PathBuf, TarArchive<Bz2Reader<File>>),
+    SevenZ(PathBuf/*, SevenzArchive<File>*/)
 }
 
 impl Archive {
-    pub fn open<T: ToString>(path: T) -> anyhow::Result<Self> {
-        let path = path.to_string();
+    pub fn open<T: Into<PathBuf>>(path: T) -> anyhow::Result<Self> {
+        let path: PathBuf = path.into();
         let file = File::open(Path::new(&path))?;
 
-        if &path[path.len() - 4..] == ".zip" {
+        if path.ends_with(".zip") {
             Ok(Archive::Zip(path, ZipArchive::new(file)?))
         }
 
-        else if &path[path.len() - 7..] == ".tar.xz" {
+        else if path.ends_with(".tar.xz") {
             Ok(Archive::TarXz(path, TarArchive::new(XzReader::new(file))))
         }
 
-        else if &path[path.len() - 7..] == ".tar.gz" {
+        else if path.ends_with(".tar.gz") {
             Ok(Archive::TarGz(path, TarArchive::new(GzReader::new(file))))
         }
 
-        else if &path[path.len() - 8..] == ".tar.bz2" {
+        else if path.ends_with(".tar.bz2") {
             Ok(Archive::TarBz2(path, TarArchive::new(Bz2Reader::new(file))))
         }
 
-        else if &path[path.len() - 3..] == ".7z" {
+        else if path.ends_with(".7z") {
             Ok(Archive::SevenZ(path.clone()/*, SevenzArchive::open(path, &[])?*/))
         }
 
-        else if &path[path.len() - 4..] == ".tar" {
+        else if path.ends_with(".tar") {
             Ok(Archive::Tar(path, TarArchive::new(file)))
         }
 
         else {
-            Err(anyhow::anyhow!("Archive format is not supported: {}", path))
+            Err(anyhow::anyhow!("Archive format is not supported: {}", path.to_string_lossy()))
         }
     }
 
@@ -199,35 +199,35 @@ impl Archive {
         entries
     }
 
-    pub fn extract<T: ToString>(&mut self, folder: T) -> anyhow::Result<()> {
+    pub fn extract<T: Into<PathBuf>>(&mut self, folder: T) -> anyhow::Result<()> {
         match self {
             Archive::Zip(_, zip) => {
-                zip.extract(folder.to_string())?;
+                zip.extract(folder.into())?;
             }
 
             Archive::Tar(_, tar) => {
-                tar.unpack(folder.to_string())?;
+                tar.unpack(folder.into())?;
             }
 
             Archive::TarXz(_, tar) => {
-                tar.unpack(folder.to_string())?;
+                tar.unpack(folder.into())?;
             }
 
             Archive::TarGz(_, tar) => {
-                tar.unpack(folder.to_string())?;
+                tar.unpack(folder.into())?;
             }
 
             Archive::TarBz2(_, tar) => {
-                tar.unpack(folder.to_string())?;
+                tar.unpack(folder.into())?;
             }
 
             Archive::SevenZ(archive) => {
-                // sevenz_rust::decompress_file(archive, folder.to_string())?;
+                // sevenz_rust::decompress_file(archive, folder.into())?;
 
                 Command::new("7z")
                     .arg("x")
                     .arg(archive)
-                    .arg(format!("-o{}", folder.to_string()))
+                    .arg(format!("-o{:?}", folder.into()))
                     .arg("-aoa")
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())

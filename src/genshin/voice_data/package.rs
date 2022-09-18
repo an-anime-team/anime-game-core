@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use fs_extra::dir::get_size;
 
@@ -30,14 +30,14 @@ fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoi
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VoicePackage {
     Installed {
-        path: String,
+        path: PathBuf,
         locale: VoiceLocale
     },
     NotInstalled {
         locale: VoiceLocale,
         version: Version,
         data: RemoteVoicePack,
-        game_path: Option<String>
+        game_path: Option<PathBuf>
     }
 }
 
@@ -45,12 +45,11 @@ impl VoicePackage {
     /// Voice packages can't be instaled wherever you want.
     /// Thus this method can return `None` in case the path
     /// doesn't point to a real voice package folder
-    pub fn new<T: ToString>(path: T) -> Option<Self> {
-        let path = path.to_string();
-        let fs_path = Path::new(path.as_str());
+    pub fn new<T: Into<PathBuf>>(path: T) -> Option<Self> {
+        let path = path.into();
 
-        if fs_path.exists() && fs_path.is_dir() {
-            match fs_path.file_name() {
+        if path.exists() && path.is_dir() {
+            match path.file_name() {
                 Some(name) => match VoiceLocale::from_str(name.to_string_lossy()) {
                     Some(locale) => Some(Self::Installed {
                         path,
@@ -113,11 +112,11 @@ impl VoicePackage {
     /// This method will return `true` if the package has `VoicePackage::Installed` enum value
     /// 
     /// If it's `VoicePackage::NotInstalled`, then this method will check `game_path`'s voices folder
-    pub fn is_installed_in<T: ToString>(&self, game_path: T) -> bool {
+    pub fn is_installed_in<T: Into<PathBuf>>(&self, game_path: T) -> bool {
         match self {
             Self::Installed { .. } => true,
             Self::NotInstalled { locale, .. } => {
-                Path::new(&get_voice_package_path(game_path, locale.to_folder())).exists()
+                get_voice_package_path(game_path, locale.to_folder()).exists()
             }
         }
     }
@@ -256,7 +255,7 @@ impl VoicePackage {
     /// Try to delete voice package
     /// 
     /// FIXME:
-    /// ! May fail on Chinese version due to paths differences
+    /// ⚠️ May fail on Chinese version due to paths differences
     pub fn delete(&self) -> anyhow::Result<()> {
         match self {
             VoicePackage::Installed { path, .. } => {
@@ -269,7 +268,7 @@ impl VoicePackage {
                     };
                 }
 
-                self.delete_in(game_path.to_string_lossy())
+                self.delete_in(game_path)
             },
             VoicePackage::NotInstalled { game_path, .. } => {
                 match game_path {
@@ -283,16 +282,18 @@ impl VoicePackage {
     /// Try to delete voice package from specific game directory
     /// 
     /// FIXME:
-    /// ! May fail on Chinese version due to paths differences
-    pub fn delete_in<T: ToString>(&self, game_path: T) -> anyhow::Result<()> {
+    /// ⚠️ May fail on Chinese version due to paths differences
+    pub fn delete_in<T: Into<PathBuf>>(&self, game_path: T) -> anyhow::Result<()> {
         let locale = match self {
             VoicePackage::Installed { locale, .. } |
             VoicePackage::NotInstalled { locale, .. } => locale
         };
 
+        let game_path = game_path.into();
+
         // Audio_<locale folder>_pkg_version
-        std::fs::remove_dir_all(get_voice_package_path(game_path.to_string(), locale.clone()))?;
-        std::fs::remove_file(format!("{}/Audio_{}_pkg_version", game_path.to_string(), locale.to_folder()))?;
+        std::fs::remove_dir_all(get_voice_package_path(&game_path, locale.clone()))?;
+        std::fs::remove_file(game_path.join(format!("Audio_{}_pkg_version", locale.to_folder())))?;
 
         Ok(())
     }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use super::voice_data::locale::VoiceLocale;
 
 // This enum is used in `Game::get_edition` method
@@ -85,12 +87,13 @@ impl ToFolder for VoiceLocale {
     }
 }
 
-pub fn get_voice_packages_path<T: ToString>(game_path: T) -> String {
-    let data_folder = unsafe { DATA_FOLDER_NAME };
-
-    format!("{}/{data_folder}/StreamingAssets/Audio/GeneratedSoundBanks/Windows", game_path.to_string())
+pub fn get_voice_packages_path<T: Into<PathBuf>>(game_path: T) -> PathBuf {
+    game_path
+        .into()
+        .join(unsafe { DATA_FOLDER_NAME })
+        .join("StreamingAssets/Audio/GeneratedSoundBanks/Windows")
 }
 
-pub fn get_voice_package_path<T: ToString, F: ToFolder>(game_path: T, locale: F) -> String {
-    format!("{}/{}", get_voice_packages_path(game_path), locale.to_folder())
+pub fn get_voice_package_path<T: Into<PathBuf>, F: ToFolder>(game_path: T, locale: F) -> PathBuf {
+    get_voice_packages_path(game_path).join(locale.to_folder())
 }

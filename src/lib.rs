@@ -42,7 +42,7 @@ pub mod prelude {
     pub use super::installer::prelude::*;
 
     #[cfg(feature = "install")]
-    pub use super::repairer::IntegrityFile;
+    pub use super::repairer::*;
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

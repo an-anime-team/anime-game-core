@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::version::Version;
 use crate::traits::game::GameBasics;
@@ -14,17 +14,17 @@ use crate::installer::diff::{VersionDiff, TryGetDiff};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
-    path: String
+    path: PathBuf
 }
 
 impl GameBasics for Game {
-    fn new<T: ToString>(path: T) -> Self {
+    fn new<T: Into<PathBuf>>(path: T) -> Self {
         Self {
-            path: path.to_string()
+            path: path.into()
         }
     }
 
-    fn path(&self) -> &str {
+    fn path(&self) -> &PathBuf {
         &self.path
     }
 
@@ -45,7 +45,7 @@ impl GameBasics for Game {
             num
         }
 
-        let file = File::open(format!("{}/{}/globalgamemanagers", &self.path, unsafe { DATA_FOLDER_NAME }))?;
+        let file = File::open(self.path.join(unsafe { DATA_FOLDER_NAME }).join("globalgamemanagers"))?;
 
         // [0..9, .]
         let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];
@@ -126,7 +126,7 @@ impl Game {
         }
 
         for edition in [GameEdition::Global, GameEdition::China] {
-            if Path::new(&format!("{}/{}", self.path, get_data_folder_name(edition))).exists() {
+            if self.path.join(get_data_folder_name(edition)).exists() {
                 return Some(edition);
             }
         }

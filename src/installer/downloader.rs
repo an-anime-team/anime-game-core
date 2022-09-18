@@ -1,5 +1,5 @@
 use std::io::{Write, Seek};
-use std::path::Path;
+use std::path::PathBuf;
 use std::fs::File;
 
 use curl::easy::Easy;
@@ -19,24 +19,24 @@ pub enum DownloadingError {
     /// Specified downloading path is not available in system
     /// 
     /// `(path)`
-    PathNotMounted(String),
+    PathNotMounted(PathBuf),
 
     /// No free space available under specified path
     /// 
     /// `(path, required, available)`
-    NoSpaceAvailable(String, u64, u64),
+    NoSpaceAvailable(PathBuf, u64, u64),
 
     /// Failed to create or open output file
     /// 
     /// `(path, error message)`
-    OutputFileError(String, String),
+    OutputFileError(PathBuf, String),
 
     /// Couldn't get metadata of existing output file
     /// 
     /// This metadata supposed to be used to continue downloading of the file
     /// 
     /// `(path, error message)`
-    OutputFileMetadataError(String, String),
+    OutputFileMetadataError(PathBuf, String),
 
     /// Curl downloading error
     Curl(curl::Error)
@@ -51,10 +51,10 @@ impl From<curl::Error> for DownloadingError {
 impl Into<std::io::Error> for DownloadingError {
     fn into(self) -> std::io::Error {
         std::io::Error::new(std::io::ErrorKind::Other, match self {
-            Self::PathNotMounted(path) => format!("Path is not mounted: {path}"),
-            Self::NoSpaceAvailable(path, required, available) => format!("No free space availale for specified path: {path} (requires {required}, available {available})"),
-            Self::OutputFileError(path, err) => format!("Failed to create output file {path}: {err}"),
-            Self::OutputFileMetadataError(path, err) => format!("Failed to read metadata of the output file {path}: {err}"),
+            Self::PathNotMounted(path) => format!("Path is not mounted: {:?}", path),
+            Self::NoSpaceAvailable(path, required, available) => format!("No free space availale for specified path: {:?} (requires {required}, available {available})", path),
+            Self::OutputFileError(path, err) => format!("Failed to create output file {:?}: {err}", path),
+            Self::OutputFileMetadataError(path, err) => format!("Failed to read metadata of the output file {:?}: {err}", path),
             Self::Curl(curl) => format!("Curl error: {curl}")
         })
     }
@@ -204,11 +204,11 @@ impl Downloader {
 
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DownloadingError>
     where
-        T: ToString,
+        T: Into<PathBuf>,
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
-        let path = path.to_string();
+        let path: PathBuf = path.into();
 
         // Check available free space
         match free_space::available(&path) {
@@ -231,7 +231,7 @@ impl Downloader {
         let mut curr = 0_usize;
 
         // Open or create output file
-        let file = if Path::new(&path).exists() {
+        let file = if path.exists() {
             let mut file = std::fs::OpenOptions::new().write(true).open(&path);
 
             // Continue downloading if the file exists and can be opened

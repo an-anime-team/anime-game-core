@@ -1,5 +1,6 @@
 use std::env::temp_dir;
 use std::os::unix::prelude::PermissionsExt;
+use std::path::PathBuf;
 
 use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
@@ -7,10 +8,10 @@ use super::free_space;
 
 #[derive(Debug, Clone)]
 pub enum Update {
-    CheckingFreeSpace(String),
+    CheckingFreeSpace(PathBuf),
 
     /// `(temp path)`
-    DownloadingStarted(String),
+    DownloadingStarted(PathBuf),
 
     /// `(current bytes, total bytes)`
     DownloadingProgress(u64, u64),
@@ -19,7 +20,7 @@ pub enum Update {
     DownloadingError(DownloadingError),
 
     /// `(unpacking path)`
-    UnpackingStarted(String),
+    UnpackingStarted(PathBuf),
 
     /// `(current bytes, total bytes)`
     UnpackingProgress(u64, u64),
@@ -40,7 +41,7 @@ pub struct Installer {
     url: String,
 
     /// Path to the temp folder used to store archive before unpacking
-    pub temp_folder: String
+    pub temp_folder: PathBuf
 }
 
 impl Installer {
@@ -49,17 +50,15 @@ impl Installer {
             Ok(downloader) => Ok(Self {
                 downloader,
                 url: url.to_string(),
-                temp_folder: temp_dir().to_str().unwrap().to_string()
+                temp_folder: temp_dir()
             }),
             Err(err) => Err(err)
         }
     }
 
     /// Specify path to the temp folder used to store archive before unpacking
-    pub fn set_temp_folder<T: ToString>(mut self, path: T) -> Self {
-        self.temp_folder = path.to_string();
-
-        self
+    pub fn set_temp_folder<T: Into<PathBuf>>(&mut self, path: T) {
+        self.temp_folder = path.into();
     }
 
     /// Get name of downloading file from uri
@@ -77,18 +76,18 @@ impl Installer {
         }
     }
 
-    fn get_temp_path(&self) -> String {
-        format!("{}/{}", self.temp_folder, self.get_filename())
+    fn get_temp_path(&self) -> PathBuf {
+        self.temp_folder.join(self.get_filename())
     }
 
     /// Download archive from specified uri and unpack it
     pub fn install<T, F>(&mut self, unpack_to: T, updater: F)
     where
-        T: ToString,
+        T: Into<PathBuf>,
         F: Fn(Update) + Clone + Send + 'static
     {
         let temp_path = self.get_temp_path();
-        let unpack_to = unpack_to.to_string();
+        let unpack_to = unpack_to.into();
 
         // Check available free space for archive itself
         (updater)(Update::CheckingFreeSpace(temp_path.clone()));
@@ -165,7 +164,7 @@ impl Installer {
                         for entry in &entries {
                             total += entry.size.get_size();
 
-                            let path = format!("{unpack_to}/{}", entry.name);
+                            let path = unpack_to.join(&entry.name);
 
                             // Failed to change permissions => likely patch-related file and was made by the sudo, so root
                             #[allow(unused_must_use)]
@@ -182,7 +181,7 @@ impl Installer {
 
                         let handle_2 = std::thread::spawn(move || {
                             let mut entries = entries.into_iter()
-                                .map(|entry| (format!("{unpacking_path}/{}", entry.name), entry.size.get_size(), true))
+                                .map(|entry| (unpacking_path.join(&entry.name), entry.size.get_size(), true))
                                 .collect::<Vec<_>>();
 
                             let mut unpacked = 0;

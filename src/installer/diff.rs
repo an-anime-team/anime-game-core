@@ -1,4 +1,5 @@
 use std::fs::{read_to_string, remove_file};
+use std::path::PathBuf;
 
 use crate::version::Version;
 
@@ -79,7 +80,7 @@ pub enum VersionDiff {
         /// Path to the folder this difference should be installed by the `install` method
         /// 
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
-        unpacking_path: Option<String>
+        unpacking_path: Option<PathBuf>
     },
 
     /// Component should be updated before using it
@@ -93,7 +94,7 @@ pub enum VersionDiff {
         /// Path to the folder this difference should be installed by the `install` method
         /// 
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
-        unpacking_path: Option<String>
+        unpacking_path: Option<PathBuf>
     },
 
     /// Difference can't be calculated because installed version is too old
@@ -112,7 +113,7 @@ pub enum VersionDiff {
         /// Path to the folder this difference should be installed by the `install` method
         /// 
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
-        unpacking_path: Option<String>
+        unpacking_path: Option<PathBuf>
     }
 }
 
@@ -121,7 +122,7 @@ impl VersionDiff {
     #[cfg(feature = "install")]
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
     where
-        T: ToString,
+        T: Into<PathBuf>,
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
@@ -176,7 +177,7 @@ impl VersionDiff {
     #[cfg(feature = "install")]
     pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
     where
-        T: ToString,
+        T: Into<PathBuf>,
         F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
         match self {
@@ -197,7 +198,7 @@ impl VersionDiff {
     #[cfg(feature = "install")]
     pub fn install_to_by<T, F>(&self, path: T, temp_path: Option<T>, updater: F) -> Result<(), DiffDownloadError>
     where
-        T: ToString,
+        T: Into<PathBuf>,
         F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
         let url;
@@ -223,10 +224,10 @@ impl VersionDiff {
             Ok(mut installer) => {
                 // Set temp folder if specified
                 if let Some(temp_path) = temp_path {
-                    installer = installer.set_temp_folder(temp_path.to_string());
+                    installer.set_temp_folder(temp_path);
                 }
 
-                let path = path.to_string();
+                let path = path.into();
 
                 // Check available free space for archive itself
                 match free_space::available(&installer.temp_folder) {
@@ -263,43 +264,45 @@ impl VersionDiff {
                 }
 
                 // Install data
-                installer.install(path.to_string(), updater);
+                installer.install(&path, updater);
 
                 // Apply hdiff patches
                 // We're ignoring Err because in practice it means that hdifffiles.txt is missing
-                if let Ok(files) = read_to_string(format!("{}/hdifffiles.txt", path.to_string())) {
+                if let Ok(files) = read_to_string(path.join("hdifffiles.txt")) {
                     // {"remoteName": "AnimeGame_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/Japanese/1001.pck"}
                     for file in files.lines().collect::<Vec<&str>>() {
-                        let file = format!("{}/{}", path.to_string(), &file[16..file.len() - 2]);
-                        let patch = format!("{}.hdiff", &file);
-                        let output = format!("{}.hdiff_patched", &file);
+                        let relative_file = &file[16..file.len() - 2];
+
+                        let file = path.join(relative_file);
+                        let patch = path.join(format!("{relative_file}.hdiff"));
+                        let output = path.join(format!("{relative_file}.hdiff_patched"));
 
                         if let Err(err) = hpatchz::patch(&file, &patch, &output) {
                             return Err(DiffDownloadError::HdiffPatch(err.to_string()));
                         }
 
                         // FIXME: handle errors properly
-                        remove_file(&file).expect(&format!("Failed to remove hdiff patch: {}", &file));
-                        remove_file(&patch).expect(&format!("Failed to remove hdiff patch: {}", &patch));
+                        remove_file(&file).expect(&format!("Failed to remove hdiff patch: {:?}", file));
+                        remove_file(&patch).expect(&format!("Failed to remove hdiff patch: {:?}", patch));
 
-                        std::fs::rename(&output, &file).expect(&format!("Failed to rename hdiff patch: {}", &file));
+                        std::fs::rename(&output, &file).expect(&format!("Failed to rename hdiff patch: {:?}", file));
                     }
 
-                    remove_file(format!("{}/hdifffiles.txt", path.to_string()))
+                    remove_file(path.join("hdifffiles.txt"))
                         .expect("Failed to remove hdifffiles.txt");
                 }
 
                 // Remove outdated files
                 // We're ignoring Err because in practice it means that deletefiles.txt is missing
-                if let Ok(files) = read_to_string(format!("{}/deletefiles.txt", path.to_string())) {
+                if let Ok(files) = read_to_string(path.join("deletefiles.txt")) {
                     // AnimeGame_Data/Plugins/metakeeper.dll
                     for file in files.lines().collect::<Vec<&str>>() {
-                        let file = format!("{}/{file}", path.to_string());
+                        let file = path.join(file);
 
-                        remove_file(&file).expect(&format!("Failed to remove outdated file: {file}"));
+                        remove_file(&file).expect(&format!("Failed to remove outdated file: {:?}", file));
                     }
 
-                    remove_file(format!("{}/deletefiles.txt", path.to_string()))
+                    remove_file(path.join("deletefiles.txt"))
                         .expect("Failed to remove deletefiles.txt");
                 }
                 
@@ -324,7 +327,7 @@ impl VersionDiff {
     }
 
     /// Returns the path this difference should be installed to if it exists in current enum value
-    pub fn unpacking_path(&self) -> Option<String> {
+    pub fn unpacking_path(&self) -> Option<PathBuf> {
         match self {
             // Can't be downloaded
             Self::Latest(_) |
