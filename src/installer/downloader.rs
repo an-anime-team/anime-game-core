@@ -63,6 +63,7 @@ impl Into<std::io::Error> for DownloadingError {
 #[derive(Debug)]
 pub struct Downloader {
     length: Option<u64>,
+    uri: String,
     curl: Easy,
 
     /// Amount of bytes `download_to` method will store in memory before
@@ -93,6 +94,7 @@ impl Downloader {
             if length >= 0.0 {
                 return Ok(Self {
                     length: Some(length.ceil() as u64),
+                    uri: uri.to_string(),
                     curl,
                     downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
                     downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
@@ -104,6 +106,7 @@ impl Downloader {
             if length >= 0.0 {
                 return Ok(Self {
                     length: Some(length.ceil() as u64),
+                    uri: uri.to_string(),
                     curl,
                     downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
                     downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
@@ -140,6 +143,7 @@ impl Downloader {
                 0 => None,
                 len => Some(len)
             },
+            uri: uri.to_string(),
             curl,
             downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
             downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
@@ -159,6 +163,21 @@ impl Downloader {
     /// Set downloading speed limit, bytes per second
     pub fn set_downloading_speed(&mut self, speed: u64) -> Result<(), curl::Error> {
         Ok(self.curl.max_recv_speed(speed)?)
+    }
+
+    /// Get name of downloading file from uri
+    /// 
+    /// - `https://example.com/example.zip` -> `example.zip`
+    /// - `https://example.com` -> `index.html`
+    pub fn get_filename(&self) -> &str {
+        match self.uri.rfind('/') {
+            Some(index) => {
+                let file = &self.uri[index + 1..];
+
+                if file == "" { "index.html" } else { file }
+            },
+            None => "index.html"
+        }
     }
 
     pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), DownloadingError>

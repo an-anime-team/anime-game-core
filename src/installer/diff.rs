@@ -171,7 +171,58 @@ impl VersionDiff {
         }
     }
 
-    /// Try to download archive with the difference by specified path
+    /// Get filename from downloading URI
+    /// 
+    /// Returns `None` on `VersionDiff::Latest` and `VersionDiff::Outdated` (so diffs that can't be downloaded)
+    pub fn file_name(&self) -> Option<String> {
+        match self {
+            Self::Latest(_) | Self::Outdated { .. } => None,
+
+            Self::Predownload { url: diff_url, .. } |
+            Self::Diff { url: diff_url, .. } |
+            Self::NotInstalled { url: diff_url, .. } => Some(String::from({
+                match diff_url.rfind('/') {
+                    Some(index) => {
+                        let file = &diff_url[index + 1..];
+
+                        if file == "" { "index.html" } else { file }
+                    },
+                    None => "index.html"
+                }
+            }))
+        }
+    }
+
+    /// Try to download archive with the difference into the specified folder
+    #[cfg(feature = "install")]
+    pub fn download_in<T, Fp>(&mut self, folder: T, progress: Fp) -> Result<(), DiffDownloadError>
+    where
+        T: Into<PathBuf>,
+        // (curr, total)
+        Fp: Fn(u64, u64) + Send + 'static
+    {
+        let url;
+
+        match self {
+            // Can't be downloaded
+            Self::Latest(_) => return Err(DiffDownloadError::AlreadyLatest),
+            Self::Outdated { .. } => return Err(DiffDownloadError::Outdated),
+
+            // Can be downloaded
+            Self::Predownload { url: diff_url, .. } |
+            Self::Diff { url: diff_url, .. } |
+            Self::NotInstalled { url: diff_url, .. } => url = diff_url.clone()
+        }
+
+        let mut downloader = Downloader::new(url)?;
+
+        match downloader.download_to(folder.into().join(downloader.get_filename()), progress) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.into())
+        }
+    }
+
+    /// Try to download archive with the difference by specified path, including filename
     #[cfg(feature = "install")]
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
     where

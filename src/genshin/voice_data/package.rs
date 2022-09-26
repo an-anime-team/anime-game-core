@@ -308,6 +308,31 @@ impl TryGetDiff for VoicePackage {
             let current = self.try_get_version()?;
 
             if response.data.game.latest.version == current {
+                // If we're running latest game version the diff we need to download
+                // must always be `predownload.diffs[0]`, but just to be safe I made
+                // a loop through possible variants, and if none of them was correct
+                // (which is not possible in reality) we should just say thath the game
+                // is latest
+                if let Some(predownload) = response.data.pre_download_game {
+                    for diff in predownload.diffs {
+                        if diff.version == current {
+                            let diff = find_voice_pack(diff.voice_packs, self.locale());
+
+                            return Ok(VersionDiff::Predownload {
+                                current,
+                                latest: Version::from_str(predownload.latest.version).unwrap(),
+                                url: diff.path,
+                                download_size: diff.size.parse::<u64>().unwrap(),
+                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                unpacking_path: match self {
+                                    VoicePackage::Installed { .. } => None,
+                                    VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                                }
+                            })
+                        }
+                    }
+                }
+
                 Ok(VersionDiff::Latest(current))
             }
 
@@ -324,7 +349,7 @@ impl TryGetDiff for VoicePackage {
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
                             unpacking_path: match self {
                                 VoicePackage::Installed { .. } => None,
-                                VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
+                                VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
                             }
                         })
                     }
@@ -347,7 +372,7 @@ impl TryGetDiff for VoicePackage {
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),
                 unpacking_path: match self {
                     VoicePackage::Installed { .. } => None,
-                    VoicePackage::NotInstalled { game_path, .. } => game_path.clone(),
+                    VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
                 }
             })
         }
