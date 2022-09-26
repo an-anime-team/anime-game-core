@@ -118,6 +118,59 @@ pub enum VersionDiff {
 }
 
 impl VersionDiff {
+    /// Get currently installed game version
+    /// 
+    /// Returns `None` on `VersionDiff::NotInstalled`
+    pub fn current(&self) -> Option<Version> {
+        match self {
+            Self::Latest(current) |
+            Self::Predownload { current, .. } |
+            Self::Diff { current, .. } |
+            Self::Outdated { current, .. } => Some(*current),
+
+            Self::NotInstalled { .. } => None
+        }
+    }
+
+    /// Get latest available game version
+    pub fn latest(&self) -> Version {
+        match self {
+            Self::Latest(latest) |
+            Self::Predownload { latest, .. } |
+            Self::Diff { latest, .. } |
+            Self::Outdated { latest, .. } |
+            Self::NotInstalled { latest, .. } => *latest
+        }
+    }
+
+    /// Returns (download_size, unpacked_size) pair if it exists in current enum value
+    pub fn size(&self) -> Option<(u64, u64)> {
+        match self {
+            // Can't be downloaded
+            Self::Latest(_) |
+            Self::Outdated { .. } => None,
+
+            // Can be downloaded
+            Self::Predownload { download_size, unpacked_size, .. } |
+            Self::Diff { download_size, unpacked_size, .. } |
+            Self::NotInstalled { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size))
+        }
+    }
+
+    /// Returns the path this difference should be installed to if it exists in current enum value
+    pub fn unpacking_path(&self) -> Option<PathBuf> {
+        match self {
+            // Can't be downloaded
+            Self::Latest(_) |
+            Self::Outdated { .. } => None,
+
+            // Can be downloaded
+            Self::Predownload { unpacking_path, .. } |
+            Self::Diff { unpacking_path, .. } |
+            Self::NotInstalled { unpacking_path, .. } => unpacking_path.clone()
+        }
+    }
+
     /// Try to download archive with the difference by specified path
     #[cfg(feature = "install")]
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
@@ -309,34 +362,6 @@ impl VersionDiff {
                 Ok(())
             },
             Err(err) => Err(err.into())
-        }
-    }
-
-    /// Returns (download_size, unpacked_size) pair if it exists in current enum value
-    pub fn size(&self) -> Option<(u64, u64)> {
-        match self {
-            // Can't be downloaded
-            Self::Latest(_) |
-            Self::Outdated { .. } => None,
-
-            // Can be downloaded
-            Self::Predownload { download_size, unpacked_size, .. } |
-            Self::Diff { download_size, unpacked_size, .. } |
-            Self::NotInstalled { download_size, unpacked_size, .. } => Some((*download_size, *unpacked_size))
-        }
-    }
-
-    /// Returns the path this difference should be installed to if it exists in current enum value
-    pub fn unpacking_path(&self) -> Option<PathBuf> {
-        match self {
-            // Can't be downloaded
-            Self::Latest(_) |
-            Self::Outdated { .. } => None,
-
-            // Can be downloaded
-            Self::Predownload { unpacking_path, .. } |
-            Self::Diff { unpacking_path, .. } |
-            Self::NotInstalled { unpacking_path, .. } => unpacking_path.clone()
         }
     }
 }
