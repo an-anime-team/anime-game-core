@@ -145,22 +145,27 @@ impl TryGetDiff for Game {
             let current = self.try_get_version()?;
 
             if response.data.game.latest.version == current {
+                // If we're running latest game version the diff we need to download
+                // must always be `predownload.diffs[0]`, but just to be safe I made
+                // a loop through possible variants, and if none of them was correct
+                // (which is not possible in reality) we should just say thath the game
+                // is latest
                 if let Some(predownload) = response.data.pre_download_game {
-                    // Imo that's just wrong to pre-download update
-                    // if your game is not updated to latest version yet
-                    Ok(VersionDiff::Predownload {
-                        current,
-                        latest: Version::from_str(predownload.latest.version).unwrap(),
-                        url: predownload.latest.path,
-                        download_size: predownload.latest.size.parse::<u64>().unwrap(),
-                        unpacked_size: predownload.latest.package_size.parse::<u64>().unwrap(),
-                        unpacking_path: Some(self.path.clone())
-                    })
+                    for diff in predownload.diffs {
+                        if diff.version == current {
+                            return Ok(VersionDiff::Predownload {
+                                current,
+                                latest: Version::from_str(predownload.latest.version).unwrap(),
+                                url: diff.path,
+                                download_size: diff.size.parse::<u64>().unwrap(),
+                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                unpacking_path: Some(self.path.clone())
+                            });
+                        }
+                    }
                 }
 
-                else {
-                    Ok(VersionDiff::Latest(current))
-                }
+                Ok(VersionDiff::Latest(current))
             }
 
             else {
@@ -173,7 +178,7 @@ impl TryGetDiff for Game {
                             download_size: diff.size.parse::<u64>().unwrap(),
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
                             unpacking_path: Some(self.path.clone())
-                        })
+                        });
                     }
                 }
 
