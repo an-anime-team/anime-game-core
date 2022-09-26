@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::fs::File;
 use std::process::{Command, Stdio};
 
@@ -48,29 +48,31 @@ pub enum Archive {
 impl Archive {
     pub fn open<T: Into<PathBuf>>(path: T) -> anyhow::Result<Self> {
         let path: PathBuf = path.into();
-        let file = File::open(Path::new(&path))?;
+        let file = File::open(&path)?;
 
-        if path.ends_with(".zip") {
+        let path_str = path.to_string_lossy();
+
+        if &path_str[path_str.len() - 4..] == ".zip" {
             Ok(Archive::Zip(path, ZipArchive::new(file)?))
         }
 
-        else if path.ends_with(".tar.xz") {
+        else if &path_str[path_str.len() - 7..] == ".tar.xz" {
             Ok(Archive::TarXz(path, TarArchive::new(XzReader::new(file))))
         }
 
-        else if path.ends_with(".tar.gz") {
+        else if &path_str[path_str.len() - 7..] == ".tar.gz" {
             Ok(Archive::TarGz(path, TarArchive::new(GzReader::new(file))))
         }
 
-        else if path.ends_with(".tar.bz2") {
+        else if &path_str[path_str.len() - 8..] == ".tar.bz2" {
             Ok(Archive::TarBz2(path, TarArchive::new(Bz2Reader::new(file))))
         }
 
-        else if path.ends_with(".7z") {
+        else if &path_str[path_str.len() - 3..] == ".7z" {
             Ok(Archive::SevenZ(path.clone()/*, SevenzArchive::open(path, &[])?*/))
         }
 
-        else if path.ends_with(".tar") {
+        else if &path_str[path_str.len() - 4..] == ".tar" {
             Ok(Archive::Tar(path, TarArchive::new(file)))
         }
 
