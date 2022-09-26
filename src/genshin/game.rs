@@ -146,12 +146,14 @@ impl TryGetDiff for Game {
 
             if response.data.game.latest.version == current {
                 if let Some(predownload) = response.data.pre_download_game {
+                    // Imo that's just wrong to pre-download update
+                    // if your game is not updated to latest version yet
                     Ok(VersionDiff::Predownload {
                         current,
-                        latest: Version::from_str(predownload.version).unwrap(),
-                        url: predownload.path,
-                        download_size: predownload.size.parse::<u64>().unwrap(),
-                        unpacked_size: predownload.package_size.parse::<u64>().unwrap(),
+                        latest: Version::from_str(predownload.latest.version).unwrap(),
+                        url: predownload.latest.path,
+                        download_size: predownload.latest.size.parse::<u64>().unwrap(),
+                        unpacked_size: predownload.latest.package_size.parse::<u64>().unwrap(),
                         unpacking_path: Some(self.path.clone())
                     })
                 }

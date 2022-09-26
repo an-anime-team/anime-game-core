@@ -14,7 +14,7 @@ pub struct Response {
 pub struct Data {
     pub web_url: String,
     pub game: Game,
-    pub pre_download_game: Option<Latest>,
+    pub pre_download_game: Option<Game>,
 
     // We're not talking about it here
 
