@@ -168,7 +168,7 @@ impl PatchApplier {
     /// 
     /// It's recommended to run this method with `use_root = true` to append telemetry entries to the hosts file.
     /// The patch script will be run with `pkexec` and this ask for root password
-    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> Result<(), Error> {
+    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> anyhow::Result<()> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -176,7 +176,7 @@ impl PatchApplier {
 
                 // Verify that the patch folder exists (it can not be synced)
                 if !Path::new(&patch_folder).exists() {
-                    return Err(Error::new(ErrorKind::Other, format!("Corresponding patch folder doesn't exist: {}", patch_folder)));
+                    return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {}", patch_folder));
                 }
 
                 // Remove temp folder if it is for some reason already exists
@@ -193,7 +193,7 @@ impl PatchApplier {
                 options.content_only = true; // Don't copy e.g. "270" folder, just its content
 
                 if let Err(err) = fs_extra::dir::copy(patch_folder, &temp_dir, &options) {
-                    return Err(Error::new(ErrorKind::Other, format!("Failed to copy patch to the temp folder: {}", err)));
+                    return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {}", err));
                 }
 
                 // Remove exit and read commands from the beginning of the patch.sh file
@@ -248,10 +248,10 @@ impl PatchApplier {
                 }
 
                 else {
-                    Err(Error::new(ErrorKind::Other, String::from_utf8_lossy(&output.stderr)))
+                    Err(Error::new(ErrorKind::Other, String::from_utf8_lossy(&output.stdout)).into())
                 }
             },
-            None => Err(Error::new(ErrorKind::Other, "Failed to get patch version"))
+            None => Err(anyhow::anyhow!("Failed to get patch version"))
         }
     }
 
@@ -259,7 +259,7 @@ impl PatchApplier {
     /// 
     /// This method doesn't verify the state of the locally installed patch.
     /// You should do it manually using `is_sync` method
-    pub fn revert<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, force: bool) -> Result<bool, Error> {
+    pub fn revert<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, force: bool) -> anyhow::Result<bool> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -267,7 +267,7 @@ impl PatchApplier {
 
                 // Verify that the patch folder exists (it can not be synced)
                 if !Path::new(&patch_folder).exists() {
-                    return Err(Error::new(ErrorKind::Other, format!("Corresponding patch folder doesn't exist: {}", patch_folder)));
+                    return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {}", patch_folder));
                 }
 
                 // Create temp folder
@@ -279,7 +279,7 @@ impl PatchApplier {
                 options.content_only = true; // Don't copy e.g. "270" folder, just its content
 
                 if let Err(err) = fs_extra::dir::copy(patch_folder, &temp_dir, &options) {
-                    return Err(Error::new(ErrorKind::Other, format!("Failed to copy patch to the temp folder: {}", err)));
+                    return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {}", err));
                 }
 
                 let revert_file = format!("{}/patch_revert.sh", temp_dir);
@@ -308,7 +308,7 @@ impl PatchApplier {
                 // Return patching status
                 Ok(!String::from_utf8_lossy(&output.stdout).contains("ERROR: "))
             },
-            None => Err(Error::new(ErrorKind::Other, "Failed to get patch version"))
+            None => Err(anyhow::anyhow!("Failed to get patch version"))
         }
     }
 }
