@@ -1,5 +1,4 @@
-use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use fs_extra::dir::get_size;
 
@@ -14,6 +13,53 @@ use crate::genshin::{
 
 #[cfg(feature = "install")]
 use crate::installer::diff::{VersionDiff, TryGetDiff};
+
+/// List of voiceover sizes
+/// 
+/// Format: `(version, english, japanese, korean, chinese)`
+/// 
+/// Korean and Chinese sizes are predicted and can be incorrect
+pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
+    ("3.1.0", 10160526140, 11223463952, 10160526140, 10160526140),
+    ("3.0.0", 9359645164,  10314955860, 9359645164,  9359645164)
+];
+
+/// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
+pub fn get_voice_pack_sizes(locale: VoiceLocale) -> Vec<(String, u64)> {
+    VOICE_PACKAGES_SIZES.into_iter().map(|item| {
+        match locale {
+            VoiceLocale::English  => (item.0.to_string(), item.1),
+            VoiceLocale::Japanese => (item.0.to_string(), item.2),
+            VoiceLocale::Korean   => (item.0.to_string(), item.3),
+            VoiceLocale::Chinese  => (item.0.to_string(), item.4)
+        }
+    }).collect::<Vec<(String, u64)>>()
+}
+
+/// Predict next value of slice using WMA
+pub fn wma_predict(values: &[u64]) -> u64 {
+    match values.len() {
+        0 => 0,
+        1 => values[1],
+        2 => (values[1] as f64 * (values[1] as f64 / values[0] as f64)).round() as u64,
+        n => {
+            let mut weighted_sum = 0.0;
+            let mut weighted_delim = 0.0;
+
+            for i in 0..n - 1 {
+                weighted_sum += values[i + 1] as f64 / values[i] as f64 * (n - i - 1) as f64;
+                weighted_delim += (n - i - 1) as f64;
+            }
+
+            (values[n - 1] as f64 * weighted_sum / weighted_delim).round() as u64
+        }
+    }
+}
+
+/// Predict new voice package size using WMA based on `VOICE_PACKAGES_SIZES` constant
+pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
+    wma_predict(&get_voice_pack_sizes(locale).into_iter().map(|item| item.1).collect::<Vec<u64>>())
+}
 
 /// Find voice package with specified locale from list of packages
 fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
@@ -155,99 +201,30 @@ impl VoicePackage {
         match &self {
             Self::NotInstalled { locale: _, version, data: _, game_path: _} => Ok(*version),
             Self::Installed { path, locale } => {
-                // self.path is Some(...) if self.version is None
-                // this means that this struct was made from some currently installed path
-
                 let package_size = get_size(&path)?;
-
-                // Since anime company changed the way they store voice packages data
-                // now to identify its version I want to calculate the actual
-                // size of the voice package directory and compare it with all the
-                // remotely available voice packages sizes
-
                 let response = api::try_fetch_json()?;
 
-                let latest_voice_pack = find_voice_pack(response.data.game.latest.voice_packs, *locale);
+                let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
 
-                // This constant found its origin in the change of the voice packages format.
-                // When the Anime Company decided that they know better how their game should work
-                // and changed voice files names to some random numbers it caused issue when
-                // old files aren't being replaced by the new ones, obviously because now they have
-                // different names. When you download new voice package - its size will be something like 9 GB.
-                // But Company's API returns double of this size, so like 18 GB, because their API also
-                // messed folder where they store unpacked voice packages.
-                // That's why we have to substract this approximate value from all the packages sizes
+                // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
+                // then we should predict their sizes
+                if VOICE_PACKAGES_SIZES[0].0 != response.data.game.latest.version {
+                    let mut t = voice_packages_sizes;
 
-                #[allow(non_snake_case)]
-                let CONSTANT_OF_STUPIDITY: u64 = match self.locale() {
-                    VoiceLocale::English  => 8593687434 + 750 * 1024 * 1024, // 8 GB    (2.8.0)                                 + 750 MB (3.0.0)
-                    VoiceLocale::Japanese => 9373182378 + 750 * 1024 * 1024, // 8.72 GB (2.8.0)                                 + 750 MB (3.0.0)
-                    VoiceLocale::Korean   => 8804682956 + 750 * 1024 * 1024, // 8.2 GB  (2.8.0, not calculated (approximation)) + 750 MB (3.0.0)
-                    VoiceLocale::Chinese  => 8804682956 + 750 * 1024 * 1024, // 8.2 GB  (2.8.0, not calculated (approximation)) + 750 MB (3.0.0)
-                };
-
-                // println!("Actual package size: {}", package_size);
-
-                // API works this way:
-                // We have [latest] field that contains absolute voice package with its real, absolute size
-                // and we have [diff] fields that contains relative incremental changes with relative sizes
-                // Since we're approximating packages versions by the real, so absolute folder sizes, we need to calculate
-                // absolute folder sizes for differences
-                // Since this is not an option in the API we have second approximation: lets say
-                // that absolute [2.6.0] version size is [latest (2.8.0)] absolute size - [2.7.0] relative size - [2.6.0] relative size
-                // That's being said we need to substract each diff.size from the latest.size
-
-                let mut voice_pack_size = latest_voice_pack.size.parse::<u64>().unwrap() - CONSTANT_OF_STUPIDITY;
-                let mut packages = VecDeque::from(vec![(response.data.game.latest.version.clone(), voice_pack_size)]);
-
-                // println!(" 3.0.0 package size: {}", voice_pack_size);
-
-                // List through other versions of the game
-                for diff in response.data.game.diffs {
-                    let voice_package = find_voice_pack(diff.voice_packs, *locale);
-
-                    // Approximate this diff absolute folder size
-                    let relative_size = voice_package.size.parse::<u64>().unwrap();
-
-                    if relative_size < 4 * 1024 * 1024 * 1024 {
-                        voice_pack_size -= relative_size;
-                    }
-
-                    // For no reason API's size field in the [diff] can contain
-                    // its absolute size. Let's say if size is more than 4 GB then it's only
-                    // update size, so difference, so relative size. Otherwise it's absolute size
-                    // 
-                    // Example (Japanese):
-                    // 
-                    // 2.8.0 size: 18736543170 (latest, so absolute size)
-                    // 2.7.0 size: 1989050587  (clearly update size, so relative)
-                    // 2.6.0 size: 15531165534 (clearly absolute size)
-                    else {
-                        voice_pack_size = relative_size;
-
-                        if voice_pack_size > CONSTANT_OF_STUPIDITY {
-                            voice_pack_size -= CONSTANT_OF_STUPIDITY;
-                        }
-                    }
-
-                    // println!(" {} package size: {}", diff.version, voice_pack_size);
-
-                    packages.push_front((diff.version, voice_pack_size));
+                    voice_packages_sizes = vec![(response.data.game.latest.version.clone(), predict_new_voice_pack_size(*locale))];
+                    voice_packages_sizes.append(&mut t);
                 }
 
-                // To approximate the version let's say if an actual folder weights less
-                // than API says some version should weight - then it's definitely not this version
-                let mut package_version = Version::from_str(response.data.game.latest.version).unwrap();
-
-                for (version, size) in packages {
-                    // Actual folder size can be +- the same as in API response
-                    // Let's say +-512 MB is ok
+                // To predict voice package version we're going through saved voice packages sizes in the `VOICE_PACKAGES_SIZES` constant
+                // plus predicted voice packages sizes if needed. The version with closest folder size is version we have installed
+                for (version, size) in voice_packages_sizes {
                     if package_size > size - 512 * 1024 * 1024 {
-                        package_version = Version::from_str(version).unwrap();
+                        return Ok(Version::from_str(version).unwrap());
                     }
                 }
 
-                Ok(package_version)
+                // This *should* be unreachable
+                unreachable!()
             }
         }
     }
@@ -259,11 +236,11 @@ impl VoicePackage {
     pub fn delete(&self) -> anyhow::Result<()> {
         match self {
             VoicePackage::Installed { path, .. } => {
-                let mut game_path = Path::new(path);
+                let mut game_path = path.clone();
 
                 for _ in 0..6 {
                     game_path = match game_path.parent() {
-                        Some(game_path) => game_path,
+                        Some(game_path) => game_path.into(),
                         None => return Err(anyhow::anyhow!("Failed to find game directory"))
                     };
                 }

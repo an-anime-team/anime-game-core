@@ -73,7 +73,11 @@ pub struct Downloader {
 
     /// Amount of progress updates that will be skipped each time
     /// before calling progress function
-    pub downloading_updates_frequence: usize
+    pub downloading_updates_frequence: usize,
+
+    /// If true, then Downloader will try to continue downloading of the file.
+    /// Otherwise it will re-download the file entirely
+    pub continue_downloading: bool
 }
 
 impl Downloader {
@@ -97,7 +101,8 @@ impl Downloader {
                     uri: uri.to_string(),
                     curl,
                     downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
-                    downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
+                    downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE,
+                    continue_downloading: true
                 });
             }
         }
@@ -109,7 +114,8 @@ impl Downloader {
                     uri: uri.to_string(),
                     curl,
                     downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
-                    downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
+                    downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE,
+                    continue_downloading: true
                 });
             }
         }
@@ -146,7 +152,8 @@ impl Downloader {
             uri: uri.to_string(),
             curl,
             downloading_chunk: DEFAULT_DOWNLOADING_CHUNK,
-            downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE
+            downloading_updates_frequence: DEFAULT_DOWNLOADING_UPDATES_FREQUENCE,
+            continue_downloading: true
         })
     }
 
