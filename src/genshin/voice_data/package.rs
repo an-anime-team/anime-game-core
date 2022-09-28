@@ -19,9 +19,11 @@ use crate::installer::diff::{VersionDiff, TryGetDiff};
 /// Format: `(version, english, japanese, korean, chinese)`
 /// 
 /// Korean and Chinese sizes are predicted and can be incorrect
+/// 2.8.0 sizes are also predicted and can be incorrect
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     ("3.1.0", 10160526140, 11223463952, 10160526140, 10160526140),
-    ("3.0.0", 9359645164,  10314955860, 9359645164,  9359645164)
+    ("3.0.0", 9359645164,  10314955860, 9359645164,  9359645164),
+    ("2.8.0", 8621891855,  9479988966,  8621891855,  8621891855)
 ];
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
