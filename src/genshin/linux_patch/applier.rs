@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::io::{Error, ErrorKind, Write};
 use std::fs;
@@ -7,15 +7,15 @@ use std::env::temp_dir;
 use crate::version::ToVersion;
 
 pub struct PatchApplier {
-    folder: String
+    folder: PathBuf
 }
 
 // TODO: rewrite to use git2 library
 
 impl PatchApplier {
-    pub fn new<T: ToString>(folder: T) -> Self {
+    pub fn new<T: Into<PathBuf>>(folder: T) -> Self {
         Self {
-            folder: folder.to_string()
+            folder: folder.into()
         }
     }
 
@@ -23,7 +23,7 @@ impl PatchApplier {
     /// 
     /// To check only specific remote use `is_sync_with`
     pub fn is_sync<T: IntoIterator<Item = F>, F: ToString>(&self, remotes: T) -> Result<bool, Error> {
-        if !Path::new(&self.folder).exists() {
+        if !self.folder.exists() {
             return Ok(false)
         }
 
@@ -66,7 +66,7 @@ impl PatchApplier {
 
     /// Verify that the folder contains latest patch
     pub fn is_sync_with<T: ToString>(&self, remote: T) -> Result<bool, Error> {
-        if !Path::new(&self.folder).exists() {
+        if !self.folder.exists() {
             return Ok(false)
         }
 
@@ -111,7 +111,7 @@ impl PatchApplier {
 
     /// Fetch patch updates from the git repository
     pub fn sync<T: ToString>(&self, remote: T) -> Result<bool, Error> {
-        if Path::new(&self.folder).exists() {
+        if self.folder.exists() {
             Command::new("git")
                 .arg("remote")
                 .arg("set-url")
@@ -155,10 +155,8 @@ impl PatchApplier {
         }
     }
 
-    fn get_temp_path(&self) -> String {
-        let temp_file = temp_dir().to_str().unwrap().to_string();
-
-        format!("{temp_file}/.patch-applying")
+    fn get_temp_path(&self) -> PathBuf {
+        temp_dir().join(".patch-applying")
     }
 
     /// Apply the linux patch to the game
@@ -168,19 +166,19 @@ impl PatchApplier {
     /// 
     /// It's recommended to run this method with `use_root = true` to append telemetry entries to the hosts file.
     /// The patch script will be run with `pkexec` and this ask for root password
-    pub fn apply<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> anyhow::Result<()> {
+    pub fn apply<T: Into<PathBuf>, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> anyhow::Result<()> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
-                let patch_folder = format!("{}/{}", self.folder, version.to_plain_string());
+                let patch_folder = self.folder.join(version.to_plain_string());
 
                 // Verify that the patch folder exists (it can not be synced)
-                if !Path::new(&patch_folder).exists() {
-                    return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {}", patch_folder));
+                if !patch_folder.exists() {
+                    return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {:?}", patch_folder));
                 }
 
                 // Remove temp folder if it is for some reason already exists
-                if Path::new(&temp_dir).exists() {
+                if temp_dir.exists() {
                     fs::remove_dir_all(&temp_dir)?;
                 }
 
@@ -198,7 +196,7 @@ impl PatchApplier {
 
                 // Remove exit and read commands from the beginning of the patch.sh file
                 // These lines are used for test patch restrictions so we don't need them
-                let patch_file = format!("{}/patch.sh", temp_dir);
+                let patch_file = temp_dir.join("patch.sh");
 
                 let mut patch_script = fs::read_to_string(&patch_file)?;
 
@@ -218,7 +216,7 @@ impl PatchApplier {
                     Command::new("pkexec")
                         .arg("bash")
                         .arg("-c")
-                        .arg(format!("cd '{}' ; bash '{}'", game_path.to_string(), patch_file))
+                        .arg(format!("cd '{}' ; bash '{}'", game_path.into().to_string_lossy(), patch_file.to_string_lossy()))
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .stderr(Stdio::piped())
@@ -226,7 +224,7 @@ impl PatchApplier {
                 } else {
                     Command::new("bash")
                         .arg(patch_file)
-                        .current_dir(game_path.to_string())
+                        .current_dir(game_path.into())
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .stderr(Stdio::piped())
@@ -259,15 +257,15 @@ impl PatchApplier {
     /// 
     /// This method doesn't verify the state of the locally installed patch.
     /// You should do it manually using `is_sync` method
-    pub fn revert<T: ToString, F: ToVersion>(&self, game_path: T, patch_version: F, force: bool) -> anyhow::Result<bool> {
+    pub fn revert<T: Into<PathBuf>, F: ToVersion>(&self, game_path: T, patch_version: F, force: bool) -> anyhow::Result<bool> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
-                let patch_folder = format!("{}/{}", self.folder, version.to_plain_string());
+                let patch_folder = self.folder.join(version.to_plain_string());
 
                 // Verify that the patch folder exists (it can not be synced)
-                if !Path::new(&patch_folder).exists() {
-                    return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {}", patch_folder));
+                if !patch_folder.exists() {
+                    return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {:?}", patch_folder));
                 }
 
                 // Create temp folder
@@ -282,7 +280,7 @@ impl PatchApplier {
                     return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {}", err));
                 }
 
-                let revert_file = format!("{}/patch_revert.sh", temp_dir);
+                let revert_file = temp_dir.join("patch_revert.sh");
 
                 // Remove files timestamps checks if it's needed
                 if force {
@@ -297,7 +295,7 @@ impl PatchApplier {
                 // Execute patch_revert.sh from the game folder
                 let output = Command::new("bash")
                     .arg(revert_file)
-                    .current_dir(game_path.to_string())
+                    .current_dir(game_path.into())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
                     .output()?;
