@@ -257,7 +257,7 @@ impl Downloader {
         let mut curr = 0_usize;
 
         // Open or create output file
-        let file = if path.exists() {
+        let file = if path.exists() && self.continue_downloading {
             let mut file = std::fs::OpenOptions::new().write(true).open(&path);
 
             // Continue downloading if the file exists and can be opened

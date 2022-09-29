@@ -48,12 +48,12 @@ impl IntegrityFile {
     /// 
     /// This method doesn't compare them, so you should do it manually
     pub fn repair<T: Into<PathBuf>>(&self, game_path: T) -> Result<(), DownloadingError> {
-        let mut downloader = Downloader::new(format!("{}/{:?}", self.base_url, self.path.as_os_str()))?;
+        let mut downloader = Downloader::new(format!("{}/{}", self.base_url, self.path.to_string_lossy()))?;
 
         // Obviously re-download file entirely
         downloader.continue_downloading = false;
 
-        Ok(downloader.download_to(game_path.into().join(&self.path), |_, _| {})?)
+        downloader.download_to(game_path.into().join(&self.path), |_, _| {})
     }
 }
 
