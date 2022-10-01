@@ -1,6 +1,8 @@
 use std::time::Duration;
 use std::path::PathBuf;
 
+use cached::proc_macro::cached;
+
 use crate::repairer::IntegrityFile;
 use crate::curl::fetch;
 
@@ -27,8 +29,28 @@ fn try_get_some_integrity_files<T: ToString>(file_name: T, timeout: Option<Durat
 }
 
 /// Try to list latest game files
+#[cached(result=true)]
 pub fn try_get_integrity_files(timeout: Option<Duration>) -> anyhow::Result<Vec<IntegrityFile>> {
     try_get_some_integrity_files("pkg_version", timeout)
+}
+
+/// Try to get specific integrity file
+/// 
+/// `relative_path` must be relative to the game's root folder, so
+/// if your file is e.g. `/path/to/[AnimeGame]/[AnimeGame_Data]/level0`, then root folder is `/path/to/[AnimeGame]`,
+/// and `relative_path` must be `[AnimeGame_Data]/level0`
+pub fn try_get_integrity_file<T: Into<PathBuf>>(relative_path: T, timeout: Option<Duration>) -> anyhow::Result<Option<IntegrityFile>> {
+    let relative_path = relative_path.into();
+
+    if let Ok(files) = try_get_integrity_files(timeout) {
+        for file in files {
+            if file.path == relative_path {
+                return Ok(Some(file));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 /// Try to get list of files that are not more used by the game and can be deleted

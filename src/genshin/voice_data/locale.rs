@@ -7,6 +7,15 @@ pub enum VoiceLocale {
 }
 
 impl VoiceLocale {
+    pub fn list() -> &'static [VoiceLocale] {
+        &[
+            Self::English,
+            Self::Japanese,
+            Self::Korean,
+            Self::Chinese
+        ]
+    }
+
     /// Convert enum value to its name
     /// 
     /// `VoiceLocale::English` -> `English`

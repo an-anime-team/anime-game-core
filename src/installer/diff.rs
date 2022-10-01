@@ -381,15 +381,54 @@ impl VersionDiff {
                         let patch = path.join(format!("{relative_file}.hdiff"));
                         let output = path.join(format!("{relative_file}.hdiff_patched"));
 
+                        // If failed to apply the patch
                         if let Err(err) = hpatchz::patch(&file, &patch, &output) {
-                            return Err(DiffDownloadError::HdiffPatch(err.to_string()));
+                            #[cfg(feature = "genshin")]
+                            {
+                                // If we were able to get API response - it shouldn't be impossible
+                                // to also get integrity files list from the same API
+                                match crate::genshin::repairer::try_get_integrity_file(relative_file, None) {
+                                    Ok(Some(integrity)) => {
+                                        if !integrity.fast_verify(&path) {
+                                            if let Err(err) = integrity.repair(&path) {
+                                                return Err(err.into());
+                                            }
+                                        }
+                                    },
+                                    _ => return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                }
+                            }
+
+                            #[cfg(feature = "honkai")]
+                            {
+                                // If we were able to get API response - it shouldn't be impossible
+                                // to also get integrity files list from the same API
+                                match crate::honkai::repairer::try_get_integrity_file(relative_file, None) {
+                                    Ok(Some(integrity)) => {
+                                        if !integrity.fast_verify(&path) {
+                                            if let Err(err) = integrity.repair(&path) {
+                                                return Err(err.into());
+                                            }
+                                        }
+                                    },
+                                    _ => return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                }
+                            }
+
+                            #[allow(unused_must_use)]
+                            {
+                                remove_file(&patch);
+                            }
                         }
 
-                        // FIXME: handle errors properly
-                        remove_file(&file).expect(&format!("Failed to remove hdiff patch: {:?}", file));
-                        remove_file(&patch).expect(&format!("Failed to remove hdiff patch: {:?}", patch));
+                        // If patch was successfully applied
+                        else {
+                            // FIXME: handle errors properly
+                            remove_file(&file).expect(&format!("Failed to remove hdiff patch: {:?}", file));
+                            remove_file(&patch).expect(&format!("Failed to remove hdiff patch: {:?}", patch));
 
-                        std::fs::rename(&output, &file).expect(&format!("Failed to rename hdiff patch: {:?}", file));
+                            std::fs::rename(&output, &file).expect(&format!("Failed to rename hdiff patch: {:?}", file));
+                        }
                     }
 
                     remove_file(path.join("hdifffiles.txt"))
