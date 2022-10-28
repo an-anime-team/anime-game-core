@@ -74,7 +74,7 @@ fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoi
     unreachable!();
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VoicePackage {
     Installed {
         path: PathBuf,

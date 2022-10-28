@@ -6,7 +6,7 @@ use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
 use super::free_space;
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum Update {
     CheckingFreeSpace(PathBuf),
 

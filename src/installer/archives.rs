@@ -10,7 +10,7 @@ use xz::read::XzDecoder as XzReader;
 use bzip2::read::BzDecoder as Bz2Reader;
 use flate2::read::GzDecoder as GzReader;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Size {
     Compressed(u64),
     Uncompressed(u64),
@@ -30,7 +30,7 @@ impl Size {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub name: String,
     pub size: Size

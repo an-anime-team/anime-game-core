@@ -1,16 +1,14 @@
-use serde::Deserialize;
-
 // In theory this can not contain data field
 // and has some actual error, but I never had it in practice
 
-#[derive(Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Response {
     pub retcode: u16,
     pub message: String,
     pub data: Data
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Data {
     pub web_url: String,
     pub game: Game,
@@ -25,7 +23,7 @@ pub struct Data {
     // pub sdk
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Game {
     pub latest: Latest,
 
@@ -33,7 +31,7 @@ pub struct Game {
     // pub diffs: Vec<Diff>
 }
 
-#[derive(Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Latest {
     pub name: String,
     pub version: String,

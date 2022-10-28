@@ -16,7 +16,7 @@ use crate::{
     external::hpatchz
 };
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum DiffDownloadError {
     /// Your installation is already up to date and not needed to be updated
     AlreadyLatest,
@@ -64,7 +64,7 @@ impl Into<std::io::Error> for DiffDownloadError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum VersionDiff {
     /// Latest version
     Latest(Version),

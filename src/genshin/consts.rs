@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use super::voice_data::locale::VoiceLocale;
 
 // This enum is used in `Game::get_edition` method
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameEdition {
     Global,
     China

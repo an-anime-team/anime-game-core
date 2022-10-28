@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use super::installer::downloader::{Downloader, DownloadingError};
 
 // {"remoteName": "UnityPlayer.dll", "md5": "8c8c3d845b957e4cb84c662bed44d072", "fileSize": 33466104}
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct IntegrityFile {
     pub path: PathBuf,
     pub md5: String,

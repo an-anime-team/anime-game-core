@@ -13,7 +13,7 @@ const STABILITY_MARK: &str = "#echo \"If you would like to test this patch, modi
 
 static mut PATCH_RESPONSES: Option<HashMap<(String, Version), Patch>> = None;
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum Regions {
     /// `UnityPlayer.dll` md5 hash
     Global(String),
@@ -43,7 +43,7 @@ impl Regions {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum Patch {
     /// Patch is not available
     NotAvailable,

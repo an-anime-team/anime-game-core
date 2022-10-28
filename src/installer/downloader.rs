@@ -14,7 +14,7 @@ pub const DEFAULT_DOWNLOADING_CHUNK: usize = 64 * 1024 * 1024;
 /// before calling progress function
 pub const DEFAULT_DOWNLOADING_UPDATES_FREQUENCE: usize = 4000;
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum DownloadingError {
     /// Specified downloading path is not available in system
     /// 
@@ -39,12 +39,12 @@ pub enum DownloadingError {
     OutputFileMetadataError(PathBuf, String),
 
     /// Curl downloading error
-    Curl(curl::Error)
+    Curl(String)
 }
 
 impl From<curl::Error> for DownloadingError {
     fn from(err: curl::Error) -> Self {
-        Self::Curl(err)
+        Self::Curl(err.to_string())
     }
 }
 
@@ -224,7 +224,7 @@ impl Downloader {
 
         match self.curl.perform() {
             Ok(_) => Ok(()),
-            Err(err) => Err(DownloadingError::Curl(err))
+            Err(err) => Err(DownloadingError::Curl(err.to_string()))
         }
     }
 
@@ -250,7 +250,7 @@ impl Downloader {
 
         // Set downloading from beginning
         if let Err(err) = self.curl.resume_from(0) {
-            return Err(DownloadingError::Curl(err));
+            return Err(DownloadingError::Curl(err.to_string()));
         }
 
         // Current downloading progress
@@ -265,7 +265,7 @@ impl Downloader {
                 match file.metadata() {
                     Ok(metadata) => {
                         if let Err(err) = self.curl.resume_from(metadata.len()) {
-                            return Err(DownloadingError::Curl(err));
+                            return Err(DownloadingError::Curl(err.to_string()));
                         }
 
                         if let Err(err) = file.seek(std::io::SeekFrom::Start(metadata.len())) {
