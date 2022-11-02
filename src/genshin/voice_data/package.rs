@@ -17,12 +17,10 @@ use crate::installer::diff::{VersionDiff, TryGetDiff};
 /// List of voiceover sizes
 /// 
 /// Format: `(version, english, japanese, korean, chinese)`
-/// 
-/// 2.8.0 sizes are predicted and can be incorrect
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
+    ("3.2.0", 8636001252, 11644175924, 8956792496, 7563358032),
     ("3.1.0", 10160526140, 11223463952, 8674947588, 8796386584),
-    ("3.0.0", 9359645164,  10314955860, 7991164050, 8103030886),
-    ("2.8.0", 8621891855,  9479988966,  7361278235, 7464327416)
+    ("3.0.0", 9359645164,  10314955860, 7991164050, 8103030886)
 ];
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
@@ -59,7 +57,7 @@ pub fn wma_predict(values: &[u64]) -> u64 {
 
 /// Predict new voice package size using WMA based on `VOICE_PACKAGES_SIZES` constant
 pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
-    wma_predict(&get_voice_pack_sizes(locale).into_iter().map(|item| item.1).collect::<Vec<u64>>())
+    wma_predict(&get_voice_pack_sizes(locale).into_iter().map(|item| item.1).rev().collect::<Vec<u64>>())
 }
 
 /// Find voice package with specified locale from list of packages
@@ -74,7 +72,7 @@ fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoi
     unreachable!();
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VoicePackage {
     Installed {
         path: PathBuf,
