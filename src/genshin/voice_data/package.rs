@@ -18,9 +18,8 @@ use crate::installer::diff::{VersionDiff, TryGetDiff};
 /// 
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
-    ("3.2.0", 8636001252, 9600770928, 7416414724, 7563358032),
-    ("3.1.0", 10160526140, 11223463952, 8674947588, 8796386584),
-    ("3.0.0", 9359645164,  10314955860, 7991164050, 8103030886)
+    // ("3.3.0", 8636001252, 9600770928, 7416414724, 7563358032),
+    ("3.2.0", 8636001252, 9600770928, 7416414724, 7563358032)
 ];
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
@@ -39,7 +38,7 @@ pub fn get_voice_pack_sizes(locale: VoiceLocale) -> Vec<(String, u64)> {
 pub fn wma_predict(values: &[u64]) -> u64 {
     match values.len() {
         0 => 0,
-        1 => values[1],
+        1 => values[0],
         2 => (values[1] as f64 * (values[1] as f64 / values[0] as f64)).round() as u64,
         n => {
             let mut weighted_sum = 0.0;
@@ -203,27 +202,36 @@ impl VoicePackage {
                 let package_size = get_size(&path)?;
                 let response = api::try_fetch_json()?;
 
-                let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
+                match std::fs::read(path.join(".version")) {
+                    Ok(curr) => Ok(Version::new(curr[0], curr[1], curr[2])),
 
-                // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
-                // then we should predict their sizes
-                if VOICE_PACKAGES_SIZES[0].0 != response.data.game.latest.version {
-                    let mut t = voice_packages_sizes;
+                    // We don't create .version file here because we don't
+                    // actually know current version and just predict it
+                    // This file will be properly created in the install method
+                    Err(_) => {
+                        let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
 
-                    voice_packages_sizes = vec![(response.data.game.latest.version.clone(), predict_new_voice_pack_size(*locale))];
-                    voice_packages_sizes.append(&mut t);
-                }
+                        // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
+                        // then we should predict their sizes
+                        if VOICE_PACKAGES_SIZES[0].0 != response.data.game.latest.version {
+                            let mut t = voice_packages_sizes;
 
-                // To predict voice package version we're going through saved voice packages sizes in the `VOICE_PACKAGES_SIZES` constant
-                // plus predicted voice packages sizes if needed. The version with closest folder size is version we have installed
-                for (version, size) in voice_packages_sizes {
-                    if package_size > size - 512 * 1024 * 1024 {
-                        return Ok(Version::from_str(version).unwrap());
+                            voice_packages_sizes = vec![(response.data.game.latest.version.clone(), predict_new_voice_pack_size(*locale))];
+                            voice_packages_sizes.append(&mut t);
+                        }
+
+                        // To predict voice package version we're going through saved voice packages sizes in the `VOICE_PACKAGES_SIZES` constant
+                        // plus predicted voice packages sizes if needed. The version with closest folder size is version we have installed
+                        for (version, size) in voice_packages_sizes {
+                            if package_size > size - 512 * 1024 * 1024 {
+                                return Ok(Version::from_str(version).unwrap());
+                            }
+                        }
+
+                        // This *should* be unreachable
+                        unreachable!()
                     }
                 }
-
-                // This *should* be unreachable
-                unreachable!()
             }
         }
     }
@@ -245,7 +253,8 @@ impl VoicePackage {
                 }
 
                 self.delete_in(game_path)
-            },
+            }
+
             VoicePackage::NotInstalled { game_path, .. } => {
                 match game_path {
                     Some(game_path) => self.delete_in(game_path),

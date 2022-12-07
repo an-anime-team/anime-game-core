@@ -308,6 +308,7 @@ impl VersionDiff {
         let url;
         let download_size;
         let unpacked_size;
+        let new_version;
 
         match self {
             // Can't be downloaded
@@ -315,12 +316,13 @@ impl VersionDiff {
             Self::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            Self::Predownload { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } |
-            Self::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } |
-            Self::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, .. } => {
+            Self::Predownload { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, .. } |
+            Self::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, .. } |
+            Self::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, .. } => {
                 url = diff_url.clone();
                 download_size = *down_size;
                 unpacked_size = *unp_size;
+                new_version = *latest;
             }
         }
 
@@ -369,6 +371,14 @@ impl VersionDiff {
 
                 // Install data
                 installer.install(&path, updater);
+
+                // Create .version file here even if hdiff patching is failed because
+                // it's easier to explain user why he should run files repairer than
+                // why he should re-download entire game update because something is failed
+                #[allow(unused_must_use)]
+                {
+                    std::fs::write(path.join(".version"), new_version.version);
+                }
 
                 // Apply hdiff patches
                 // We're ignoring Err because in practice it means that hdifffiles.txt is missing
