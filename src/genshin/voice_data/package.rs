@@ -18,8 +18,9 @@ use crate::installer::diff::{VersionDiff, TryGetDiff};
 /// 
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
-    // ("3.3.0", 8636001252, 9600770928, 7416414724, 7563358032),
-    ("3.2.0", 8636001252, 9600770928, 7416414724, 7563358032)
+    //        English(US)  Japanese      Korean       Chinese
+    ("3.3.0", 9183929971,  10250403911,  7896362859,  8047012675),
+    ("3.2.0", 8636001252,  9600770928,   7416414724,  7563358032)
 ];
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
@@ -309,9 +310,20 @@ impl TryGetDiff for VoicePackage {
                                 url: diff.path,
                                 download_size: diff.size.parse::<u64>().unwrap(),
                                 unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+
                                 unpacking_path: match self {
                                     VoicePackage::Installed { .. } => None,
                                     VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                                },
+
+                                version_file_path: match self {
+                                    VoicePackage::Installed { path, .. } => Some(path.join(".version")),
+                                    VoicePackage::NotInstalled { game_path, .. } => {
+                                        match game_path {
+                                            Some(game_path) => Some(get_voice_package_path(game_path, self.locale()).join(".version")),
+                                            None => None
+                                        }
+                                    }
                                 }
                             })
                         }
@@ -332,9 +344,20 @@ impl TryGetDiff for VoicePackage {
                             url: diff.path,
                             download_size: diff.size.parse::<u64>().unwrap(),
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+
                             unpacking_path: match self {
                                 VoicePackage::Installed { .. } => None,
                                 VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                            },
+
+                            version_file_path: match self {
+                                VoicePackage::Installed { path, .. } => Some(path.join(".version")),
+                                VoicePackage::NotInstalled { game_path, .. } => {
+                                    match game_path {
+                                        Some(game_path) => Some(get_voice_package_path(game_path, self.locale()).join(".version")),
+                                        None => None
+                                    }
+                                }
                             }
                         })
                     }
@@ -355,9 +378,20 @@ impl TryGetDiff for VoicePackage {
                 url: latest.path,
                 download_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+
                 unpacking_path: match self {
                     VoicePackage::Installed { .. } => None,
                     VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                },
+
+                version_file_path: match self {
+                    VoicePackage::Installed { path, .. } => Some(path.join(".version")),
+                    VoicePackage::NotInstalled { game_path, .. } => {
+                        match game_path {
+                            Some(game_path) => Some(get_voice_package_path(game_path, self.locale()).join(".version")),
+                            None => None
+                        }
+                    }
                 }
             })
         }

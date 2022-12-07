@@ -116,7 +116,8 @@ impl TryGetDiff for Game {
                     url: latest.path,
                     download_size: latest.size.parse::<u64>().unwrap(),
                     unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                    unpacking_path: Some(self.path.clone())
+                    unpacking_path: Some(self.path.clone()),
+                    version_file_path: None
                 })
             }
         }
@@ -127,7 +128,8 @@ impl TryGetDiff for Game {
                 url: latest.path,
                 download_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                unpacking_path: Some(self.path.clone())
+                unpacking_path: Some(self.path.clone()),
+                version_file_path: None
             })
         }
     }

@@ -80,7 +80,10 @@ pub enum VersionDiff {
         /// Path to the folder this difference should be installed by the `install` method
         /// 
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
-        unpacking_path: Option<PathBuf>
+        unpacking_path: Option<PathBuf>,
+
+        // Optional path to the .version file
+        version_file_path: Option<PathBuf>
     },
 
     /// Component should be updated before using it
@@ -94,7 +97,10 @@ pub enum VersionDiff {
         /// Path to the folder this difference should be installed by the `install` method
         /// 
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
-        unpacking_path: Option<PathBuf>
+        unpacking_path: Option<PathBuf>,
+
+        // Optional path to the .version file
+        version_file_path: Option<PathBuf>
     },
 
     /// Difference can't be calculated because installed version is too old
@@ -113,7 +119,10 @@ pub enum VersionDiff {
         /// Path to the folder this difference should be installed by the `install` method
         /// 
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
-        unpacking_path: Option<PathBuf>
+        unpacking_path: Option<PathBuf>,
+
+        // Optional path to the .version file
+        version_file_path: Option<PathBuf>
     }
 }
 
@@ -309,6 +318,7 @@ impl VersionDiff {
         let download_size;
         let unpacked_size;
         let new_version;
+        let version_path;
 
         match self {
             // Can't be downloaded
@@ -316,13 +326,14 @@ impl VersionDiff {
             Self::Outdated { .. } => return Err(DiffDownloadError::Outdated),
 
             // Can be downloaded
-            Self::Predownload { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, .. } |
-            Self::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, .. } |
-            Self::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, .. } => {
+            Self::Predownload { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, version_file_path, .. } |
+            Self::Diff { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, version_file_path, .. } |
+            Self::NotInstalled { url: diff_url, download_size: down_size, unpacked_size: unp_size, latest, version_file_path, .. } => {
                 url = diff_url.clone();
                 download_size = *down_size;
                 unpacked_size = *unp_size;
                 new_version = *latest;
+                version_path = version_file_path.clone();
             }
         }
 
@@ -377,7 +388,9 @@ impl VersionDiff {
                 // why he should re-download entire game update because something is failed
                 #[allow(unused_must_use)]
                 {
-                    std::fs::write(path.join(".version"), new_version.version);
+                    let version_path = version_path.unwrap_or(path.join(".version"));
+
+                    std::fs::write(version_path, new_version.version);
                 }
 
                 // Apply hdiff patches
