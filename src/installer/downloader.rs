@@ -280,6 +280,13 @@ impl Downloader {
 
             file
         } else {
+            let base_folder = path.parent().unwrap();
+
+            #[allow(unused_must_use)]
+            if !base_folder.exists() {
+                std::fs::create_dir_all(base_folder);
+            }
+
             File::create(&path)
         };
 
