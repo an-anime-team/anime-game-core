@@ -142,7 +142,25 @@ impl TryGetDiff for Game {
         let response = api::try_fetch_json()?;
 
         if self.is_installed() {
-            let current = self.try_get_version()?;
+            let current = match self.try_get_version() {
+                Ok(version) => version,
+                Err(err) => {
+                    if self.path.exists() && self.path.metadata()?.len() == 0 {
+                        let latest = response.data.game.latest;
+
+                        return Ok(VersionDiff::NotInstalled {
+                            latest: Version::from_str(&latest.version).unwrap(),
+                            url: latest.path,
+                            download_size: latest.size.parse::<u64>().unwrap(),
+                            unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                            unpacking_path: Some(self.path.clone()),
+                            version_file_path: None
+                        });
+                    }
+
+                    return Err(err);
+                }
+            };
 
             if response.data.game.latest.version == current {
                 // If we're running latest game version the diff we need to download

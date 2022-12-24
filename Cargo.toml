@@ -1,6 +1,6 @@
 [package]
 name = "anime-game-core"
-version = "1.3.1"
+version = "1.3.2"
 authors = ["Nikita Podvirnyy <suimin.tu.mu.ga.mi@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"
@@ -15,7 +15,7 @@ cached = { version = "0.40.0", features = ["proc_macro"]}
 anyhow = "1.0"
 
 # Install feature
-sysinfo = { version = "0.26", optional = true }
+sysinfo = { version = "0.27", optional = true }
 zip = { version = "0.6", optional = true }
 tar = { version = "0.4", optional = true }
 # sevenz-rust = { version = "0.1.1", optional = true }
