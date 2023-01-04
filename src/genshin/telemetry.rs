@@ -19,7 +19,7 @@ pub fn is_disabled(timeout: Option<Duration>) -> Option<String> {
     let servers = unsafe { TELEMETRY_SERVERS };
 
     for server in servers {
-        if (server == "0.0.0.0") {
+        if server == &"0.0.0.0" {
             continue;
         }
         if let Ok(_) = fetch(server, timeout) {
