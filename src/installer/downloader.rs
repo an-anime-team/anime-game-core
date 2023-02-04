@@ -8,7 +8,7 @@ use super::free_space;
 
 /// Default amount of bytes `Downloader::download_to` method will store in memory
 /// before writing them onto the disk
-pub const DEFAULT_DOWNLOADING_CHUNK: usize = 64 * 1024 * 1024;
+pub const DEFAULT_DOWNLOADING_CHUNK: usize = 1024 * 1024;
 
 /// Default amount of progress updates that will be skipped each time
 /// before calling progress function
@@ -208,8 +208,8 @@ impl Downloader {
         let mut i = 0_usize;
 
         self.curl.progress_function(move |expected_total, downloaded, _, _| {
-            let curr = downloaded.ceil() as u64;
-            let total = content_length.unwrap_or(expected_total.ceil() as u64);
+            let curr = downloaded as u64;
+            let total = content_length.unwrap_or(expected_total as u64);
 
             i += 1;
 
