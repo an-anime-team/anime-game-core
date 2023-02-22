@@ -197,6 +197,7 @@ impl VoicePackage {
     /// This method can fail to parse this package version.
     /// It also can mean that the corresponding folder doesn't
     /// contain voice package files
+    #[tracing::instrument(level = "debug")]
     pub fn try_get_version(&self) -> anyhow::Result<Version> {
         match &self {
             Self::NotInstalled { locale: _, version, data: _, game_path: _} => Ok(*version),
@@ -242,6 +243,7 @@ impl VoicePackage {
     /// 
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
+    #[tracing::instrument(level = "debug")]
     pub fn delete(&self) -> anyhow::Result<()> {
         match self {
             VoicePackage::Installed { path, .. } => {
@@ -270,7 +272,8 @@ impl VoicePackage {
     /// 
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
-    pub fn delete_in<T: Into<PathBuf>>(&self, game_path: T) -> anyhow::Result<()> {
+    #[tracing::instrument(level = "debug")]
+    pub fn delete_in<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> anyhow::Result<()> {
         let locale = match self {
             VoicePackage::Installed { locale, .. } |
             VoicePackage::NotInstalled { locale, .. } => locale
@@ -288,6 +291,7 @@ impl VoicePackage {
 
 #[cfg(feature = "install")]
 impl TryGetDiff for VoicePackage {
+    #[tracing::instrument(level = "debug")]
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         let response = api::try_fetch_json()?;
 

@@ -31,6 +31,7 @@ impl<'a> Response {
 
 /// Try to fetch data from the game's api
 #[cached::proc_macro::cached]
+#[tracing::instrument(level = "trace")]
 pub fn try_fetch(uri: &'static str) -> Result<Response, curl::Error> {
     let mut curl = Easy::new();
     let (sender, receiver) = mpsc::channel();

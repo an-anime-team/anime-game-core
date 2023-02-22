@@ -7,7 +7,8 @@ use sysinfo::{System, SystemExt, DiskExt};
 /// Get available free disk space by specified path
 /// 
 /// Can return `None` if path is not prefixed by any available disk
-pub fn available<T: Into<PathBuf>>(path: T) -> Option<u64> {
+#[tracing::instrument(level = "trace")]
+pub fn available<T: Into<PathBuf> + std::fmt::Debug>(path: T) -> Option<u64> {
     let mut system = System::new_all();
 
     system.sort_disks_by(|a, b| {
@@ -29,7 +30,8 @@ pub fn available<T: Into<PathBuf>>(path: T) -> Option<u64> {
 }
 
 /// Check if two paths exist on the same disk
-pub fn is_same_disk<T: Into<PathBuf>>(path1: T, path2: T) -> bool {
+#[tracing::instrument(level = "trace")]
+pub fn is_same_disk<T: Into<PathBuf> + std::fmt::Debug>(path1: T, path2: T) -> bool {
     let mut system = System::new_all();
 
     system.sort_disks_by(|a, b| {

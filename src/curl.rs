@@ -25,6 +25,7 @@ impl Response {
     }
 
     /// Get body of this request
+    #[tracing::instrument(level = "trace")]
     pub fn get_body(&mut self) -> Result<Vec<u8>, curl::Error> {
         self.curl.nobody(false)?;
 
@@ -55,7 +56,8 @@ impl Response {
 }
 
 /// Try to fetch remote data
-pub fn fetch<T: ToString>(url: T, timeout: Option<Duration>) -> Result<Response, curl::Error> {
+#[tracing::instrument(level = "trace")]
+pub fn fetch<T: ToString + std::fmt::Debug>(url: T, timeout: Option<Duration>) -> Result<Response, curl::Error> {
     let mut curl = Easy::new();
 
     curl.url(&url.to_string())?;

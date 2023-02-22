@@ -15,6 +15,7 @@ use super::consts::TELEMETRY_SERVERS;
 ///     println!("Telemetry is disabled");
 /// }
 /// ```
+#[tracing::instrument(level = "debug")]
 pub fn is_disabled(timeout: Option<Duration>) -> Option<String> {
     let servers = unsafe { TELEMETRY_SERVERS };
 

@@ -28,11 +28,13 @@ impl GameBasics for Game {
     }
 
     /// Try to get latest game version
+    #[tracing::instrument(level = "debug")]
     fn try_get_latest_version() -> anyhow::Result<Version> {
         // I assume game's API can't return incorrect version format right? Right?
         Ok(Version::from_str(api::try_fetch_json()?.data.game.latest.version).unwrap())
     }
 
+    #[tracing::instrument(level = "debug")]
     fn try_get_version(&self) -> anyhow::Result<Version> {
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
             let mut num: u8 = 0;
@@ -97,6 +99,7 @@ impl GameBasics for Game {
 
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
+    #[tracing::instrument(level = "debug")]
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         let latest = api::try_fetch_json()?.data.game.latest;
 

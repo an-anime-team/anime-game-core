@@ -6,6 +6,7 @@ use std::env::temp_dir;
 
 use crate::version::ToVersion;
 
+#[derive(Debug, Clone)]
 pub struct PatchApplier {
     folder: PathBuf
 }
@@ -22,7 +23,8 @@ impl PatchApplier {
     /// Verify that the folder contains latest patch
     /// 
     /// To check only specific remote use `is_sync_with`
-    pub fn is_sync<T: IntoIterator<Item = F>, F: ToString>(&self, remotes: T) -> Result<bool, Error> {
+    #[tracing::instrument(level = "trace")]
+    pub fn is_sync<T: IntoIterator<Item = F> + std::fmt::Debug, F: ToString + std::fmt::Debug>(&self, remotes: T) -> Result<bool, Error> {
         if !self.folder.exists() {
             return Ok(false)
         }
@@ -65,7 +67,8 @@ impl PatchApplier {
     }
 
     /// Verify that the folder contains latest patch
-    pub fn is_sync_with<T: ToString>(&self, remote: T) -> Result<bool, Error> {
+    #[tracing::instrument(level = "trace")]
+    pub fn is_sync_with<T: ToString + std::fmt::Debug>(&self, remote: T) -> Result<bool, Error> {
         if !self.folder.exists() {
             return Ok(false)
         }
@@ -110,7 +113,8 @@ impl PatchApplier {
     }
 
     /// Fetch patch updates from the git repository
-    pub fn sync<T: ToString>(&self, remote: T) -> Result<bool, Error> {
+    #[tracing::instrument(level = "debug")]
+    pub fn sync<T: ToString + std::fmt::Debug>(&self, remote: T) -> Result<bool, Error> {
         if self.folder.exists() {
             Command::new("git")
                 .arg("remote")
@@ -166,7 +170,8 @@ impl PatchApplier {
     /// 
     /// It's recommended to run this method with `use_root = true` to append telemetry entries to the hosts file.
     /// The patch script will be run with `pkexec` and this ask for root password
-    pub fn apply<T: Into<PathBuf>, F: ToVersion>(&self, game_path: T, patch_version: F, use_root: bool) -> anyhow::Result<()> {
+    #[tracing::instrument(level = "debug")]
+    pub fn apply<T: Into<PathBuf> + std::fmt::Debug, F: ToVersion + std::fmt::Debug>(&self, game_path: T, patch_version: F, use_root: bool) -> anyhow::Result<()> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -191,7 +196,7 @@ impl PatchApplier {
                 options.content_only = true; // Don't copy e.g. "270" folder, just its content
 
                 if let Err(err) = fs_extra::dir::copy(patch_folder, &temp_dir, &options) {
-                    return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {}", err));
+                    return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {err}"));
                 }
 
                 // Remove exit and read commands from the beginning of the patch.sh file
@@ -257,7 +262,8 @@ impl PatchApplier {
     /// 
     /// This method doesn't verify the state of the locally installed patch.
     /// You should do it manually using `is_sync` method
-    pub fn revert<T: Into<PathBuf>, F: ToVersion>(&self, game_path: T, patch_version: F, force: bool) -> anyhow::Result<bool> {
+    #[tracing::instrument(level = "debug")]
+    pub fn revert<T: Into<PathBuf> + std::fmt::Debug, F: ToVersion + std::fmt::Debug>(&self, game_path: T, patch_version: F, force: bool) -> anyhow::Result<bool> {
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -277,7 +283,7 @@ impl PatchApplier {
                 options.content_only = true; // Don't copy e.g. "270" folder, just its content
 
                 if let Err(err) = fs_extra::dir::copy(patch_folder, &temp_dir, &options) {
-                    return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {}", err));
+                    return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {err}"));
                 }
 
                 let revert_file = temp_dir.join("patch_revert.sh");

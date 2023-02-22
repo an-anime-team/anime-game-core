@@ -14,7 +14,8 @@ pub struct IntegrityFile {
 
 impl IntegrityFile {
     /// Compare files' sizes and (if needed) hashes
-    pub fn verify<T: Into<PathBuf>>(&self, game_path: T) -> bool {
+    #[tracing::instrument(level = "debug")]
+    pub fn verify<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> bool {
         let file_path: PathBuf = game_path.into().join(&self.path);
 
         // Compare files' sizes. If they're different - they 100% different
@@ -37,7 +38,8 @@ impl IntegrityFile {
     }
 
     /// Compare files' sizes and do not compare files' hashes. Works lots faster than `verify`
-    pub fn fast_verify<T: Into<PathBuf>>(&self, game_path: T) -> bool {
+    #[tracing::instrument(level = "debug")]
+    pub fn fast_verify<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> bool {
         match std::fs::metadata(game_path.into().join(&self.path)) {
             Ok(metadata) => metadata.len() == self.size,
             Err(_) => false
@@ -47,7 +49,8 @@ impl IntegrityFile {
     /// Replace remote file with the latest one
     /// 
     /// This method doesn't compare them, so you should do it manually
-    pub fn repair<T: Into<PathBuf>>(&self, game_path: T) -> Result<(), DownloadingError> {
+    #[tracing::instrument(level = "debug")]
+    pub fn repair<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> Result<(), DownloadingError> {
         let mut downloader = Downloader::new(format!("{}/{}", self.base_url, self.path.to_string_lossy()))?;
 
         // Obviously re-download file entirely

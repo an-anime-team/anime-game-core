@@ -204,9 +204,10 @@ impl VersionDiff {
 
     /// Try to download archive with the difference into the specified folder
     #[cfg(feature = "install")]
+    #[tracing::instrument(level = "debug", skip(progress))]
     pub fn download_in<T, Fp>(&mut self, folder: T, progress: Fp) -> Result<(), DiffDownloadError>
     where
-        T: Into<PathBuf>,
+        T: Into<PathBuf> + std::fmt::Debug,
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
@@ -233,9 +234,10 @@ impl VersionDiff {
 
     /// Try to download archive with the difference by specified path, including filename
     #[cfg(feature = "install")]
+    #[tracing::instrument(level = "debug", skip(progress))]
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
     where
-        T: Into<PathBuf>,
+        T: Into<PathBuf> + std::fmt::Debug,
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
@@ -266,6 +268,7 @@ impl VersionDiff {
     /// It's recommended to use `unpacking_path` before this method to be sure that current enum knows
     /// where the difference should be installed
     #[cfg(feature = "install")]
+    #[tracing::instrument(level = "debug", skip(updater))]
     pub fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
     where F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
@@ -288,9 +291,10 @@ impl VersionDiff {
 
     /// Try to install the difference by specified location
     #[cfg(feature = "install")]
+    #[tracing::instrument(level = "debug", skip(updater))]
     pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
     where
-        T: Into<PathBuf>,
+        T: Into<PathBuf> + std::fmt::Debug,
         F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
         match self {
@@ -309,9 +313,10 @@ impl VersionDiff {
     /// 
     /// Same as `install_to` method if `temp_path` specified as `None` (uses default system temp folder)
     #[cfg(feature = "install")]
+    #[tracing::instrument(level = "debug", skip(updater))]
     pub fn install_to_by<T, F>(&self, path: T, temp_path: Option<T>, updater: F) -> Result<(), DiffDownloadError>
     where
-        T: Into<PathBuf>,
+        T: Into<PathBuf> + std::fmt::Debug,
         F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
         let url;

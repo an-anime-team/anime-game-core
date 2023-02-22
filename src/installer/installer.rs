@@ -45,7 +45,8 @@ pub struct Installer {
 }
 
 impl Installer {
-    pub fn new<T: ToString>(url: T) -> Result<Self, curl::Error> {
+    #[tracing::instrument(level = "debug")]
+    pub fn new<T: ToString + std::fmt::Debug>(url: T) -> Result<Self, curl::Error> {
         match Downloader::new(url.to_string()) {
             Ok(downloader) => Ok(Self {
                 downloader,
@@ -81,9 +82,10 @@ impl Installer {
     }
 
     /// Download archive from specified uri and unpack it
+    #[tracing::instrument(level = "debug", skip(updater))]
     pub fn install<T, F>(&mut self, unpack_to: T, updater: F)
     where
-        T: Into<PathBuf>,
+        T: Into<PathBuf> + std::fmt::Debug,
         F: Fn(Update) + Clone + Send + 'static
     {
         let temp_path = self.get_temp_path();

@@ -84,7 +84,8 @@ impl Downloader {
     /// Try to open downloading stream
     /// 
     /// Will return `Error` if the URL is not valid
-    pub fn new<T: ToString>(uri: T) -> Result<Self, curl::Error> {
+    #[tracing::instrument(level = "trace")]
+    pub fn new<T: ToString + std::fmt::Debug>(uri: T) -> Result<Self, curl::Error> {
         let mut curl = Easy::new();
 
         curl.url(&uri.to_string())?;
@@ -187,6 +188,7 @@ impl Downloader {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(downloader, progress))]
     pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), DownloadingError>
     where
         // array of bytes
@@ -228,9 +230,10 @@ impl Downloader {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(progress))]
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DownloadingError>
     where
-        T: Into<PathBuf>,
+        T: Into<PathBuf> + std::fmt::Debug,
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {

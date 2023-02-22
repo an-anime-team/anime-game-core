@@ -4,7 +4,8 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 
 /// Try to apply hdiff patch
-pub fn patch<T: Into<PathBuf>>(file: T, patch: T, output: T) -> std::io::Result<()> {
+#[tracing::instrument(level = "debug")]
+pub fn patch<T: Into<PathBuf> + std::fmt::Debug>(file: T, patch: T, output: T) -> std::io::Result<()> {
     let hpatchz = super::STORAGE.map("hpatchz")?;
 
     // Allow to execute this binary
