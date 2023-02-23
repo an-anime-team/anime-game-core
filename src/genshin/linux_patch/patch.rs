@@ -32,8 +32,8 @@ impl Regions {
     /// Compares `player_hash` with inner values
     /// 
     /// If `player_hash` not equal to the inner value, then the patch was applied
-    #[tracing::instrument(level = "trace")]
-    pub fn is_applied<T: ToString + std::fmt::Debug>(&self, player_hash: T) -> bool {
+    #[inline]
+    pub fn is_applied<T: ToString>(&self, player_hash: T) -> bool {
         let player_hash = &player_hash.to_string();
 
         match self {
@@ -88,12 +88,14 @@ impl Patch {
     /// this method will return outdated version
     /// 
     /// Timeout is applied to all the requests separately, so the whole operation can take more than `Some(timeout)`
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     pub fn try_fetch<T, F>(hosts: F, timeout: Option<Duration>) -> anyhow::Result<Self>
     where
         T: ToString + std::fmt::Debug,
         F: IntoIterator<Item = T> + std::fmt::Debug
     {
+        tracing::debug!("Trying to fetch remote patch state");
+
         let response = api::try_fetch_json()?;
 
         let mut versions = vec![Version::from_str(&response.data.game.latest.version).unwrap()];
@@ -135,8 +137,10 @@ impl Patch {
     /// Try to fetch the patch with specified game version
     /// 
     /// Never returns `Some(Patch::Outdated)` because doesn't check the latest game version
-    #[tracing::instrument(level = "trace")]
+    #[tracing::instrument(level = "trace", ret)]
     pub fn try_fetch_version<T: ToString + std::fmt::Debug>(host: T, version: Version, timeout: Option<Duration>) -> Result<Self, curl::Error> {
+        tracing::debug!("Trying to get state of patch version from remote repository");
+
         // Return cached value if it exists
         unsafe {
             if let Some(responses) = &PATCH_RESPONSES {
@@ -291,8 +295,7 @@ impl Patch {
     /// Check whether this patch is applied to the game
     /// 
     /// This method will return `Ok(false)` if the patch is not available, outdated or in preparation state
-    #[tracing::instrument(level = "debug")]
-    pub fn is_applied<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> Result<bool, std::io::Error> {
+    pub fn is_applied<T: Into<PathBuf>>(&self, game_path: T) -> Result<bool, std::io::Error> {
         let dll = std::fs::read(game_path.into().join("UnityPlayer.dll"))?;
         let hash = format!("{:x}", md5::compute(dll));
 
@@ -308,6 +311,7 @@ impl Patch {
 }
 
 impl ToVersion for Patch {
+    #[inline]
     fn to_version(&self) -> Option<Version> {
         match self {
             Patch::Preparation { version, .. } |

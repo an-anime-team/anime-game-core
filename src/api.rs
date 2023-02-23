@@ -1,6 +1,3 @@
-use std::string::FromUtf8Error;
-use std::sync::mpsc;
-
 use curl::easy::Easy;
 use serde::Deserialize;
 
@@ -10,16 +7,23 @@ pub struct Response {
 }
 
 impl<'a> Response {
+    #[inline]
     pub fn bytes(&self) -> &Vec<u8> {
         &self.data
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     /// Try to parse utf8 string from responded array of bytes
-    pub fn try_string(&self) -> Result<String, FromUtf8Error> {
+    pub fn try_string(&self) -> Result<String, std::string::FromUtf8Error> {
         String::from_utf8(self.data.clone())
     }
 
@@ -33,8 +37,10 @@ impl<'a> Response {
 #[cached::proc_macro::cached]
 #[tracing::instrument(level = "trace")]
 pub fn try_fetch(uri: &'static str) -> Result<Response, curl::Error> {
+    tracing::trace!("Fetching remote data");
+
     let mut curl = Easy::new();
-    let (sender, receiver) = mpsc::channel();
+    let (sender, receiver) = std::sync::mpsc::channel();
 
     curl.url(uri)?;
 

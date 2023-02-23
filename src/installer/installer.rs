@@ -45,8 +45,7 @@ pub struct Installer {
 }
 
 impl Installer {
-    #[tracing::instrument(level = "debug")]
-    pub fn new<T: ToString + std::fmt::Debug>(url: T) -> Result<Self, curl::Error> {
+    pub fn new<T: ToString>(url: T) -> Result<Self, curl::Error> {
         match Downloader::new(url.to_string()) {
             Ok(downloader) => Ok(Self {
                 downloader,
@@ -58,6 +57,7 @@ impl Installer {
     }
 
     /// Specify path to the temp folder used to store archive before unpacking
+    #[inline]
     pub fn set_temp_folder<T: Into<PathBuf>>(&mut self, path: T) {
         self.temp_folder = path.into();
     }
@@ -77,6 +77,7 @@ impl Installer {
         }
     }
 
+    #[inline]
     fn get_temp_path(&self) -> PathBuf {
         self.temp_folder.join(self.get_filename())
     }
@@ -88,6 +89,8 @@ impl Installer {
         T: Into<PathBuf> + std::fmt::Debug,
         F: Fn(Update) + Clone + Send + 'static
     {
+        tracing::trace!("Checking free space availability");
+
         let temp_path = self.get_temp_path();
         let unpack_to = unpack_to.into();
 
@@ -145,6 +148,8 @@ impl Installer {
             }
         }
 
+        tracing::trace!("Downloading archive");
+
         // Download archive
         let download_progress_updater = updater.clone();
 
@@ -177,6 +182,8 @@ impl Installer {
                                 std::fs::remove_file(&path);
                             }
                         }
+
+                        tracing::trace!("Extracting archive");
 
                         let unpacking_path = unpack_to.clone();
                         let unpacking_updater = updater.clone();

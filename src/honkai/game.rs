@@ -23,19 +23,24 @@ impl GameBasics for Game {
         }
     }
 
+    #[inline]
     fn path(&self) -> &PathBuf {
         &self.path
     }
 
     /// Try to get latest game version
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "trace", ret)]
     fn try_get_latest_version() -> anyhow::Result<Version> {
+        tracing::trace!("Trying to get latest game version");
+
         // I assume game's API can't return incorrect version format right? Right?
         Ok(Version::from_str(api::try_fetch_json()?.data.game.latest.version).unwrap())
     }
 
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     fn try_get_version(&self) -> anyhow::Result<Version> {
+        tracing::debug!("Trying to get installed game version");
+
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
             let mut num: u8 = 0;
         
@@ -93,14 +98,18 @@ impl GameBasics for Game {
             }
         }
 
+        tracing::error!("Version's bytes sequence wasn't found");
+
         Err(anyhow::anyhow!("Version's bytes sequence wasn't found"))
     }
 }
 
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
+        tracing::debug!("Trying to find version diff for the game");
+
         let latest = api::try_fetch_json()?.data.game.latest;
 
         if self.is_installed() {
@@ -109,10 +118,14 @@ impl TryGetDiff for Game {
             // Hon-kai doesn't have game predownloading feature for launcher,
             // and just makes players completely reinstall the game, as I know
             if latest.version == current {
+                tracing::debug!("Game version is latest");
+
                 Ok(VersionDiff::Latest(current))
             }
 
             else {
+                tracing::debug!("Game is outdated: {} -> {}", current, latest.version);
+
                 Ok(VersionDiff::Diff {
                     current,
                     latest: Version::from_str(latest.version).unwrap(),
@@ -126,6 +139,8 @@ impl TryGetDiff for Game {
         }
 
         else {
+            tracing::debug!("Game is not installed");
+
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
                 url: latest.path,

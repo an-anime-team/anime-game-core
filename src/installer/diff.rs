@@ -130,6 +130,7 @@ impl VersionDiff {
     /// Get currently installed game version
     /// 
     /// Returns `None` on `VersionDiff::NotInstalled`
+    #[inline]
     pub fn current(&self) -> Option<Version> {
         match self {
             Self::Latest(current) |
@@ -142,6 +143,7 @@ impl VersionDiff {
     }
 
     /// Get latest available game version
+    #[inline]
     pub fn latest(&self) -> Version {
         match self {
             Self::Latest(latest) |
@@ -153,6 +155,7 @@ impl VersionDiff {
     }
 
     /// Returns (download_size, unpacked_size) pair if it exists in current enum value
+    #[inline]
     pub fn size(&self) -> Option<(u64, u64)> {
         match self {
             // Can't be downloaded
@@ -167,6 +170,7 @@ impl VersionDiff {
     }
 
     /// Returns the path this difference should be installed to if it exists in current enum value
+    #[inline]
     pub fn unpacking_path(&self) -> Option<PathBuf> {
         match self {
             // Can't be downloaded
@@ -211,6 +215,8 @@ impl VersionDiff {
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
+        tracing::debug!("Downloading version difference");
+
         let url;
 
         match self {
@@ -228,7 +234,13 @@ impl VersionDiff {
 
         match downloader.download_to(folder.into().join(downloader.get_filename()), progress) {
             Ok(_) => Ok(()),
-            Err(err) => Err(err.into())
+            Err(err) => {
+                let io_err: std::io::Error = err.clone().into();
+
+                tracing::error!("Failed to download version difference: {io_err}");
+
+                Err(err.into())
+            }
         }
     }
 
@@ -241,6 +253,8 @@ impl VersionDiff {
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
+        tracing::debug!("Downloading version difference");
+
         let url;
 
         match self {
@@ -258,7 +272,13 @@ impl VersionDiff {
 
         match downloader.download_to(path, progress) {
             Ok(_) => Ok(()),
-            Err(err) => Err(err.into())
+            Err(err) => {
+                let io_err: std::io::Error = err.clone().into();
+
+                tracing::error!("Failed to download version difference: {io_err}");
+
+                Err(err.into())
+            }
         }
     }
 
@@ -268,7 +288,6 @@ impl VersionDiff {
     /// It's recommended to use `unpacking_path` before this method to be sure that current enum knows
     /// where the difference should be installed
     #[cfg(feature = "install")]
-    #[tracing::instrument(level = "debug", skip(updater))]
     pub fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
     where F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
@@ -291,7 +310,6 @@ impl VersionDiff {
 
     /// Try to install the difference by specified location
     #[cfg(feature = "install")]
-    #[tracing::instrument(level = "debug", skip(updater))]
     pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
@@ -319,6 +337,8 @@ impl VersionDiff {
         T: Into<PathBuf> + std::fmt::Debug,
         F: Fn(InstallerUpdate) + Clone + Send + 'static
     {
+        tracing::debug!("Installing version difference");
+
         let url;
         let download_size;
         let unpacked_size;
@@ -398,6 +418,8 @@ impl VersionDiff {
                     std::fs::write(version_path, new_version.version);
                 }
 
+                tracing::debug!("Applying hdiff patches");
+
                 // Apply hdiff patches
                 // We're ignoring Err because in practice it means that hdifffiles.txt is missing
                 if let Ok(files) = read_to_string(path.join("hdifffiles.txt")) {
@@ -411,40 +433,75 @@ impl VersionDiff {
 
                         // If failed to apply the patch
                         if let Err(err) = hpatchz::patch(&file, &patch, &output) {
+                            tracing::warn!("Failed to apply hdiff patch for {:?}: {err}", file);
+
                             #[cfg(feature = "genshin")]
                             {
+                                tracing::debug!("Trying to repair corrupted file");
+
                                 // If we were able to get API response - it shouldn't be impossible
                                 // to also get integrity files list from the same API
                                 match crate::genshin::repairer::try_get_integrity_file(relative_file, None) {
                                     Ok(Some(integrity)) => {
                                         if !integrity.fast_verify(&path) {
                                             if let Err(err) = integrity.repair(&path) {
+                                                let io_err: std::io::Error = err.clone().into();
+
+                                                tracing::error!("Failed to repair corrupted file: {io_err}");
+
                                                 return Err(err.into());
                                             }
                                         }
-                                    },
-                                    _ => return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                    }
+
+                                    Ok(None) => {
+                                        tracing::error!("Failed to repair corrupted file: not found");
+
+                                        return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                    }
+
+                                    Err(repair_fail) => {
+                                        tracing::error!("Failed to repair corrupted file: {repair_fail}");
+
+                                        return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                    }
                                 }
                             }
 
                             #[cfg(feature = "honkai")]
                             {
+                                tracing::debug!("Trying to replace corrupted file");
+
                                 // If we were able to get API response - it shouldn't be impossible
                                 // to also get integrity files list from the same API
                                 match crate::honkai::repairer::try_get_integrity_file(relative_file, None) {
                                     Ok(Some(integrity)) => {
                                         if !integrity.fast_verify(&path) {
                                             if let Err(err) = integrity.repair(&path) {
+                                                let io_err: std::io::Error = err.clone().into();
+
+                                                tracing::error!("Failed to repair corrupted file: {io_err}");
+
                                                 return Err(err.into());
                                             }
                                         }
-                                    },
-                                    _ => return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                    }
+
+                                    Ok(None) => {
+                                        tracing::error!("Failed to repair corrupted file: not found");
+
+                                        return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                    }
+
+                                    Err(repair_fail) => {
+                                        tracing::error!("Failed to repair corrupted file: {repair_fail}");
+
+                                        return Err(DiffDownloadError::HdiffPatch(err.to_string()))
+                                    }
                                 }
                             }
 
-                            #[allow(unused_must_use)]
-                            {
+                            #[allow(unused_must_use)] {
                                 remove_file(&patch);
                             }
                         }
@@ -462,6 +519,8 @@ impl VersionDiff {
                     remove_file(path.join("hdifffiles.txt"))
                         .expect("Failed to remove hdifffiles.txt");
                 }
+
+                tracing::debug!("Deleting outdated files");
 
                 // Remove outdated files
                 // We're ignoring Err because in practice it means that deletefiles.txt is missing

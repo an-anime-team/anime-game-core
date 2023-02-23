@@ -14,8 +14,10 @@ pub struct IntegrityFile {
 
 impl IntegrityFile {
     /// Compare files' sizes and (if needed) hashes
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "trace", ret)]
     pub fn verify<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> bool {
+        tracing::trace!("Verifying file");
+
         let file_path: PathBuf = game_path.into().join(&self.path);
 
         // Compare files' sizes. If they're different - they 100% different
@@ -26,6 +28,8 @@ impl IntegrityFile {
                 }
 
                 else {
+                    tracing::trace!("Comparing hashes");
+
                     // And if files' sizes are same we should compare their hashes
                     match std::fs::read(&file_path) {
                         Ok(hash) => format!("{:x}", md5::compute(hash)).to_lowercase() == self.md5.to_lowercase(),
@@ -38,8 +42,10 @@ impl IntegrityFile {
     }
 
     /// Compare files' sizes and do not compare files' hashes. Works lots faster than `verify`
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "trace", ret)]
     pub fn fast_verify<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> bool {
+        tracing::trace!("Verifying file");
+
         match std::fs::metadata(game_path.into().join(&self.path)) {
             Ok(metadata) => metadata.len() == self.size,
             Err(_) => false
@@ -49,8 +55,10 @@ impl IntegrityFile {
     /// Replace remote file with the latest one
     /// 
     /// This method doesn't compare them, so you should do it manually
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     pub fn repair<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> Result<(), DownloadingError> {
+        tracing::debug!("Repairing file");
+
         let mut downloader = Downloader::new(format!("{}/{}", self.base_url, self.path.to_string_lossy()))?;
 
         // Obviously re-download file entirely

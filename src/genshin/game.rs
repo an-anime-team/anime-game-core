@@ -24,19 +24,24 @@ impl GameBasics for Game {
         }
     }
 
+    #[inline]
     fn path(&self) -> &PathBuf {
         &self.path
     }
 
     /// Try to get latest game version
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "trace", ret)]
     fn try_get_latest_version() -> anyhow::Result<Version> {
+        tracing::trace!("Trying to get latest game version");
+
         // I assume game's API can't return incorrect version format right? Right?
         Ok(Version::from_str(api::try_fetch_json()?.data.game.latest.version).unwrap())
     }
 
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     fn try_get_version(&self) -> anyhow::Result<Version> {
+        tracing::debug!("Trying to get installed game version");
+
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
             let mut num: u8 = 0;
         
@@ -98,13 +103,14 @@ impl GameBasics for Game {
             }
         }
 
+        tracing::error!("Version's bytes sequence wasn't found");
+
         Err(anyhow::anyhow!("Version's bytes sequence wasn't found"))
     }
 }
 
 impl Game {
     /// Get list of installed voice packages
-    #[tracing::instrument(level = "debug")]
     pub fn get_voice_packages(&self) -> anyhow::Result<Vec<VoicePackage>> {
         let content = std::fs::read_dir(get_voice_packages_path(&self.path))?;
 
@@ -141,8 +147,10 @@ impl Game {
 
 #[cfg(feature = "install")]
 impl TryGetDiff for Game {
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
+        tracing::debug!("Trying to find version diff for the game");
+
         let response = api::try_fetch_json()?;
 
         if self.is_installed() {
@@ -167,6 +175,8 @@ impl TryGetDiff for Game {
             };
 
             if response.data.game.latest.version == current {
+                tracing::debug!("Game version is latest");
+
                 // If we're running latest game version the diff we need to download
                 // must always be `predownload.diffs[0]`, but just to be safe I made
                 // a loop through possible variants, and if none of them was correct
@@ -192,6 +202,8 @@ impl TryGetDiff for Game {
             }
 
             else {
+                tracing::debug!("Game is outdated: {} -> {}", current, response.data.game.latest.version);
+
                 for diff in response.data.game.diffs {
                     if diff.version == current {
                         return Ok(VersionDiff::Diff {
@@ -214,6 +226,8 @@ impl TryGetDiff for Game {
         }
 
         else {
+            tracing::debug!("Game is not installed");
+
             let latest = response.data.game.latest;
 
             Ok(VersionDiff::NotInstalled {

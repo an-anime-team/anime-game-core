@@ -17,9 +17,10 @@ impl Response {
     /// By successful it means that the status code is in range of 200-299
     /// 
     /// https://developer.mozilla.org/en-US/docs/Web/API/Response/ok
+    #[inline]
     pub fn is_ok(&self) -> bool {
         match self.status {
-            Some(code) => code >= 200 && code <= 299,
+            Some(code) => (200..=299).contains(&code),
             None => false
         }
     }
@@ -27,6 +28,8 @@ impl Response {
     /// Get body of this request
     #[tracing::instrument(level = "trace")]
     pub fn get_body(&mut self) -> Result<Vec<u8>, curl::Error> {
+        tracing::trace!("Fetching remote data body");
+
         self.curl.nobody(false)?;
 
         // TODO: downloading speed may be higher than disk writing speed, so
@@ -58,6 +61,8 @@ impl Response {
 /// Try to fetch remote data
 #[tracing::instrument(level = "trace")]
 pub fn fetch<T: ToString + std::fmt::Debug>(url: T, timeout: Option<Duration>) -> Result<Response, curl::Error> {
+    tracing::trace!("Fetching remote data header");
+
     let mut curl = Easy::new();
 
     curl.url(&url.to_string())?;
@@ -86,7 +91,7 @@ pub fn fetch<T: ToString + std::fmt::Debug>(url: T, timeout: Option<Duration>) -
         header.push(data.clone());
 
         if data.len() > 9 && &data[..5] == "HTTP/" {
-            let code = data.split(" ").collect::<Vec<&str>>()[1];
+            let code = data.split(' ').collect::<Vec<&str>>()[1];
 
             status = Some(code.parse::<u16>().unwrap());
         }

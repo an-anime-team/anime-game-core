@@ -135,6 +135,7 @@ impl VoicePackage {
     /// This method will return `false` if this package is `VoicePackage::NotInstalled` enum value
     /// 
     /// If you want to check it's actually installed - you'd need to use `is_installed_in`
+    #[inline]
     pub fn is_installed(&self) -> bool {
         match self {
             Self::Installed { .. } => true,
@@ -187,18 +188,21 @@ impl VoicePackage {
     }
 
     /// Get voice package locale
+    #[inline]
     pub fn locale(&self) -> VoiceLocale {
         match self {
-            Self::Installed { path: _, locale } => *locale,
-            Self::NotInstalled { locale, version: _, data: _, game_path: _ } => *locale
+            Self::Installed { locale, .. } |
+            Self::NotInstalled { locale, .. } => *locale
         }
     }
 
     /// This method can fail to parse this package version.
     /// It also can mean that the corresponding folder doesn't
     /// contain voice package files
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     pub fn try_get_version(&self) -> anyhow::Result<Version> {
+        tracing::debug!("Trying to get {} voice package version", self.locale().to_code());
+
         match &self {
             Self::NotInstalled { locale: _, version, data: _, game_path: _} => Ok(*version),
             Self::Installed { path, locale } => {
@@ -206,12 +210,18 @@ impl VoicePackage {
                 let response = api::try_fetch_json()?;
 
                 match std::fs::read(path.join(".version")) {
-                    Ok(curr) => Ok(Version::new(curr[0], curr[1], curr[2])),
+                    Ok(curr) => {
+                        tracing::debug!("Found .version file: {}.{}.{}", curr[0], curr[1], curr[2]);
+
+                        Ok(Version::new(curr[0], curr[1], curr[2]))
+                    },
 
                     // We don't create .version file here because we don't
                     // actually know current version and just predict it
                     // This file will be properly created in the install method
                     Err(_) => {
+                        tracing::debug!(".version file wasn't found. Predict version. Package size: {package_size}");
+
                         let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
 
                         // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
@@ -227,6 +237,8 @@ impl VoicePackage {
                         // plus predicted voice packages sizes if needed. The version with closest folder size is version we have installed
                         for (version, size) in voice_packages_sizes {
                             if package_size > size - 512 * 1024 * 1024 {
+                                tracing::debug!("Predicted version: {version}");
+
                                 return Ok(Version::from_str(version).unwrap());
                             }
                         }
@@ -243,8 +255,10 @@ impl VoicePackage {
     /// 
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "trace", ret)]
     pub fn delete(&self) -> anyhow::Result<()> {
+        tracing::trace!("Deleting {} voice package", self.locale().to_code());
+
         match self {
             VoicePackage::Installed { path, .. } => {
                 let mut game_path = path.clone();
@@ -252,7 +266,11 @@ impl VoicePackage {
                 for _ in 0..6 {
                     game_path = match game_path.parent() {
                         Some(game_path) => game_path.into(),
-                        None => return Err(anyhow::anyhow!("Failed to find game directory"))
+                        None => {
+                            tracing::error!("Failed to find game directory");
+
+                            return Err(anyhow::anyhow!("Failed to find game directory"))
+                        }
                     };
                 }
 
@@ -262,7 +280,11 @@ impl VoicePackage {
             VoicePackage::NotInstalled { game_path, .. } => {
                 match game_path {
                     Some(game_path) => self.delete_in(game_path),
-                    None => return Err(anyhow::anyhow!("Failed to find game directory"))
+                    None => {
+                        tracing::error!("Failed to find game directory");
+
+                        return Err(anyhow::anyhow!("Failed to find game directory"))
+                    }
                 }
             }
         }
@@ -272,8 +294,10 @@ impl VoicePackage {
     /// 
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     pub fn delete_in<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> anyhow::Result<()> {
+        tracing::debug!("Deleting {} voice package", self.locale().to_code());
+
         let locale = match self {
             VoicePackage::Installed { locale, .. } |
             VoicePackage::NotInstalled { locale, .. } => locale
@@ -291,14 +315,18 @@ impl VoicePackage {
 
 #[cfg(feature = "install")]
 impl TryGetDiff for VoicePackage {
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
+        tracing::debug!("Trying to find version diff for {} voice package", self.locale().to_code());
+
         let response = api::try_fetch_json()?;
 
         if self.is_installed() {
             let current = self.try_get_version()?;
 
             if response.data.game.latest.version == current {
+                tracing::debug!("Package version is latest");
+
                 // If we're running latest game version the diff we need to download
                 // must always be `predownload.diffs[0]`, but just to be safe I made
                 // a loop through possible variants, and if none of them was correct
@@ -339,6 +367,8 @@ impl TryGetDiff for VoicePackage {
             }
 
             else {
+                tracing::debug!("Package is outdated: {} -> {}", current, response.data.game.latest.version);
+
                 for diff in response.data.game.diffs {
                     if diff.version == current {
                         let diff = find_voice_pack(diff.voice_packs, self.locale());
@@ -376,6 +406,8 @@ impl TryGetDiff for VoicePackage {
         }
         
         else {
+            tracing::debug!("Package is not installed");
+
             let latest = find_voice_pack(response.data.game.latest.voice_packs, self.locale());
 
             Ok(VersionDiff::NotInstalled {

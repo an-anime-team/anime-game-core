@@ -6,6 +6,7 @@ pub struct Version {
 }
 
 impl Version {
+    #[inline]
     pub fn new(a: u8, b: u8, c: u8) -> Version {
         Version {
             version: [a, b, c]
@@ -19,6 +20,7 @@ impl Version {
     /// 
     /// let version = Version::from_str("1.10.2").expect("Failed to parse version string");
     /// ```
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str<T: ToString>(str: T) -> Option<Version> {
         let str = str.to_string();
         let parts = str.split('.').collect::<Vec<&str>>();
@@ -38,17 +40,6 @@ impl Version {
         else {
             None
         }
-    }
-
-    /// Converts `Version` struct to readable format (e.g. "1.2.3")
-    /// 
-    /// ```
-    /// use anime_game_core::prelude::Version;
-    /// 
-    /// assert_eq!(Version::new(1, 2, 3).to_string(), "1.2.3");
-    /// ```
-    pub fn to_string(&self) -> String {
-        format!("{}.{}.{}", self.version[0], self.version[1], self.version[2])
     }
 
     /// Converts `Version` struct to plain format (e.g. "123")
@@ -76,24 +67,28 @@ impl fmt::Display for Version {
 }
 
 impl PartialEq<String> for Version {
+    #[inline]
     fn eq(&self, other: &String) -> bool {
         &self.to_string() == other
     }
 }
 
 impl PartialEq<Version> for String {
+    #[inline]
     fn eq(&self, other: &Version) -> bool {
         self == &other.to_string()
     }
 }
 
 impl PartialEq<&str> for Version {
+    #[inline]
     fn eq(&self, other: &&str) -> bool {
         &self.to_string() == other
     }
 }
 
 impl PartialEq<Version> for &str {
+    #[inline]
     fn eq(&self, other: &Version) -> bool {
         self == &other.to_string()
     }
@@ -104,6 +99,7 @@ pub trait ToVersion {
 }
 
 impl<T> ToVersion for T where T: ToString {
+    #[inline]
     fn to_version(&self) -> Option<Version> {
         Version::from_str(self.to_string())
     }

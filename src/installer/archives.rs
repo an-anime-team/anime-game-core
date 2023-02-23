@@ -46,8 +46,7 @@ pub enum Archive {
 }
 
 impl Archive {
-    #[tracing::instrument(level = "debug")]
-    pub fn open<T: Into<PathBuf> + std::fmt::Debug>(path: T) -> anyhow::Result<Self> {
+    pub fn open<T: Into<PathBuf>>(path: T) -> anyhow::Result<Self> {
         let path: PathBuf = path.into();
         let file = File::open(&path)?;
 
@@ -83,7 +82,6 @@ impl Archive {
     }
 
     /// Tar archives may forbid you to extract them if you call this method
-    #[tracing::instrument(level = "debug", skip(self))]
     pub fn get_entries(&mut self) -> Vec<Entry> {
         let mut entries = Vec::new();
 
@@ -205,6 +203,8 @@ impl Archive {
 
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn extract<T: Into<PathBuf> + std::fmt::Debug>(&mut self, folder: T) -> anyhow::Result<()> {
+        tracing::trace!("Extracting archive");
+
         match self {
             Archive::Zip(_, zip) => {
                 zip.extract(folder.into())?;

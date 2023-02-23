@@ -14,6 +14,7 @@ pub struct PatchApplier {
 // TODO: rewrite to use git2 library
 
 impl PatchApplier {
+    #[inline]
     pub fn new<T: Into<PathBuf>>(folder: T) -> Self {
         Self {
             folder: folder.into()
@@ -23,8 +24,10 @@ impl PatchApplier {
     /// Verify that the folder contains latest patch
     /// 
     /// To check only specific remote use `is_sync_with`
-    #[tracing::instrument(level = "trace")]
+    #[tracing::instrument(level = "trace", ret)]
     pub fn is_sync<T: IntoIterator<Item = F> + std::fmt::Debug, F: ToString + std::fmt::Debug>(&self, remotes: T) -> Result<bool, Error> {
+        tracing::trace!("Checking local patch repository sync state");
+
         if !self.folder.exists() {
             return Ok(false)
         }
@@ -67,8 +70,10 @@ impl PatchApplier {
     }
 
     /// Verify that the folder contains latest patch
-    #[tracing::instrument(level = "trace")]
+    #[tracing::instrument(level = "trace", ret)]
     pub fn is_sync_with<T: ToString + std::fmt::Debug>(&self, remote: T) -> Result<bool, Error> {
+        tracing::trace!("Checking local patch repository sync state");
+
         if !self.folder.exists() {
             return Ok(false)
         }
@@ -113,8 +118,10 @@ impl PatchApplier {
     }
 
     /// Fetch patch updates from the git repository
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "debug", ret)]
     pub fn sync<T: ToString + std::fmt::Debug>(&self, remote: T) -> Result<bool, Error> {
+        tracing::debug!("Syncing local patch repository with remote");
+
         if self.folder.exists() {
             Command::new("git")
                 .arg("remote")
@@ -159,6 +166,7 @@ impl PatchApplier {
         }
     }
 
+    #[inline]
     fn get_temp_path(&self) -> PathBuf {
         temp_dir().join(".patch-applying")
     }
@@ -170,8 +178,14 @@ impl PatchApplier {
     /// 
     /// It's recommended to run this method with `use_root = true` to append telemetry entries to the hosts file.
     /// The patch script will be run with `pkexec` and this ask for root password
-    #[tracing::instrument(level = "debug")]
-    pub fn apply<T: Into<PathBuf> + std::fmt::Debug, F: ToVersion + std::fmt::Debug>(&self, game_path: T, patch_version: F, use_root: bool) -> anyhow::Result<()> {
+    #[tracing::instrument(level = "debug", ret)]
+    pub fn apply<T, F>(&self, game_path: T, patch_version: F, use_root: bool) -> anyhow::Result<()>
+    where
+        T: Into<PathBuf> + std::fmt::Debug,
+        F: ToVersion + std::fmt::Debug
+    {
+        tracing::debug!("Applying game patch");
+
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -179,6 +193,8 @@ impl PatchApplier {
 
                 // Verify that the patch folder exists (it can not be synced)
                 if !patch_folder.exists() {
+                    tracing::error!("Corresponding patch folder doesn't exist: {:?}", patch_folder);
+
                     return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {:?}", patch_folder));
                 }
 
@@ -196,6 +212,8 @@ impl PatchApplier {
                 options.content_only = true; // Don't copy e.g. "270" folder, just its content
 
                 if let Err(err) = fs_extra::dir::copy(patch_folder, &temp_dir, &options) {
+                    tracing::error!("Failed to copy patch to the temp folder: {err}");
+
                     return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {err}"));
                 }
 
@@ -246,15 +264,23 @@ impl PatchApplier {
                 fs::remove_dir_all(temp_dir)?;
 
                 // Return patching status
-                if String::from_utf8_lossy(&output.stdout).contains("Patch applied!") {
+                let output = String::from_utf8_lossy(&output.stdout);
+
+                if output.contains("Patch applied!") {
                     Ok(())
                 }
 
                 else {
-                    Err(Error::new(ErrorKind::Other, String::from_utf8_lossy(&output.stdout)).into())
+                    tracing::error!("Failed to apply patch: {output}");
+
+                    Err(Error::new(ErrorKind::Other, output).into())
                 }
             },
-            None => Err(anyhow::anyhow!("Failed to get patch version"))
+            None => {
+                tracing::error!("Failed to get patch version");
+
+                Err(anyhow::anyhow!("Failed to get patch version"))
+            }
         }
     }
 
@@ -262,8 +288,14 @@ impl PatchApplier {
     /// 
     /// This method doesn't verify the state of the locally installed patch.
     /// You should do it manually using `is_sync` method
-    #[tracing::instrument(level = "debug")]
-    pub fn revert<T: Into<PathBuf> + std::fmt::Debug, F: ToVersion + std::fmt::Debug>(&self, game_path: T, patch_version: F, force: bool) -> anyhow::Result<bool> {
+    #[tracing::instrument(level = "debug", ret)]
+    pub fn revert<T, F>(&self, game_path: T, patch_version: F, force: bool) -> anyhow::Result<bool>
+    where
+        T: Into<PathBuf> + std::fmt::Debug,
+        F: ToVersion + std::fmt::Debug
+    {
+        tracing::debug!("Reverting game patch");
+
         match patch_version.to_version() {
             Some(version) => {
                 let temp_dir = self.get_temp_path();
@@ -271,6 +303,8 @@ impl PatchApplier {
 
                 // Verify that the patch folder exists (it can not be synced)
                 if !patch_folder.exists() {
+                    tracing::error!("Corresponding patch folder doesn't exist: {:?}", patch_folder);
+
                     return Err(anyhow::anyhow!("Corresponding patch folder doesn't exist: {:?}", patch_folder));
                 }
 
@@ -283,6 +317,8 @@ impl PatchApplier {
                 options.content_only = true; // Don't copy e.g. "270" folder, just its content
 
                 if let Err(err) = fs_extra::dir::copy(patch_folder, &temp_dir, &options) {
+                    tracing::error!("Failed to copy patch to the temp folder: {err}");
+
                     return Err(anyhow::anyhow!("Failed to copy patch to the temp folder: {err}"));
                 }
 
@@ -312,7 +348,11 @@ impl PatchApplier {
                 // Return patching status
                 Ok(!String::from_utf8_lossy(&output.stdout).contains("ERROR: "))
             },
-            None => Err(anyhow::anyhow!("Failed to get patch version"))
+            None => {
+                tracing::error!("Failed to get patch version");
+
+                Err(anyhow::anyhow!("Failed to get patch version"))
+            }
         }
     }
 }

@@ -28,6 +28,7 @@ pub static mut TELEMETRY_SERVERS: &[&str] = &[
     concat!("overseauspider.", "yu", "ans", "hen", ".com")
 ];
 
+#[inline]
 pub fn get_api_uri(edition: GameEdition) -> &'static str {
     match edition {
         GameEdition::Global => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10"),
@@ -35,6 +36,7 @@ pub fn get_api_uri(edition: GameEdition) -> &'static str {
     }
 }
 
+#[inline]
 pub fn get_data_folder_name(edition: GameEdition) -> &'static str {
     match edition {
         GameEdition::Global => concat!("Ge", "nsh", "inIm", "pact_Data"),
@@ -43,6 +45,7 @@ pub fn get_data_folder_name(edition: GameEdition) -> &'static str {
 }
 
 #[cfg(feature = "telemetry")]
+#[inline]
 pub fn get_telemetry_servers(edition: GameEdition) -> &'static [&'static str] {
     match edition {
         GameEdition::Global => &[
@@ -76,17 +79,20 @@ pub trait ToFolder {
 }
 
 impl<T: ToString> ToFolder for T {
+    #[inline]
     fn to_folder(&self) -> String {
         self.to_string()
     }
 }
 
 impl ToFolder for VoiceLocale {
+    #[inline]
     fn to_folder(&self) -> String {
         self.to_folder().to_string()
     }
 }
 
+#[inline]
 pub fn get_voice_packages_path<T: Into<PathBuf>>(game_path: T) -> PathBuf {
     game_path
         .into()
@@ -94,6 +100,7 @@ pub fn get_voice_packages_path<T: Into<PathBuf>>(game_path: T) -> PathBuf {
         .join("StreamingAssets/Audio/GeneratedSoundBanks/Windows")
 }
 
+#[inline]
 pub fn get_voice_package_path<T: Into<PathBuf>, F: ToFolder>(game_path: T, locale: F) -> PathBuf {
     get_voice_packages_path(game_path).join(locale.to_folder())
 }

@@ -6,6 +6,8 @@ use std::path::PathBuf;
 /// Try to apply hdiff patch
 #[tracing::instrument(level = "debug")]
 pub fn patch<T: Into<PathBuf> + std::fmt::Debug>(file: T, patch: T, output: T) -> std::io::Result<()> {
+    tracing::debug!("Applying hdiff patch");
+
     let hpatchz = super::STORAGE.map("hpatchz")?;
 
     // Allow to execute this binary
@@ -23,6 +25,10 @@ pub fn patch<T: Into<PathBuf> + std::fmt::Debug>(file: T, patch: T, output: T) -
     }
 
     else {
-        Err(Error::new(ErrorKind::Other, format!("Failed to apply hdiff patch: {}", String::from_utf8_lossy(&output.stderr))))
+        let err = String::from_utf8_lossy(&output.stderr);
+
+        tracing::error!("Failed to apply hdiff patch: {err}");
+
+        Err(Error::new(ErrorKind::Other, format!("Failed to apply hdiff patch: {err}")))
     }
 }

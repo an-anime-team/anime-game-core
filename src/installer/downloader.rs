@@ -48,6 +48,8 @@ impl From<curl::Error> for DownloadingError {
     }
 }
 
+/// TODO: use some crate to replace this
+
 impl Into<std::io::Error> for DownloadingError {
     fn into(self) -> std::io::Error {
         std::io::Error::new(std::io::ErrorKind::Other, match self {
@@ -84,8 +86,7 @@ impl Downloader {
     /// Try to open downloading stream
     /// 
     /// Will return `Error` if the URL is not valid
-    #[tracing::instrument(level = "trace")]
-    pub fn new<T: ToString + std::fmt::Debug>(uri: T) -> Result<Self, curl::Error> {
+    pub fn new<T: ToString>(uri: T) -> Result<Self, curl::Error> {
         let mut curl = Easy::new();
 
         curl.url(&uri.to_string())?;
@@ -159,16 +160,19 @@ impl Downloader {
     }
 
     /// Get content length
+    #[inline]
     pub fn length(&self) -> Option<u64> {
         self.length
     }
 
     /// Set downloading chunk size
+    #[inline]
     pub fn set_downloading_chunk(&mut self, size: usize) {
         self.downloading_chunk = size;
     }
 
     /// Set downloading speed limit, bytes per second
+    #[inline]
     pub fn set_downloading_speed(&mut self, speed: u64) -> Result<(), curl::Error> {
         Ok(self.curl.max_recv_speed(speed)?)
     }
@@ -188,7 +192,7 @@ impl Downloader {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(downloader, progress))]
+    #[tracing::instrument(level = "debug", skip(downloader, progress), ret)]
     pub fn download<Fd, Fp>(&mut self, mut downloader: Fd, progress: Fp) -> Result<(), DownloadingError>
     where
         // array of bytes
@@ -224,19 +228,27 @@ impl Downloader {
             true
         })?;
 
+        tracing::debug!("Starting downloading");
+
         match self.curl.perform() {
             Ok(_) => Ok(()),
-            Err(err) => Err(DownloadingError::Curl(err.to_string()))
+            Err(err) => {
+                tracing::warn!("Downloading failed: {err}");
+
+                Err(DownloadingError::Curl(err.to_string()))
+            }
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(progress))]
+    #[tracing::instrument(level = "debug", skip(progress), ret)]
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DownloadingError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
         // (curr, total)
         Fp: Fn(u64, u64) + Send + 'static
     {
+        tracing::debug!("Checking free space availability");
+
         let path: PathBuf = path.into();
 
         // Check available free space
@@ -261,6 +273,8 @@ impl Downloader {
 
         // Open or create output file
         let file = if path.exists() && self.continue_downloading {
+            tracing::debug!("Opening output file");
+
             let mut file = std::fs::OpenOptions::new().read(true).write(true).open(&path);
 
             // Continue downloading if the file exists and can be opened
@@ -283,6 +297,8 @@ impl Downloader {
 
             file
         } else {
+            tracing::debug!("Creating output file");
+
             let base_folder = path.parent().unwrap();
 
             #[allow(unused_must_use)]

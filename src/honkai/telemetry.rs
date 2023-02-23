@@ -17,10 +17,14 @@ use super::consts::TELEMETRY_SERVERS;
 /// ```
 #[tracing::instrument(level = "debug")]
 pub fn is_disabled(timeout: Option<Duration>) -> Option<String> {
+    tracing::debug!("Checking telemetry servers status");
+
     let servers = unsafe { TELEMETRY_SERVERS };
 
     for server in servers {
         if let Ok(_) = fetch(server, timeout) {
+            tracing::warn!("Server is not disabled: {server}");
+
             return Some(server.to_string());
         }
     }
