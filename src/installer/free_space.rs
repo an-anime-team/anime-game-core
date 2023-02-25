@@ -8,7 +8,10 @@ use sysinfo::{System, SystemExt, DiskExt};
 /// 
 /// Can return `None` if path is not prefixed by any available disk
 pub fn available<T: Into<PathBuf>>(path: T) -> Option<u64> {
-    let mut system = System::new_all();
+    let mut system = System::new();
+
+    system.refresh_disks_list();
+    system.refresh_disks();
 
     system.sort_disks_by(|a, b| {
         let a = a.mount_point().as_os_str().len();
@@ -30,7 +33,10 @@ pub fn available<T: Into<PathBuf>>(path: T) -> Option<u64> {
 
 /// Check if two paths exist on the same disk
 pub fn is_same_disk<T: Into<PathBuf>>(path1: T, path2: T) -> bool {
-    let mut system = System::new_all();
+    let mut system = System::new();
+
+    system.refresh_disks_list();
+    system.refresh_disks();
 
     system.sort_disks_by(|a, b| {
         let a = a.mount_point().as_os_str().len();
