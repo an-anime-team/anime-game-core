@@ -1,3 +1,5 @@
+use md5::{Md5, Digest};
+
 use std::collections::HashMap;
 use std::time::Duration;
 use std::path::PathBuf;
@@ -297,7 +299,7 @@ impl Patch {
     /// This method will return `Ok(false)` if the patch is not available, outdated or in preparation state
     pub fn is_applied<T: Into<PathBuf>>(&self, game_path: T) -> Result<bool, std::io::Error> {
         let dll = std::fs::read(game_path.into().join("UnityPlayer.dll"))?;
-        let hash = format!("{:x}", md5::compute(dll));
+        let hash = format!("{:x}", Md5::digest(dll));
 
         match self {
             Patch::NotAvailable => Ok(false),

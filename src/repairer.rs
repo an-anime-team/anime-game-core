@@ -1,3 +1,5 @@
+use md5::{Md5, Digest};
+
 use std::path::PathBuf;
 use std::collections::HashSet;
 
@@ -32,7 +34,7 @@ impl IntegrityFile {
 
                     // And if files' sizes are same we should compare their hashes
                     match std::fs::read(&file_path) {
-                        Ok(hash) => format!("{:x}", md5::compute(hash)).to_lowercase() == self.md5.to_lowercase(),
+                        Ok(hash) => format!("{:x}", Md5::digest(hash)).to_lowercase() == self.md5.to_lowercase(),
                         Err(_) => false
                     }
                 }
