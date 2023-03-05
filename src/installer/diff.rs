@@ -1,6 +1,8 @@
 use std::fs::{read_to_string, remove_file};
 use std::path::PathBuf;
 
+use thiserror::Error;
+
 use crate::version::Version;
 
 #[cfg(feature = "install")]
@@ -16,19 +18,23 @@ use crate::{
     external::hpatchz
 };
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DiffDownloadError {
     /// Your installation is already up to date and not needed to be updated
+    #[error("Component version is already latest")]
     AlreadyLatest,
 
     /// Current version is too outdated and can't be updated.
     /// It means that you have to download everything from zero
+    #[error("Components version is too outdated and can't be updated")]
     Outdated,
 
     /// Failed to fetch remove data. Redirected from `Downloader`
-    DownloadingError(DownloadingError),
+    #[error("{0}")]
+    DownloadingError(#[from] DownloadingError),
 
-    // Failed to apply hdiff patch
+    /// Failed to apply hdiff patch
+    #[error("Failed to apply hdiff patch: {0}")]
     HdiffPatch(String),
 
     /// Installation path wasn't specified. This could happen when you
@@ -36,31 +42,13 @@ pub enum DiffDownloadError {
     /// in `VoicePackage::list_latest`. This method couldn't know
     /// your game installation path and thus indicates that it doesn't know
     /// where this package needs to be installed
+    #[error("Path to the component's downloading folder is not specified")]
     PathNotSpecified
-}
-
-impl From<DownloadingError> for DiffDownloadError {
-    fn from(err: DownloadingError) -> Self {
-        Self::DownloadingError(err)
-    }
 }
 
 impl From<curl::Error> for DiffDownloadError {
     fn from(err: curl::Error) -> Self {
         Self::DownloadingError(err.into())
-    }
-}
-
-impl Into<std::io::Error> for DiffDownloadError {
-    fn into(self) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, match self {
-            Self::DownloadingError(err) => return err.into(),
-
-            Self::AlreadyLatest => "Component version is already latest".to_string(),
-            Self::Outdated => "Components version is too outdated and can't be updated".to_string(),
-            Self::HdiffPatch(err) => format!("Failed to apply hdiff patch: {err}"),
-            Self::PathNotSpecified => "Path to the component's downloading folder is not specified".to_string()
-        })
     }
 }
 
@@ -235,9 +223,7 @@ impl VersionDiff {
         match downloader.download_to(folder.into().join(downloader.get_filename()), progress) {
             Ok(_) => Ok(()),
             Err(err) => {
-                let io_err: std::io::Error = err.clone().into();
-
-                tracing::error!("Failed to download version difference: {io_err}");
+                tracing::error!("Failed to download version difference: {err}");
 
                 Err(err.into())
             }
@@ -273,9 +259,7 @@ impl VersionDiff {
         match downloader.download_to(path, progress) {
             Ok(_) => Ok(()),
             Err(err) => {
-                let io_err: std::io::Error = err.clone().into();
-
-                tracing::error!("Failed to download version difference: {io_err}");
+                tracing::error!("Failed to download version difference: {err}");
 
                 Err(err.into())
             }
@@ -445,9 +429,7 @@ impl VersionDiff {
                                     Ok(Some(integrity)) => {
                                         if !integrity.fast_verify(&path) {
                                             if let Err(err) = integrity.repair(&path) {
-                                                let io_err: std::io::Error = err.clone().into();
-
-                                                tracing::error!("Failed to repair corrupted file: {io_err}");
+                                                tracing::error!("Failed to repair corrupted file: {err}");
 
                                                 return Err(err.into());
                                             }

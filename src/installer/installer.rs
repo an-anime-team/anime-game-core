@@ -6,7 +6,7 @@ use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
 use super::free_space;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Update {
     CheckingFreeSpace(PathBuf),
 
@@ -66,15 +66,15 @@ impl Installer {
     /// 
     /// - `https://example.com/example.zip` -> `example.zip`
     /// - `https://example.com` -> `index.html`
+    #[inline]
     pub fn get_filename(&self) -> &str {
-        match self.url.rfind('/') {
-            Some(index) => {
-                let file = &self.url[index + 1..];
-
-                if file == "" { "index.html" } else { file }
-            },
-            None => "index.html"
-        }
+        self.url.replace('\\', "/")
+            .split('/')
+            .last()
+            .unwrap_or("index.html")
+            .is_empty()
+            .then(|| "index.html")
+            .unwrap_or("index.html")
     }
 
     #[inline]

@@ -25,8 +25,8 @@ impl GameBasics for Game {
     }
 
     #[inline]
-    fn path(&self) -> &PathBuf {
-        &self.path
+    fn path(&self) -> &Path {
+        self.path.as_path()
     }
 
     /// Try to get latest game version
@@ -130,7 +130,7 @@ impl Game {
     /// 
     /// Will return `None` if the game is not installed
     pub fn get_edition(&self) -> Option<GameEdition> {
-        if !Path::new(&self.path).exists() {
+        if !self.path.exists() {
             return None;
         }
 

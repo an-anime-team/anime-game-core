@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::fs::File;
 
 use curl::easy::Easy;
+use thiserror::Error;
 
 use super::free_space;
 
@@ -14,21 +15,24 @@ pub const DEFAULT_DOWNLOADING_CHUNK: usize = 1024 * 1024;
 /// before calling progress function
 pub const DEFAULT_DOWNLOADING_UPDATES_FREQUENCE: usize = 4000;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DownloadingError {
     /// Specified downloading path is not available in system
     /// 
     /// `(path)`
+    #[error("Path is not mounted: {0:?}")]
     PathNotMounted(PathBuf),
 
     /// No free space available under specified path
     /// 
     /// `(path, required, available)`
+    #[error("No free space availale for specified path: {0:?} (requires {1}, available {2})")] // TODO: convert bytes into prettified strings
     NoSpaceAvailable(PathBuf, u64, u64),
 
     /// Failed to create or open output file
     /// 
     /// `(path, error message)`
+    #[error("Failed to create output file {0:?}: {1}")]
     OutputFileError(PathBuf, String),
 
     /// Couldn't get metadata of existing output file
@@ -36,29 +40,17 @@ pub enum DownloadingError {
     /// This metadata supposed to be used to continue downloading of the file
     /// 
     /// `(path, error message)`
+    #[error("Failed to read metadata of the output file {0:?}: {1}")]
     OutputFileMetadataError(PathBuf, String),
 
     /// Curl downloading error
+    #[error("Curl error: {0}")]
     Curl(String)
 }
 
 impl From<curl::Error> for DownloadingError {
     fn from(err: curl::Error) -> Self {
         Self::Curl(err.to_string())
-    }
-}
-
-/// TODO: use some crate to replace this
-
-impl Into<std::io::Error> for DownloadingError {
-    fn into(self) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, match self {
-            Self::PathNotMounted(path) => format!("Path is not mounted: {:?}", path),
-            Self::NoSpaceAvailable(path, required, available) => format!("No free space availale for specified path: {:?} (requires {required}, available {available})", path),
-            Self::OutputFileError(path, err) => format!("Failed to create output file {:?}: {err}", path),
-            Self::OutputFileMetadataError(path, err) => format!("Failed to read metadata of the output file {:?}: {err}", path),
-            Self::Curl(curl) => format!("Curl error: {curl}")
-        })
     }
 }
 

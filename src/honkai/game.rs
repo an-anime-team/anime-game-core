@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::version::Version;
 use crate::traits::game::GameBasics;
@@ -24,8 +24,8 @@ impl GameBasics for Game {
     }
 
     #[inline]
-    fn path(&self) -> &PathBuf {
-        &self.path
+    fn path(&self) -> &Path {
+        self.path.as_path()
     }
 
     /// Try to get latest game version

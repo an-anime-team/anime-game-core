@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::version::Version;
 
 pub trait GameBasics {
     fn new<T: Into<PathBuf>>(path: T) -> Self;
-    fn path(&self) -> &PathBuf;
+    fn path(&self) -> &Path;
 
     /// Checks if the game is installed
     fn is_installed(&self) -> bool {
