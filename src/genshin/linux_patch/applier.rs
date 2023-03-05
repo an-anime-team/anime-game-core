@@ -1,168 +1,28 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::io::{Error, ErrorKind, Write};
 use std::fs;
 use std::env::temp_dir;
 
 use crate::version::ToVersion;
+use crate::traits::git_sync::RemoteGitSync;
 
 #[derive(Debug, Clone)]
 pub struct PatchApplier {
     folder: PathBuf
 }
 
-// TODO: rewrite to use git2 library
+impl RemoteGitSync for PatchApplier {
+    fn folder(&self) -> &Path {
+        self.folder.as_path()
+    }
+}
 
 impl PatchApplier {
     #[inline]
     pub fn new<T: Into<PathBuf>>(folder: T) -> Self {
         Self {
             folder: folder.into()
-        }
-    }
-
-    /// Verify that the folder contains latest patch
-    /// 
-    /// To check only specific remote use `is_sync_with`
-    #[tracing::instrument(level = "trace", ret)]
-    pub fn is_sync<T: IntoIterator<Item = F> + std::fmt::Debug, F: ToString + std::fmt::Debug>(&self, remotes: T) -> Result<bool, Error> {
-        tracing::trace!("Checking local patch repository sync state");
-
-        if !self.folder.exists() {
-            return Ok(false)
-        }
-
-        // FIXME: git ref-parse doesn't check removed files
-
-        let head = Command::new("git")
-            .arg("rev-parse")
-            .arg("HEAD")
-            .current_dir(&self.folder)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .output()?;
-
-        for remote in remotes {
-            Command::new("git")
-                .arg("remote")
-                .arg("set-url")
-                .arg("origin")
-                .arg(remote.to_string())
-                .current_dir(&self.folder)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output()?;
-
-            let remote = Command::new("git")
-                .arg("rev-parse")
-                .arg("origin/HEAD")
-                .current_dir(&self.folder)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .output()?;
-
-            if head.stdout == remote.stdout {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
-    }
-
-    /// Verify that the folder contains latest patch
-    #[tracing::instrument(level = "trace", ret)]
-    pub fn is_sync_with<T: ToString + std::fmt::Debug>(&self, remote: T) -> Result<bool, Error> {
-        tracing::trace!("Checking local patch repository sync state");
-
-        if !self.folder.exists() {
-            return Ok(false)
-        }
-
-        // FIXME: git ref-parse doesn't check removed files
-
-        let head = Command::new("git")
-            .arg("rev-parse")
-            .arg("HEAD")
-            .current_dir(&self.folder)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .output()?;
-
-        Command::new("git")
-            .arg("remote")
-            .arg("set-url")
-            .arg("origin")
-            .arg(remote.to_string())
-            .current_dir(&self.folder)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .output()?;
-
-        Command::new("git")
-            .arg("fetch")
-            .arg("origin")
-            .current_dir(&self.folder)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .output()?;
-
-        let remote = Command::new("git")
-            .arg("rev-parse")
-            .arg("origin/HEAD")
-            .current_dir(&self.folder)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .output()?;
-
-        Ok(head.stdout == remote.stdout)
-    }
-
-    /// Fetch patch updates from the git repository
-    #[tracing::instrument(level = "debug", ret)]
-    pub fn sync<T: ToString + std::fmt::Debug>(&self, remote: T) -> Result<bool, Error> {
-        tracing::debug!("Syncing local patch repository with remote");
-
-        if self.folder.exists() {
-            Command::new("git")
-                .arg("remote")
-                .arg("set-url")
-                .arg("origin")
-                .arg(remote.to_string())
-                .current_dir(&self.folder)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output()?;
-            
-            Command::new("git")
-                .arg("fetch")
-                .arg("origin")
-                .current_dir(&self.folder)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output()?;
-
-            Command::new("git")
-                .arg("reset")
-                .arg("--hard")
-                .arg("origin/master")
-                .current_dir(&self.folder)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output()?;
-
-            Ok(true)
-        }
-
-        else {
-            let output = Command::new("git")
-                .arg("clone")
-                .arg(remote.to_string())
-                .arg(&self.folder)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output()?;
-
-            Ok(output.status.success())
         }
     }
 
@@ -275,7 +135,8 @@ impl PatchApplier {
 
                     Err(Error::new(ErrorKind::Other, output).into())
                 }
-            },
+            }
+
             None => {
                 tracing::error!("Failed to get patch version");
 
@@ -347,7 +208,8 @@ impl PatchApplier {
 
                 // Return patching status
                 Ok(!String::from_utf8_lossy(&output.stdout).contains("ERROR: "))
-            },
+            }
+
             None => {
                 tracing::error!("Failed to get patch version");
 
