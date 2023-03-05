@@ -1,8 +1,7 @@
 pub mod version;
 pub mod curl;
 pub mod api;
-
-mod traits;
+pub mod traits;
 
 pub use ::curl as curl_sys;
 
