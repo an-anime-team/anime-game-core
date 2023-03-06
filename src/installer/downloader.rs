@@ -6,6 +6,7 @@ use curl::easy::Easy;
 use thiserror::Error;
 
 use super::free_space;
+use crate::prettify_bytes::prettify_bytes;
 
 /// Default amount of bytes `Downloader::download_to` method will store in memory
 /// before writing them onto the disk
@@ -26,7 +27,7 @@ pub enum DownloadingError {
     /// No free space available under specified path
     /// 
     /// `(path, required, available)`
-    #[error("No free space availale for specified path: {0:?} (requires {1}, available {2})")] // TODO: convert bytes into prettified strings
+    #[error("No free space availale for specified path: {0:?} (requires {}, available {})", prettify_bytes(*.1), prettify_bytes(*.2))]
     NoSpaceAvailable(PathBuf, u64, u64),
 
     /// Failed to create or open output file

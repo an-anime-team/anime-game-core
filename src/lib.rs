@@ -2,6 +2,7 @@ pub mod version;
 pub mod curl;
 pub mod api;
 pub mod traits;
+pub mod prettify_bytes;
 
 pub use ::curl as curl_sys;
 
@@ -28,6 +29,7 @@ pub mod prelude {
     pub use super::version::*;
     pub use super::curl::fetch;
     pub use super::api;
+    pub use super::prettify_bytes::prettify_bytes;
 
     pub use super::traits::prelude::*;
 
@@ -45,3 +47,4 @@ pub mod prelude {
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
