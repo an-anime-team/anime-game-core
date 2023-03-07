@@ -47,4 +47,3 @@ pub mod prelude {
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
