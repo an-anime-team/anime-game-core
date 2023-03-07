@@ -24,36 +24,8 @@ pub trait RemoteGitSync: std::fmt::Debug {
             return Ok(false);
         }
 
-        // FIXME: git ref-parse doesn't check removed files
-
-        let head = Command::new("git")
-            .arg("rev-parse")
-            .arg("HEAD")
-            .current_dir(self.folder())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .output()?;
-
         for remote in remotes {
-            Command::new("git")
-                .arg("remote")
-                .arg("set-url")
-                .arg("origin")
-                .arg(remote.as_ref())
-                .current_dir(self.folder())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output()?;
-
-            let remote = Command::new("git")
-                .arg("rev-parse")
-                .arg("origin/HEAD")
-                .current_dir(self.folder())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .output()?;
-
-            if head.stdout == remote.stdout {
+            if self.is_sync_with(remote)? {
                 return Ok(true);
             }
         }
