@@ -65,16 +65,16 @@ impl Installer {
     /// Get name of downloading file from uri
     /// 
     /// - `https://example.com/example.zip` -> `example.zip`
-    /// - `https://example.com` -> `index.html`
+    /// - `https://example.com/` -> `index.html`
     #[inline]
     pub fn get_filename(&self) -> &str {
-        self.url.replace('\\', "/")
-            .split('/')
-            .last()
-            .unwrap_or("index.html")
-            .is_empty()
-            .then(|| "index.html")
-            .unwrap_or("index.html")
+        if let Some(pos) = self.url.replace('\\', "/").rfind(|c| c == '/') {
+            if pos < self.url.len() - 1 {
+                return &self.url[pos + 1..];
+            }
+        }
+
+        "index.html"
     }
 
     #[inline]
