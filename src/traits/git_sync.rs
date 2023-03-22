@@ -9,9 +9,12 @@ pub trait RemoteGitSync: std::fmt::Debug {
 
     /// Verify that the folder is synced
     /// 
+    /// Returns given remote with which current folder is synced,
+    /// and `Ok(None)` if it's not synced
+    /// 
     /// To check only specific remote use `is_sync_with`
     #[tracing::instrument(level = "debug", ret)]
-    fn is_sync<T, F>(&self, remotes: T) -> std::io::Result<bool>
+    fn is_sync<T, F>(&self, remotes: T) -> anyhow::Result<Option<String>>
     where
         T: IntoIterator<Item = F> + std::fmt::Debug,
         F: AsRef<str> + std::fmt::Debug
@@ -21,16 +24,16 @@ pub trait RemoteGitSync: std::fmt::Debug {
         if !self.folder().exists() {
             tracing::warn!("Given local repository folder doesn't exist");
 
-            return Ok(false);
+            anyhow::bail!("Given local repository folder doesn't exist");
         }
 
         for remote in remotes {
-            if self.is_sync_with(remote)? {
-                return Ok(true);
+            if self.is_sync_with(remote.as_ref())? {
+                return Ok(Some(remote.as_ref().to_string()));
             }
         }
 
-        Ok(false)
+        Ok(None)
     }
 
     /// Verify that the folder is synced

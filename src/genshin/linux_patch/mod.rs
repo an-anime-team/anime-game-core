@@ -1,13 +1,15 @@
 mod patch;
-mod applier;
+mod patches;
 
 pub use patch::*;
-pub use applier::*;
+pub use patches::*;
 
 pub mod prelude {
     pub use super::patch::{
         Patch,
+        PatchStatus,
         Regions as PatchRegions
     };
-    pub use super::applier::PatchApplier;
+
+    pub use super::patches::*;
 }
