@@ -10,6 +10,7 @@ use super::{PatchStatus, Regions};
 
 use crate::version::Version;
 use crate::genshin::api;
+use super::super::consts::DATA_FOLDER_NAME;
 
 /// If this line is commented in the `patch.sh` or `patch_anti_logincrash.sh` file,
 /// then it's stable version. Otherwise it's in testing phase
@@ -38,7 +39,7 @@ pub trait PatchExt {
 }
 
 macro_rules! impl_patch {
-    ($name:ident, $patching_library:expr, $patch_script:expr) => {
+    ($name:ident, $data_subfolder:expr, $patching_library:expr, $patch_script:expr) => {
         #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
         pub struct $name {
             // I don't like these fields to be public
@@ -215,7 +216,14 @@ macro_rules! impl_patch {
             }
 
             fn is_applied<T: AsRef<Path>>(&self, game_folder: T) -> anyhow::Result<bool> {
-                let dll = std::fs::read(game_folder.as_ref().join($patching_library))?;
+                let mut dll = game_folder.as_ref().to_path_buf();
+
+                if $data_subfolder {
+                    dll = dll.join(unsafe { DATA_FOLDER_NAME });
+                }
+
+                let dll = std::fs::read(dll.join($patching_library))?;
+
                 let hash = format!("{:x}", Md5::digest(dll));
 
                 match &self.status {
@@ -414,5 +422,5 @@ macro_rules! impl_patch {
     };
 }
 
-impl_patch!(UnityPlayerPatch, "UnityPlayer.dll", "patch.sh");
-impl_patch!(XluaPatch, "Plugins/xlua.dll", "patch_anti_logincrash.sh");
+impl_patch!(UnityPlayerPatch, false, "UnityPlayer.dll", "patch.sh");
+impl_patch!(XluaPatch, true, "Plugins/xlua.dll", "patch_anti_logincrash.sh");
