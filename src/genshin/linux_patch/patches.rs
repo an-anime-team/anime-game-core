@@ -43,10 +43,7 @@ macro_rules! impl_patch {
         pub struct $name {
             // I don't like these fields to be public
             // but otherwise it breaks main window compatibility in
-            // PerformAction event. So:
-
-            // TODO: split PerformAction event to subfunctions
-
+            // PerformAction event
             pub patch_folder: PathBuf,
             pub status: PatchStatus
         }

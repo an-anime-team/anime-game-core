@@ -93,4 +93,9 @@ impl Patch {
     pub fn unity_player_patch(&self) -> anyhow::Result<UnityPlayerPatch> {
         UnityPlayerPatch::from_folder(&self.folder)
     }
+
+    #[inline]
+    pub fn xlua_patch(&self) -> anyhow::Result<XluaPatch> {
+        XluaPatch::from_folder(&self.folder)
+    }
 }
