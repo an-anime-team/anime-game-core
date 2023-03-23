@@ -1,6 +1,6 @@
 [package]
 name = "anime-game-core"
-version = "1.4.3"
+version = "1.4.4"
 authors = ["Nikita Podvirnyy <suimin.tu.mu.ga.mi@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"

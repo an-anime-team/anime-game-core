@@ -24,7 +24,7 @@ pub trait RemoteGitSync: std::fmt::Debug {
         if !self.folder().exists() {
             tracing::warn!("Given local repository folder doesn't exist");
 
-            anyhow::bail!("Given local repository folder doesn't exist");
+            return Ok(None);
         }
 
         for remote in remotes {
