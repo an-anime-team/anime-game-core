@@ -14,7 +14,7 @@ pub const DEFAULT_DOWNLOADING_CHUNK: usize = 1024 * 1024;
 
 /// Default amount of progress updates that will be skipped each time
 /// before calling progress function
-pub const DEFAULT_DOWNLOADING_UPDATES_FREQUENCE: usize = 4000;
+pub const DEFAULT_DOWNLOADING_UPDATES_FREQUENCE: usize = 1000;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DownloadingError {
