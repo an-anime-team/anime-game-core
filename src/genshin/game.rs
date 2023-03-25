@@ -105,7 +105,7 @@ impl GameBasics for Game {
 
         tracing::error!("Version's bytes sequence wasn't found");
 
-        Err(anyhow::anyhow!("Version's bytes sequence wasn't found"))
+        anyhow::bail!("Version's bytes sequence wasn't found");
     }
 }
 
