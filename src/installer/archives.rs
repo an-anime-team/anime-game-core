@@ -2,6 +2,8 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::process::{Command, Stdio};
 
+use serde::{Serialize, Deserialize};
+
 use zip::ZipArchive;
 use tar::Archive as TarArchive;
 // use sevenz_rust::SevenZReader as SevenzArchive;
@@ -10,7 +12,7 @@ use xz::read::XzDecoder as XzReader;
 use bzip2::read::BzDecoder as Bz2Reader;
 use flate2::read::GzDecoder as GzReader;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Size {
     Compressed(u64),
     Uncompressed(u64),
@@ -30,7 +32,7 @@ impl Size {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub name: String,
     pub size: Size

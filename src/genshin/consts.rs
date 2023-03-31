@@ -1,106 +1,85 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use serde::{Serialize, Deserialize};
 
 use super::voice_data::locale::VoiceLocale;
 
+static mut GAME_EDITION: GameEdition = GameEdition::Global;
+
 // This enum is used in `Game::get_edition` method
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameEdition {
     Global,
     China
 }
 
 impl Default for GameEdition {
+    #[inline]
     fn default() -> Self {
         Self::Global
     }
 }
 
-pub static mut GAME_EDITION: GameEdition = GameEdition::Global;
-
-pub static mut API_URI: &str = concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10");
-
-/// Name of the game's data folder
-pub static mut DATA_FOLDER_NAME: &str = concat!("Ge", "nsh", "inIm", "pact_Data");
-
-#[cfg(feature = "telemetry")]
-pub static mut TELEMETRY_SERVERS: &[&str] = &[
-    concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
-    concat!("overseauspider.", "yu", "ans", "hen", ".com")
-];
-
-#[inline]
-pub fn get_api_uri(edition: GameEdition) -> &'static str {
-    match edition {
-        GameEdition::Global => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10"),
-        GameEdition::China  => concat!("https://sdk-static.", "mih", "oyo", ".com/hk4e_cn/mdk/launcher/api/resource?key=eYd89JmJ&launcher_id=18")
+impl GameEdition {
+    #[inline]
+    pub fn list() -> &'static [GameEdition] {
+        &[Self::Global, Self::China]
     }
-}
 
-#[inline]
-pub fn get_data_folder_name(edition: GameEdition) -> &'static str {
-    match edition {
-        GameEdition::Global => concat!("Ge", "nsh", "inIm", "pact_Data"),
-        GameEdition::China  => concat!("Yu", "anS", "hen", "_Data")
+    #[inline]
+    pub fn selected() -> Self {
+        unsafe {
+            GAME_EDITION
+        }
     }
-}
 
-#[cfg(feature = "telemetry")]
-#[inline]
-pub fn get_telemetry_servers(edition: GameEdition) -> &'static [&'static str] {
-    match edition {
-        GameEdition::Global => &[
-            concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
-            concat!("overseauspider.", "yu", "ans", "hen", ".com")
-        ],
-        GameEdition::China => &[
-            concat!("log-upload.", "mih", "oyo", ".com"),
-            concat!("uspider.", "yu", "ans", "hen", ".com")
-        ]
+    #[inline]
+    pub fn select(self) {
+        unsafe {
+            GAME_EDITION = self;
+        }
     }
-}
 
-/// Set the game edition
-/// 
-/// Updates all related constants from this mod
-pub fn set_game_edition(edition: GameEdition) {
-    unsafe {
-        GAME_EDITION = edition;
-        API_URI = get_api_uri(edition);
-        DATA_FOLDER_NAME = get_data_folder_name(edition);
+    #[inline]
+    pub fn api_uri(&self) -> &str {
+        match self {
+            GameEdition::Global => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/hk4e_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10"),
+            GameEdition::China  => concat!("https://sdk-static.", "mih", "oyo", ".com/hk4e_cn/mdk/launcher/api/resource?key=eYd89JmJ&launcher_id=18")
+        }
+    }
 
-        if cfg!(feature = "telemetry") {
-            TELEMETRY_SERVERS = get_telemetry_servers(edition);
+    #[inline]
+    pub fn data_folder(&self) -> &str {
+        match self {
+            GameEdition::Global => concat!("Ge", "nsh", "inIm", "pact_Data"),
+            GameEdition::China  => concat!("Yu", "anS", "hen", "_Data")
+        }
+    }
+
+    #[cfg(feature = "telemetry")]
+    #[inline]
+    pub fn telemetry_servers(&self) -> &[&str] {
+        match self {
+            GameEdition::Global => &[
+                concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
+                concat!("overseauspider.", "yu", "ans", "hen", ".com")
+            ],
+            GameEdition::China => &[
+                concat!("log-upload.", "mih", "oyo", ".com"),
+                concat!("uspider.", "yu", "ans", "hen", ".com")
+            ]
         }
     }
 }
 
-pub trait ToFolder {
-    fn to_folder(&self) -> String;
-}
-
-impl<T: ToString> ToFolder for T {
-    #[inline]
-    fn to_folder(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToFolder for VoiceLocale {
-    #[inline]
-    fn to_folder(&self) -> String {
-        self.to_folder().to_string()
-    }
-}
-
 #[inline]
-pub fn get_voice_packages_path<T: Into<PathBuf>>(game_path: T) -> PathBuf {
-    game_path
-        .into()
-        .join(unsafe { DATA_FOLDER_NAME })
+pub fn get_voice_packages_path<T: AsRef<Path>>(game_path: T) -> PathBuf {
+    game_path.as_ref()
+        .join(GameEdition::selected().data_folder())
         .join("StreamingAssets/Audio/GeneratedSoundBanks/Windows")
 }
 
 #[inline]
-pub fn get_voice_package_path<T: Into<PathBuf>, F: ToFolder>(game_path: T, locale: F) -> PathBuf {
+pub fn get_voice_package_path<T: AsRef<Path>>(game_path: T, locale: VoiceLocale) -> PathBuf {
     get_voice_packages_path(game_path).join(locale.to_folder())
 }

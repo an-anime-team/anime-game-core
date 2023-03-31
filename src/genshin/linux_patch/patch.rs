@@ -5,7 +5,7 @@ use serde::{Serialize, Deserialize};
 use super::patches::*;
 
 use crate::version::*;
-use crate::traits::git_sync::RemoteGitSync;
+use crate::traits::git_sync::RemoteGitSyncExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Regions {
@@ -74,7 +74,7 @@ pub struct Patch {
     folder: PathBuf
 }
 
-impl RemoteGitSync for Patch {
+impl RemoteGitSyncExt for Patch {
     #[inline]
     fn folder(&self) -> &Path {
         self.folder.as_path()

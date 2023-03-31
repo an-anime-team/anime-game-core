@@ -1,6 +1,7 @@
 use std::fs::{read_to_string, remove_file};
 use std::path::PathBuf;
 
+use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
 use crate::version::Version;
@@ -18,7 +19,7 @@ use crate::{
     external::hpatchz
 };
 
-#[derive(Error, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiffDownloadError {
     /// Your installation is already up to date and not needed to be updated
     #[error("Component version is already latest")]
@@ -46,13 +47,13 @@ pub enum DiffDownloadError {
     PathNotSpecified
 }
 
-impl From<curl::Error> for DiffDownloadError {
-    fn from(err: curl::Error) -> Self {
-        Self::DownloadingError(err.into())
+impl From<minreq::Error> for DiffDownloadError {
+    fn from(error: minreq::Error) -> Self {
+        DiffDownloadError::DownloadingError(DownloadingError::Minreq(error.to_string()))
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VersionDiff {
     /// Latest version
     Latest(Version),
@@ -220,7 +221,7 @@ impl VersionDiff {
 
         let mut downloader = Downloader::new(url)?;
 
-        match downloader.download_to(folder.into().join(downloader.get_filename()), progress) {
+        match downloader.download(folder.into().join(downloader.get_filename()), progress) {
             Ok(_) => Ok(()),
             Err(err) => {
                 tracing::error!("Failed to download version difference: {err}");
@@ -256,14 +257,13 @@ impl VersionDiff {
 
         let mut downloader = Downloader::new(url)?;
 
-        match downloader.download_to(path, progress) {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                tracing::error!("Failed to download version difference: {err}");
+        if let Err(err) = downloader.download(path, progress) {
+            tracing::error!("Failed to download version difference: {err}");
 
-                Err(err.into())
-            }
+            return Err(err.into());
         }
+
+        Ok(())
     }
 
     /// Try to install the difference
@@ -519,7 +519,8 @@ impl VersionDiff {
                 }
                 
                 Ok(())
-            },
+            }
+
             Err(err) => Err(err.into())
         }
     }

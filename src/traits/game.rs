@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::version::Version;
 
-pub trait GameBasics {
+pub trait GameExt {
     fn new<T: Into<PathBuf>>(path: T) -> Self;
     fn path(&self) -> &Path;
 
@@ -11,6 +11,6 @@ pub trait GameBasics {
         self.path().exists()
     }
 
-    fn try_get_latest_version() -> anyhow::Result<Version>;
-    fn try_get_version(&self) -> anyhow::Result<Version>;
+    fn get_latest_version() -> anyhow::Result<Version>;
+    fn get_version(&self) -> anyhow::Result<Version>;
 }

@@ -2,11 +2,13 @@ use std::env::temp_dir;
 use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 
+use serde::{Serialize, Deserialize};
+
 use super::downloader::{Downloader, DownloadingError};
 use super::archives::Archive;
 use super::free_space;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Update {
     CheckingFreeSpace(PathBuf),
 
@@ -38,22 +40,18 @@ impl From<DownloadingError> for Update {
 #[derive(Debug)]
 pub struct Installer {
     pub downloader: Downloader,
-    url: String,
 
     /// Path to the temp folder used to store archive before unpacking
     pub temp_folder: PathBuf
 }
 
 impl Installer {
-    pub fn new<T: ToString>(url: T) -> Result<Self, curl::Error> {
-        match Downloader::new(url.to_string()) {
-            Ok(downloader) => Ok(Self {
-                downloader,
-                url: url.to_string(),
-                temp_folder: temp_dir()
-            }),
-            Err(err) => Err(err)
-        }
+    #[inline]
+    pub fn new<T: AsRef<str>>(uri: T) -> Result<Self, minreq::Error> {
+        Ok(Self {
+            downloader: Downloader::new(uri.as_ref())?,
+            temp_folder: temp_dir()
+        })
     }
 
     /// Specify path to the temp folder used to store archive before unpacking
@@ -65,16 +63,10 @@ impl Installer {
     /// Get name of downloading file from uri
     /// 
     /// - `https://example.com/example.zip` -> `example.zip`
-    /// - `https://example.com/` -> `index.html`
+    /// - `https://example.com` -> `index.html`
     #[inline]
     pub fn get_filename(&self) -> &str {
-        if let Some(pos) = self.url.replace('\\', "/").rfind(|c| c == '/') {
-            if pos < self.url.len() - 1 {
-                return &self.url[pos + 1..];
-            }
-        }
-
-        "index.html"
+        self.downloader.get_filename()
     }
 
     #[inline]
@@ -155,100 +147,101 @@ impl Installer {
 
         (updater)(Update::DownloadingStarted(temp_path.clone()));
 
-        match self.downloader.download_to(&temp_path, move |curr, total| {
-            (download_progress_updater)(Update::DownloadingProgress(curr, total));
-        }) {
-            Ok(_) => {
-                (updater)(Update::DownloadingFinished);
+        if let Err(err) = self.downloader.download(&temp_path, move |curr, total| (download_progress_updater)(Update::DownloadingProgress(curr, total))) {
+            (updater)(Update::DownloadingError(err));
 
-                match Archive::open(&temp_path) {
-                    Ok(mut archive) => {
-                        // Temporary workaround as we can't get archive extraction process
-                        // directly - we'll spawn it in another thread and check this archive entries appearence in the filesystem
-                        let mut total = 0;
-                        let entries = archive.get_entries();
+            return;
+        }
 
-                        for entry in &entries {
-                            total += entry.size.get_size();
+        (updater)(Update::DownloadingFinished);
 
-                            let path = unpack_to.join(&entry.name);
+        match Archive::open(&temp_path) {
+            Ok(mut archive) => {
+                // Temporary workaround as we can't get archive extraction process
+                // directly - we'll spawn it in another thread and check this archive entries appearence in the filesystem
+                let mut total = 0;
+                let entries = archive.get_entries();
 
-                            // Failed to change permissions => likely patch-related file and was made by the sudo, so root
-                            #[allow(unused_must_use)]
-                            if let Err(_) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)) {
-                                // For weird reason we can delete files made by root, but can't modify their permissions
-                                // We're not checking its result because if it's error - then it's either couldn't be removed (which is not the case)
-                                // or the file doesn't exist, which we obviously can just ignore
-                                std::fs::remove_file(&path);
+                for entry in &entries {
+                    total += entry.size.get_size();
+
+                    let path = unpack_to.join(&entry.name);
+
+                    // Failed to change permissions => likely patch-related file and was made by the sudo, so root
+                    #[allow(unused_must_use)]
+                    if let Err(_) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)) {
+                        // For weird reason we can delete files made by root, but can't modify their permissions
+                        // We're not checking its result because if it's error - then it's either couldn't be removed (which is not the case)
+                        // or the file doesn't exist, which we obviously can just ignore
+                        std::fs::remove_file(&path);
+                    }
+                }
+
+                tracing::trace!("Extracting archive");
+
+                let unpacking_path = unpack_to.clone();
+                let unpacking_updater = updater.clone();
+
+                let handle_2 = std::thread::spawn(move || {
+                    let mut entries = entries.into_iter()
+                        .map(|entry| (unpacking_path.join(&entry.name), entry.size.get_size(), true))
+                        .collect::<Vec<_>>();
+
+                    let mut unpacked = 0;
+
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_millis(250));
+
+                        let mut empty = true;
+
+                        for (path, size, remained) in &mut entries {
+                            if *remained {
+                                empty = false;
+
+                                if std::path::Path::new(path).exists() {
+                                    *remained = false;
+
+                                    unpacked += *size;
+                                }
                             }
                         }
 
-                        tracing::trace!("Extracting archive");
+                        (unpacking_updater)(Update::UnpackingProgress(unpacked, total));
 
-                        let unpacking_path = unpack_to.clone();
-                        let unpacking_updater = updater.clone();
+                        if empty {
+                            break;
+                        }
+                    }
+                });
 
-                        let handle_2 = std::thread::spawn(move || {
-                            let mut entries = entries.into_iter()
-                                .map(|entry| (unpacking_path.join(&entry.name), entry.size.get_size(), true))
-                                .collect::<Vec<_>>();
+                // Run archive extraction in another thread to not to freeze the current one
+                let handle_1 = std::thread::spawn(move || {
+                    (updater)(Update::UnpackingStarted(unpack_to.clone()));
 
-                            let mut unpacked = 0;
-
-                            loop {
-                                std::thread::sleep(std::time::Duration::from_millis(250));
-
-                                let mut empty = true;
-
-                                for (path, size, remained) in &mut entries {
-                                    if *remained {
-                                        empty = false;
-
-                                        if std::path::Path::new(path).exists() {
-                                            *remained = false;
-
-                                            unpacked += *size;
-                                        }
-                                    }
+                    // We have to create new instance of Archive here
+                    // because otherwise it may not work after get_entries method call
+                    match Archive::open(&temp_path) {
+                        Ok(mut archive) => match archive.extract(unpack_to) {
+                            Ok(_) => {
+                                // TODO error handling
+                                #[allow(unused_must_use)] {
+                                    std::fs::remove_file(temp_path);
                                 }
 
-                                (unpacking_updater)(Update::UnpackingProgress(unpacked, total));
-
-                                if empty {
-                                    break;
-                                }
+                                (updater)(Update::UnpackingFinished);
                             }
-                        });
 
-                        // Run archive extraction in another thread to not to freeze the current one
-                        let handle_1 = std::thread::spawn(move || {
-                            (updater)(Update::UnpackingStarted(unpack_to.clone()));
+                            Err(err) => (updater)(Update::UnpackingError(err.to_string()))
+                        }
 
-                            // We have to create new instance of Archive here
-                            // because otherwise it may not work after get_entries method call
-                            match Archive::open(&temp_path) {
-                                Ok(mut archive) => match archive.extract(unpack_to) {
-                                    Ok(_) => {
-                                        // TODO error handling
-                                        std::fs::remove_file(temp_path).expect("Failed to remove temporary file");
+                        Err(err) => (updater)(Update::UnpackingError(err.to_string()))
+                    }
+                });
 
-                                        (updater)(Update::UnpackingFinished);
-                                    },
-                                    Err(err) => (updater)(Update::UnpackingError(err.to_string()))
-                                },
-                                Err(err) => (updater)(Update::UnpackingError(err.to_string()))
-                            }
-                        });
-
-                        handle_1.join().unwrap();
-                        handle_2.join().unwrap();
-                    },
-                    Err(err) => (updater)(Update::UnpackingError(err.to_string()))
-                }
+                handle_1.join().unwrap();
+                handle_2.join().unwrap();
             },
-            Err(err) => {
-                (updater)(Update::DownloadingError(err));
-            }
+            Err(err) => (updater)(Update::UnpackingError(err.to_string()))
         }
     }
 }

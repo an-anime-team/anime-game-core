@@ -1,10 +1,14 @@
+pub use minreq;
+
+/// Default requests timeout in seconds
+pub const DEFAULT_REQUESTS_TIMEOUT: u64 = 4;
+
+/// Core library version
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod version;
-pub mod curl;
-pub mod api;
 pub mod traits;
 pub mod prettify_bytes;
-
-pub use ::curl as curl_sys;
 
 // Games-specific functionality
 
@@ -27,8 +31,6 @@ pub mod repairer;
 
 pub mod prelude {
     pub use super::version::*;
-    pub use super::curl::fetch;
-    pub use super::api;
     pub use super::prettify_bytes::prettify_bytes;
 
     pub use super::traits::prelude::*;
@@ -45,5 +47,3 @@ pub mod prelude {
     #[cfg(feature = "install")]
     pub use super::repairer::*;
 }
-
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");

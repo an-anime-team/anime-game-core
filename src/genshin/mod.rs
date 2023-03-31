@@ -1,5 +1,4 @@
 pub mod consts;
-pub mod json_schemas;
 pub mod api;
 pub mod game;
 pub mod voice_data;

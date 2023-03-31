@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use fs_extra::dir::get_size;
 
@@ -6,7 +6,7 @@ use crate::version::Version;
 
 use crate::genshin::{
     voice_data::locale::VoiceLocale,
-    json_schemas::versions::VoicePack as RemoteVoicePack,
+    api::schema::VoicePack as RemoteVoicePack,
     consts::get_voice_package_path,
     api
 };
@@ -26,6 +26,7 @@ pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
 ];
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
+#[inline]
 pub fn get_voice_pack_sizes(locale: VoiceLocale) -> Vec<(String, u64)> {
     VOICE_PACKAGES_SIZES.into_iter().map(|item| {
         match locale {
@@ -38,6 +39,7 @@ pub fn get_voice_pack_sizes(locale: VoiceLocale) -> Vec<(String, u64)> {
 }
 
 /// Predict next value of slice using WMA
+#[inline]
 pub fn wma_predict(values: &[u64]) -> u64 {
     match values.len() {
         0 => 0,
@@ -58,11 +60,13 @@ pub fn wma_predict(values: &[u64]) -> u64 {
 }
 
 /// Predict new voice package size using WMA based on `VOICE_PACKAGES_SIZES` constant
+#[inline]
 pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
     wma_predict(&get_voice_pack_sizes(locale).into_iter().map(|item| item.1).rev().collect::<Vec<u64>>())
 }
 
 /// Find voice package with specified locale from list of packages
+#[inline]
 fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
     for pack in list {
         if pack.language == locale.to_code() {
@@ -92,6 +96,7 @@ impl VoicePackage {
     /// Voice packages can't be instaled wherever you want.
     /// Thus this method can return `None` in case the path
     /// doesn't point to a real voice package folder
+    #[inline]
     pub fn new<T: Into<PathBuf>>(path: T) -> Option<Self> {
         let path = path.into();
 
@@ -117,9 +122,9 @@ impl VoicePackage {
     /// 
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
     /// technically it can be installed. This method just don't know the game's path
+    #[inline]
     pub fn with_locale(locale: VoiceLocale) -> anyhow::Result<Self> {
-        let response = api::try_fetch_json()?;
-        let latest = response.data.game.latest;
+        let latest = api::request()?.data.game.latest;
 
         Ok(Self::NotInstalled {
             locale,
@@ -147,6 +152,7 @@ impl VoicePackage {
     /// Calculate voice package size in bytes
     /// 
     /// (unpacked size, Option(archive size))
+    #[inline]
     pub fn size(&self) -> (u64, Option<u64>) {
         match self {
             VoicePackage::Installed { path, .. } => (get_size(path).unwrap(), None),
@@ -160,18 +166,17 @@ impl VoicePackage {
     /// This method will return `true` if the package has `VoicePackage::Installed` enum value
     /// 
     /// If it's `VoicePackage::NotInstalled`, then this method will check `game_path`'s voices folder
-    pub fn is_installed_in<T: Into<PathBuf>>(&self, game_path: T) -> bool {
+    #[inline]
+    pub fn is_installed_in<T: AsRef<Path>>(&self, game_path: T) -> bool {
         match self {
             Self::Installed { .. } => true,
-            Self::NotInstalled { locale, .. } => {
-                get_voice_package_path(game_path, locale.to_folder()).exists()
-            }
+            Self::NotInstalled { locale, .. } => get_voice_package_path(game_path, *locale).exists()
         }
     }
 
     /// Get list of latest voice packages
     pub fn list_latest() -> anyhow::Result<Vec<VoicePackage>> {
-        let response = api::try_fetch_json()?;
+        let response = api::request()?;
 
         let mut packages = Vec::new();
         let version = Version::from_str(response.data.game.latest.version).unwrap();
@@ -208,7 +213,7 @@ impl VoicePackage {
             Self::NotInstalled { locale: _, version, data: _, game_path: _} => Ok(*version),
             Self::Installed { path, locale } => {
                 let package_size = get_size(&path)?;
-                let response = api::try_fetch_json()?;
+                let response = api::request()?;
 
                 match std::fs::read(path.join(".version")) {
                     Ok(curr) => {
@@ -320,7 +325,7 @@ impl TryGetDiff for VoicePackage {
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for {} voice package", self.locale().to_code());
 
-        let response = api::try_fetch_json()?;
+        let response = api::request()?;
 
         if self.is_installed() {
             let current = self.try_get_version()?;

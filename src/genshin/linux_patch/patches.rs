@@ -9,8 +9,7 @@ use md5::{Md5, Digest};
 use super::{PatchStatus, Regions};
 
 use crate::version::Version;
-use crate::genshin::api;
-use super::super::consts::DATA_FOLDER_NAME;
+use crate::genshin::{api, consts::GameEdition};
 
 /// If this line is commented in the `patch.sh` or `patch_anti_logincrash.sh` file,
 /// then it's stable version. Otherwise it's in testing phase
@@ -91,7 +90,7 @@ macro_rules! impl_patch {
                 patch_folders.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
 
                 // Get latest available game version
-                let latest_version = Version::from_str(api::try_fetch_json()?.data.game.latest.version).unwrap();
+                let latest_version = Version::from_str(api::request()?.data.game.latest.version).unwrap();
 
                 // TODO: move this stuff in function to use it in similar XluaPatch
                 // TODO: this loop executes only 1 time so better get rid of it right?
@@ -219,7 +218,7 @@ macro_rules! impl_patch {
                 let mut dll = game_folder.as_ref().to_path_buf();
 
                 if $data_subfolder {
-                    dll = dll.join(unsafe { DATA_FOLDER_NAME });
+                    dll = dll.join(GameEdition::selected().data_folder());
                 }
 
                 let dll = std::fs::read(dll.join($patching_library))?;

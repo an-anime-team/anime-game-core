@@ -1,4 +1,6 @@
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VoiceLocale {
     English,
     Japanese,
@@ -7,18 +9,15 @@ pub enum VoiceLocale {
 }
 
 impl VoiceLocale {
+    #[inline]
     pub fn list() -> &'static [VoiceLocale] {
-        &[
-            Self::English,
-            Self::Japanese,
-            Self::Korean,
-            Self::Chinese
-        ]
+        &[Self::English, Self::Japanese, Self::Korean, Self::Chinese]
     }
 
     /// Convert enum value to its name
     /// 
     /// `VoiceLocale::English` -> `English`
+    #[inline]
     pub fn to_name(&self) -> &str {
         match self {
             VoiceLocale::English  => "English",
@@ -31,6 +30,7 @@ impl VoiceLocale {
     /// Convert enum value to its code
     /// 
     /// `VoiceLocale::English` -> `en-us`
+    #[inline]
     pub fn to_code(&self) -> &str {
         match self {
             VoiceLocale::English  => "en-us",
@@ -43,6 +43,7 @@ impl VoiceLocale {
     /// Convert enum value to its folder name
     /// 
     /// `VoiceLocale::English` -> `English(US)`
+    #[inline]
     pub fn to_folder(&self) -> &str {
         match self {
             VoiceLocale::English  => "English(US)",
@@ -57,8 +58,9 @@ impl VoiceLocale {
     /// - `English` -> `VoiceLocale::English`
     /// - `English(US)` -> `VoiceLocale::English`
     /// - `en-us` -> `VoiceLocale::English`
-    pub fn from_str<T: ToString>(str: T) -> Option<Self> {
-        match str.to_string().as_str() {
+    #[inline]
+    pub fn from_str<T: AsRef<str>>(str: T) -> Option<Self> {
+        match str.as_ref() {
             // Locales names
             "English"  => Some(VoiceLocale::English),
             "Japanese" => Some(VoiceLocale::Japanese),

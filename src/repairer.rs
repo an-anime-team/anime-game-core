@@ -66,7 +66,7 @@ impl IntegrityFile {
         // Obviously re-download file entirely
         downloader.continue_downloading = false;
 
-        downloader.download_to(game_path.into().join(&self.path), |_, _| {})
+        downloader.download(game_path.into().join(&self.path), |_, _| {})
     }
 }
 

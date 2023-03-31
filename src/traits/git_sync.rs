@@ -3,7 +3,7 @@ use std::path::Path;
 
 // TODO: rewrite to use git2 library
 
-pub trait RemoteGitSync: std::fmt::Debug {
+pub trait RemoteGitSyncExt {
     /// Path to folder with local git repository
     fn folder(&self) -> &Path;
 
@@ -13,7 +13,6 @@ pub trait RemoteGitSync: std::fmt::Debug {
     /// and `Ok(None)` if it's not synced
     /// 
     /// To check only specific remote use `is_sync_with`
-    #[tracing::instrument(level = "debug", ret)]
     fn is_sync<T, F>(&self, remotes: T) -> anyhow::Result<Option<String>>
     where
         T: IntoIterator<Item = F> + std::fmt::Debug,
@@ -37,7 +36,6 @@ pub trait RemoteGitSync: std::fmt::Debug {
     }
 
     /// Verify that the folder is synced
-    #[tracing::instrument(level = "debug", ret)]
     fn is_sync_with<T: AsRef<str> + std::fmt::Debug>(&self, remote: T) -> std::io::Result<bool> {
         tracing::trace!("Checking local repository sync state. Folder: {:?}. Remote: {}", self.folder(), remote.as_ref());
 
@@ -87,7 +85,6 @@ pub trait RemoteGitSync: std::fmt::Debug {
     }
 
     /// Fetch patch updates from the git repository
-    #[tracing::instrument(level = "debug", ret)]
     fn sync<T: AsRef<str> + std::fmt::Debug>(&self, remote: T) -> std::io::Result<bool> {
         tracing::debug!("Syncing local patch repository with remote");
 
