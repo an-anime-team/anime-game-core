@@ -19,7 +19,7 @@ pub fn is_disabled(timeout: Option<u64>) -> Option<String> {
     tracing::debug!("Checking telemetry servers status");
 
     for server in GameEdition::selected().telemetry_servers() {
-        let mut request = minreq::get(*server);
+        let mut request = minreq::head(format!("http://{server}"));
 
         if let Some(timeout) = timeout {
             request = request.with_timeout(timeout);
