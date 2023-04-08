@@ -15,8 +15,8 @@ pub trait RemoteGitSyncExt {
     /// To check only specific remote use `is_sync_with`
     fn is_sync<T, F>(&self, remotes: T) -> anyhow::Result<Option<String>>
     where
-        T: IntoIterator<Item = F> + std::fmt::Debug,
-        F: AsRef<str> + std::fmt::Debug
+        T: IntoIterator<Item = F>,
+        F: AsRef<str>
     {
         tracing::trace!("Checking local repository sync state: {:?}", self.folder());
 
@@ -36,7 +36,7 @@ pub trait RemoteGitSyncExt {
     }
 
     /// Verify that the folder is synced
-    fn is_sync_with<T: AsRef<str> + std::fmt::Debug>(&self, remote: T) -> std::io::Result<bool> {
+    fn is_sync_with(&self, remote: impl AsRef<str>) -> anyhow::Result<bool> {
         tracing::trace!("Checking local repository sync state. Folder: {:?}. Remote: {}", self.folder(), remote.as_ref());
 
         if !self.folder().exists() {
@@ -85,10 +85,23 @@ pub trait RemoteGitSyncExt {
     }
 
     /// Fetch patch updates from the git repository
-    fn sync<T: AsRef<str> + std::fmt::Debug>(&self, remote: T) -> std::io::Result<bool> {
+    fn sync(&self, remote: impl AsRef<str>) -> anyhow::Result<Vec<String>> {
         tracing::debug!("Syncing local patch repository with remote");
 
         if self.folder().exists() {
+            // git rev-parse HEAD
+
+            let head_commit = String::from_utf8(Command::new("git")
+                .arg("rev-parse")
+                .arg("HEAD")
+                .current_dir(self.folder())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()?
+                .stdout)?.trim_end().to_string();
+
+            // git remote set-url origin <remote>
+
             Command::new("git")
                 .arg("remote")
                 .arg("set-url")
@@ -99,6 +112,8 @@ pub trait RemoteGitSyncExt {
                 .stderr(Stdio::null())
                 .output()?;
 
+            // git fetch origin
+
             Command::new("git")
                 .arg("fetch")
                 .arg("origin")
@@ -106,6 +121,8 @@ pub trait RemoteGitSyncExt {
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .output()?;
+
+            // git reset --hard origin/HEAD
 
             Command::new("git")
                 .arg("reset")
@@ -116,11 +133,26 @@ pub trait RemoteGitSyncExt {
                 .stderr(Stdio::null())
                 .output()?;
 
-            Ok(true)
+            // git --no-pager log --oneline <head_commit (old)>..HEAD
+
+            let changes = String::from_utf8(Command::new("git")
+                .arg("--no-pager")
+                .arg("log")
+                .arg("--oneline")
+                .arg(format!("{head_commit}..HEAD"))
+                .current_dir(self.folder())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()?
+                .stdout)?;
+
+            Ok(changes.trim_end().lines().map(|line| line[8..].to_string()).collect())
         }
 
         else {
-            let output = Command::new("git")
+            // git clone <remote> <folder>
+
+            Command::new("git")
                 .arg("clone")
                 .arg(remote.as_ref())
                 .arg(self.folder())
@@ -128,7 +160,20 @@ pub trait RemoteGitSyncExt {
                 .stderr(Stdio::null())
                 .output()?;
 
-            Ok(output.status.success())
+            // TODO: maybe it's too long?
+            // git --no-pager log --oneline
+
+            let changes = String::from_utf8(Command::new("git")
+                .arg("--no-pager")
+                .arg("log")
+                .arg("--oneline")
+                .current_dir(self.folder())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()?
+                .stdout)?;
+
+            Ok(changes.trim_end().lines().map(|line| line[8..].to_string()).collect())
         }
     }
 }
