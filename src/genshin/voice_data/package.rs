@@ -410,7 +410,7 @@ impl TryGetDiff for VoicePackage {
                 })
             }
         }
-        
+
         else {
             tracing::debug!("Package is not installed");
 

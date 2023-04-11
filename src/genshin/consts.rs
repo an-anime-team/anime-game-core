@@ -76,7 +76,7 @@ impl GameEdition {
 pub fn get_voice_packages_path<T: AsRef<Path>>(game_path: T) -> PathBuf {
     game_path.as_ref()
         .join(GameEdition::selected().data_folder())
-        .join("StreamingAssets/Audio/GeneratedSoundBanks/Windows")
+        .join("StreamingAssets/AudioAssets")
 }
 
 #[inline]

@@ -11,6 +11,11 @@ pub mod prelude {
         Installer,
         Update as InstallerUpdate
     };
-    pub use super::diff::*;
+    pub use super::diff::{
+        VersionDiff,
+        TryGetDiff,
+        DiffDownloadError,
+        Update as DiffUpdate
+    };
     pub use super::free_space;
 }

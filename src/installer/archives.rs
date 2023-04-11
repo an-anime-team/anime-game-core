@@ -207,25 +207,37 @@ impl Archive {
     pub fn extract<T: Into<PathBuf> + std::fmt::Debug>(&mut self, folder: T) -> anyhow::Result<()> {
         tracing::trace!("Extracting archive");
 
+        let folder = folder.into();
+
         match self {
-            Archive::Zip(_, zip) => {
-                zip.extract(folder.into())?;
+            Archive::Zip(archive, zip) => {
+                if zip.extract(&folder).is_err() {
+                    Command::new("unzip")
+                        .arg("-q")
+                        .arg("-o")
+                        .arg(archive)
+                        .arg("-d")
+                        .arg(folder)
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .output()?;
+                }
             }
 
             Archive::Tar(_, tar) => {
-                tar.unpack(folder.into())?;
+                tar.unpack(folder)?;
             }
 
             Archive::TarXz(_, tar) => {
-                tar.unpack(folder.into())?;
+                tar.unpack(folder)?;
             }
 
             Archive::TarGz(_, tar) => {
-                tar.unpack(folder.into())?;
+                tar.unpack(folder)?;
             }
 
             Archive::TarBz2(_, tar) => {
-                tar.unpack(folder.into())?;
+                tar.unpack(folder)?;
             }
 
             Archive::SevenZ(archive) => {
@@ -234,7 +246,7 @@ impl Archive {
                 Command::new("7z")
                     .arg("x")
                     .arg(archive)
-                    .arg(format!("-o{:?}", folder.into()))
+                    .arg(format!("-o{:?}", folder))
                     .arg("-aoa")
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())

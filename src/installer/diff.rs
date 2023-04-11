@@ -19,6 +19,26 @@ use crate::{
     external::hpatchz
 };
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Update {
+    InstallerUpdate(InstallerUpdate),
+
+    ApplyingHdiffStarted,
+    ApplyingHdiffProgress(u64, u64),
+    ApplyingHdiffFinished,
+
+    RemovingOutdatedStarted,
+    RemovingOutdatedProgress(u64, u64),
+    RemovingOutdatedFinished
+}
+
+impl From<InstallerUpdate> for Update {
+    #[inline]
+    fn from(update: InstallerUpdate) -> Self {
+        Self::InstallerUpdate(update)
+    }
+}
+
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiffDownloadError {
     /// Your installation is already up to date and not needed to be updated
@@ -273,7 +293,7 @@ impl VersionDiff {
     /// where the difference should be installed
     #[cfg(feature = "install")]
     pub fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
-    where F: Fn(InstallerUpdate) + Clone + Send + 'static
+    where F: Fn(Update) + Clone + Send + 'static
     {
         match self {
             // Can't be downloaded
@@ -297,7 +317,7 @@ impl VersionDiff {
     pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
-        F: Fn(InstallerUpdate) + Clone + Send + 'static
+        F: Fn(Update) + Clone + Send + 'static
     {
         match self {
             // Can't be downloaded
@@ -319,7 +339,7 @@ impl VersionDiff {
     pub fn install_to_by<T, F>(&self, path: T, temp_path: Option<T>, updater: F) -> Result<(), DiffDownloadError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
-        F: Fn(InstallerUpdate) + Clone + Send + 'static
+        F: Fn(Update) + Clone + Send + 'static
     {
         tracing::debug!("Installing version difference");
 
@@ -390,7 +410,9 @@ impl VersionDiff {
                 }
 
                 // Install data
-                installer.install(&path, updater);
+                let installer_updater = updater.clone();
+
+                installer.install(&path, move |update| (installer_updater)(Update::InstallerUpdate(update)));
 
                 // Create .version file here even if hdiff patching is failed because
                 // it's easier to explain user why he should run files repairer than
@@ -407,8 +429,13 @@ impl VersionDiff {
                 // Apply hdiff patches
                 // We're ignoring Err because in practice it means that hdifffiles.txt is missing
                 if let Ok(files) = read_to_string(path.join("hdifffiles.txt")) {
+                    let files = files.lines().collect::<Vec<&str>>();
+                    let hdiffs = files.len() as u64;
+
+                    (updater)(Update::ApplyingHdiffStarted);
+
                     // {"remoteName": "AnimeGame_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/Japanese/1001.pck"}
-                    for file in files.lines().collect::<Vec<&str>>() {
+                    for (i, file) in files.into_iter().enumerate() {
                         let relative_file = &file[16..file.len() - 2];
 
                         let file = path.join(relative_file);
@@ -496,10 +523,14 @@ impl VersionDiff {
 
                             std::fs::rename(&output, &file).expect(&format!("Failed to rename hdiff patch: {:?}", file));
                         }
+
+                        (updater)(Update::ApplyingHdiffProgress(i as u64 + 1, hdiffs));
                     }
 
                     remove_file(path.join("hdifffiles.txt"))
                         .expect("Failed to remove hdifffiles.txt");
+
+                    (updater)(Update::ApplyingHdiffFinished);
                 }
 
                 tracing::debug!("Deleting outdated files");
@@ -507,17 +538,26 @@ impl VersionDiff {
                 // Remove outdated files
                 // We're ignoring Err because in practice it means that deletefiles.txt is missing
                 if let Ok(files) = read_to_string(path.join("deletefiles.txt")) {
+                    let files = files.lines().collect::<Vec<&str>>();
+                    let files_len = files.len() as u64;
+
+                    (updater)(Update::RemovingOutdatedStarted);
+
                     // AnimeGame_Data/Plugins/metakeeper.dll
-                    for file in files.lines().collect::<Vec<&str>>() {
+                    for (i, file) in files.into_iter().enumerate() {
                         let file = path.join(file);
 
                         remove_file(&file).expect(&format!("Failed to remove outdated file: {:?}", file));
+
+                        (updater)(Update::RemovingOutdatedProgress(i as u64 + 1, files_len));
                     }
 
                     remove_file(path.join("deletefiles.txt"))
                         .expect("Failed to remove deletefiles.txt");
+
+                    (updater)(Update::RemovingOutdatedFinished);
                 }
-                
+
                 Ok(())
             }
 
