@@ -170,7 +170,40 @@ impl Downloader {
             Ok(mut file) => {
                 let mut chunk = Vec::with_capacity(self.chunk_size);
 
-                for byte in minreq::get(&self.uri).with_header("range", format!("bytes={downloaded}-")).send_lazy()? {
+                let request = minreq::head(&self.uri)
+                    .with_header("range", format!("bytes={downloaded}-"))
+                    .send()?;
+
+                // Request content range (downloaded + remained content size)
+                // 
+                // If finished or overcame: bytes */10611646760
+                // If not finished: bytes 10611646759-10611646759/10611646760
+                // 
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
+                if let Some(range) = request.headers.get("content-range") {
+                    // Finish downloading if header says that we've already downloaded all the data
+                    if range.contains("*/") {
+                        (progress)(self.length.unwrap_or(downloaded as u64), self.length.unwrap_or(downloaded as u64));
+
+                        return Ok(());
+                    }
+                }
+
+                let request = minreq::get(&self.uri)
+                    .with_header("range", format!("bytes={downloaded}-"))
+                    .send_lazy()?;
+
+                // HTTP 416 = provided range is overcame actual content length (means file is downloaded)
+                // I check this here because HEAD request can return 200 OK while GET - 416
+                // 
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
+                if request.status_code == 416 {
+                    (progress)(self.length.unwrap_or(downloaded as u64), self.length.unwrap_or(downloaded as u64));
+
+                    return Ok(());
+                }
+
+                for byte in request {
                     let (byte, expected_len) = byte?;
 
                     chunk.push(byte);
