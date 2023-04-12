@@ -282,10 +282,10 @@ macro_rules! impl_patch {
                         let mut patch_script = std::fs::read_to_string(&patch_file)?;
 
                         patch_script = format!("{}{}", {
-                            patch_script[..650]
+                            patch_script[..1200]
                                 .replace("exit", "#exit")
                                 .replace("read", "#read")
-                        }, &patch_script[650..]);
+                        }, &patch_script[1200..]);
 
                         // Update patch.sh file
                         std::fs::write(&patch_file, patch_script)?;
