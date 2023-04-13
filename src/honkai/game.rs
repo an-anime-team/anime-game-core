@@ -3,7 +3,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::version::Version;
-use crate::traits::game::GameBasics;
+use crate::traits::game::GameExt;
 
 use super::api;
 use super::consts::*;
@@ -16,7 +16,8 @@ pub struct Game {
     path: PathBuf
 }
 
-impl GameBasics for Game {
+impl GameExt for Game {
+    #[inline]
     fn new<T: Into<PathBuf>>(path: T) -> Self {
         Self {
             path: path.into()
@@ -30,15 +31,15 @@ impl GameBasics for Game {
 
     /// Try to get latest game version
     #[tracing::instrument(level = "trace", ret)]
-    fn try_get_latest_version() -> anyhow::Result<Version> {
+    fn get_latest_version() -> anyhow::Result<Version> {
         tracing::trace!("Trying to get latest game version");
 
         // I assume game's API can't return incorrect version format right? Right?
-        Ok(Version::from_str(api::try_fetch_json()?.data.game.latest.version).unwrap())
+        Ok(Version::from_str(api::request()?.data.game.latest.version).unwrap())
     }
 
     #[tracing::instrument(level = "debug", ret)]
-    fn try_get_version(&self) -> anyhow::Result<Version> {
+    fn get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!("Trying to get installed game version");
 
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
@@ -51,7 +52,7 @@ impl GameBasics for Game {
             num
         }
 
-        let file = File::open(self.path.join(unsafe { DATA_FOLDER_NAME }).join("globalgamemanagers"))?;
+        let file = File::open(self.path.join(DATA_FOLDER_NAME).join("globalgamemanagers"))?;
 
         // [0..9, .]
         let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];
@@ -110,10 +111,10 @@ impl TryGetDiff for Game {
     fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
-        let latest = api::try_fetch_json()?.data.game.latest;
+        let latest = api::request()?.data.game.latest;
 
         if self.is_installed() {
-            let current = self.try_get_version()?;
+            let current = self.get_version()?;
 
             // Hon-kai doesn't have game predownloading feature for launcher,
             // and just makes players completely reinstall the game, as I know

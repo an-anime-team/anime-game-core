@@ -1,20 +1,20 @@
-use std::time::Duration;
 use std::path::PathBuf;
 
 use cached::proc_macro::cached;
 
-use crate::repairer::IntegrityFile;
-use crate::curl::fetch;
-
 use super::api;
+use crate::repairer::IntegrityFile;
 
-fn try_get_some_integrity_files<T: ToString>(file_name: T, timeout: Option<Duration>) -> anyhow::Result<Vec<IntegrityFile>> {
-    let decompressed_path = api::try_fetch_json()?.data.game.latest.decompressed_path;
-    let pkg_version = fetch(format!("{decompressed_path}/{}", file_name.to_string()), timeout)?.get_body()?;
+fn try_get_some_integrity_files<T: AsRef<str>>(file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
+    let decompressed_path = api::request()?.data.game.latest.decompressed_path;
+
+    let pkg_version = minreq::get(format!("{decompressed_path}/{}", file_name.as_ref()))
+        .with_timeout(timeout.unwrap_or(crate::DEFAULT_REQUESTS_TIMEOUT))
+        .send()?;
 
     let mut files = Vec::new();
 
-    for line in String::from_utf8_lossy(&pkg_version).lines() {
+    for line in String::from_utf8_lossy(pkg_version.as_bytes()).lines() {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
             files.push(IntegrityFile {
                 path: PathBuf::from(value["remoteName"].as_str().unwrap()),
@@ -29,8 +29,8 @@ fn try_get_some_integrity_files<T: ToString>(file_name: T, timeout: Option<Durat
 }
 
 /// Try to list latest game files
-#[cached(result=true)]
-pub fn try_get_integrity_files(timeout: Option<Duration>) -> anyhow::Result<Vec<IntegrityFile>> {
+#[cached(result)]
+pub fn try_get_integrity_files(timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
     try_get_some_integrity_files("pkg_version", timeout)
 }
 
@@ -39,7 +39,7 @@ pub fn try_get_integrity_files(timeout: Option<Duration>) -> anyhow::Result<Vec<
 /// `relative_path` must be relative to the game's root folder, so
 /// if your file is e.g. `/path/to/[AnimeGame]/[AnimeGame_Data]/level0`, then root folder is `/path/to/[AnimeGame]`,
 /// and `relative_path` must be `[AnimeGame_Data]/level0`
-pub fn try_get_integrity_file<T: Into<PathBuf>>(relative_path: T, timeout: Option<Duration>) -> anyhow::Result<Option<IntegrityFile>> {
+pub fn try_get_integrity_file<T: Into<PathBuf>>(relative_path: T, timeout: Option<u64>) -> anyhow::Result<Option<IntegrityFile>> {
     let relative_path = relative_path.into();
 
     if let Ok(files) = try_get_integrity_files(timeout) {
@@ -58,7 +58,7 @@ pub fn try_get_integrity_file<T: Into<PathBuf>>(relative_path: T, timeout: Optio
 /// ⚠️ Be aware that the game can create its own files after downloading, so "unused files" may not be really unused.
 /// It's strongly recommended to use this function only with manual control from user's side, in example to show him
 /// paths to these files and let him choose what to do with them
-pub fn try_get_unused_files<T: Into<PathBuf>>(game_dir: T, timeout: Option<Duration>) -> anyhow::Result<Vec<PathBuf>> {
+pub fn try_get_unused_files<T: Into<PathBuf>>(game_dir: T, timeout: Option<u64>) -> anyhow::Result<Vec<PathBuf>> {
     let used_files = try_get_integrity_files(timeout)?
         .into_iter()
         .map(|file| file.path)
@@ -66,7 +66,8 @@ pub fn try_get_unused_files<T: Into<PathBuf>>(game_dir: T, timeout: Option<Durat
 
     let skip_names = [
         String::from("webCaches"),
-        String::from("SDKCaches")
+        String::from("SDKCaches"),
+        String::from("ScreenShot"),
     ];
 
     crate::repairer::try_get_unused_files(game_dir, used_files, skip_names)

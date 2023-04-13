@@ -9,6 +9,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod version;
 pub mod traits;
 pub mod prettify_bytes;
+pub mod check_domain;
 
 // Games-specific functionality
 

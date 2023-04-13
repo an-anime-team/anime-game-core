@@ -44,6 +44,5 @@ honkai = []
 install = ["external", "dep:sysinfo", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2"] # "dep:sevenz-rust"
 linux-patch = ["dep:md-5"]
 external = ["dep:kinda-virtual-fs", "dep:lazy_static"]
-telemetry = []
 
-all = ["install", "linux-patch", "external", "telemetry"]
+all = ["install", "linux-patch", "external"]

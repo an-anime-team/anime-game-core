@@ -16,6 +16,7 @@ use crate::{
         },
         free_space
     },
+    repairer::IntegrityFile,
     external::hpatchz
 };
 
@@ -443,53 +444,30 @@ impl VersionDiff {
                         let output = path.join(format!("{relative_file}.hdiff_patched"));
 
                         // If failed to apply the patch
+                        #[allow(unused_mut, unused_assignments)]
                         if let Err(err) = hpatchz::patch(&file, &patch, &output) {
                             tracing::warn!("Failed to apply hdiff patch for {:?}: {err}", file);
 
-                            #[cfg(feature = "genshin")]
-                            {
+                            let mut integrity_files: Option<anyhow::Result<Option<IntegrityFile>>> = None;
+
+                            #[cfg(feature = "genshin")] {
+                                integrity_files = Some(crate::genshin::repairer::try_get_integrity_file(relative_file, None));
+                            }
+
+                            #[cfg(feature = "honkai")] {
+                                integrity_files = Some(crate::honkai::repairer::try_get_integrity_file(relative_file, None));
+                            }
+
+                            if let Some(integrity_files) = integrity_files {
                                 tracing::debug!("Trying to repair corrupted file");
 
                                 // If we were able to get API response - it shouldn't be impossible
                                 // to also get integrity files list from the same API
-                                match crate::genshin::repairer::try_get_integrity_file(relative_file, None) {
+                                match integrity_files {
                                     Ok(Some(integrity)) => {
                                         if !integrity.fast_verify(&path) {
                                             if let Err(err) = integrity.repair(&path) {
                                                 tracing::error!("Failed to repair corrupted file: {err}");
-
-                                                return Err(err.into());
-                                            }
-                                        }
-                                    }
-
-                                    Ok(None) => {
-                                        tracing::error!("Failed to repair corrupted file: not found");
-
-                                        return Err(DiffDownloadError::HdiffPatch(err.to_string()))
-                                    }
-
-                                    Err(repair_fail) => {
-                                        tracing::error!("Failed to repair corrupted file: {repair_fail}");
-
-                                        return Err(DiffDownloadError::HdiffPatch(err.to_string()))
-                                    }
-                                }
-                            }
-
-                            #[cfg(feature = "honkai")]
-                            {
-                                tracing::debug!("Trying to replace corrupted file");
-
-                                // If we were able to get API response - it shouldn't be impossible
-                                // to also get integrity files list from the same API
-                                match crate::honkai::repairer::try_get_integrity_file(relative_file, None) {
-                                    Ok(Some(integrity)) => {
-                                        if !integrity.fast_verify(&path) {
-                                            if let Err(err) = integrity.repair(&path) {
-                                                let io_err: std::io::Error = err.clone().into();
-
-                                                tracing::error!("Failed to repair corrupted file: {io_err}");
 
                                                 return Err(err.into());
                                             }
