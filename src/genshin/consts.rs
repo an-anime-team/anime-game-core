@@ -4,9 +4,8 @@ use serde::{Serialize, Deserialize};
 
 use super::voice_data::locale::VoiceLocale;
 
-static mut GAME_EDITION: GameEdition = GameEdition::Global;
+static mut GAME_EDITION: GameEdition = GameEdition::default();
 
-// This enum is used in `Game::get_edition` method
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameEdition {
     Global,
@@ -68,6 +67,20 @@ impl GameEdition {
                 concat!("log-upload.", "mih", "oyo", ".com"),
                 concat!("uspider.", "yu", "ans", "hen", ".com")
             ]
+        }
+    }
+
+    pub fn from_system_lang(&self) -> Self {
+        #[allow(clippy::or_fun_call)]
+        let locale = std::env::var("LC_ALL")
+            .unwrap_or_else(|_| std::env::var("LC_MESSAGES")
+            .unwrap_or_else(|_| std::env::var("LANG")
+            .unwrap_or(String::from("en_us"))));
+
+        if locale.len() > 4 && &locale[..5].to_ascii_lowercase() == "zh_cn" {
+            Self::China
+        } else {
+            Self::Global
         }
     }
 }

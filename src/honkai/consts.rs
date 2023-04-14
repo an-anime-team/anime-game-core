@@ -3,8 +3,11 @@ pub static API_URI: &str = concat!("https://sdk-os-static.", "ho", "yo", "verse"
 /// Name of the game's data folder
 pub static DATA_FOLDER_NAME: &str = concat!("BH3_Data");
 
-// FIXME: copied from gen-shi-n, not sure which ones for this game
+/// List of game telemetry servers
 pub static TELEMETRY_SERVERS: &[&str] = &[
-    concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
-    concat!("overseauspider.", "yu", "ans", "hen", ".com")
+    concat!("tqos-yun.ant", "icheate", "xpert.com"),
+    concat!("down.ant", "icheate", "xpert.com"),
+    concat!("log-upload-os.m", "ih", "oy", "o.com"),
+    concat!("log-upload-os.ho", "yov", "erse.com"),
+    concat!("sg-public-data-api.ho", "yov", "erse.com")
 ];
