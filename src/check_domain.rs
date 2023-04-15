@@ -2,7 +2,7 @@
 /// 
 /// Timeout is optional amount of seconds
 #[tracing::instrument(level = "trace")]
-pub fn is_disabled<T: AsRef<str> + std::fmt::Debug>(domain: T, timeout: Option<u64>) -> bool {
+pub fn available<T: AsRef<str> + std::fmt::Debug>(domain: T, timeout: Option<u64>) -> bool {
     let mut request = minreq::head(format!("http://{}", domain.as_ref()));
 
     if let Some(timeout) = timeout {
