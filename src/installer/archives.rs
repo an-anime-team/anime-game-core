@@ -246,7 +246,7 @@ impl Archive {
                 Command::new("7z")
                     .arg("x")
                     .arg(archive)
-                    .arg(format!("-o{:?}", folder))
+                    .arg(format!("-o{}", folder.to_string_lossy()))
                     .arg("-aoa")
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
