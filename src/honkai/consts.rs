@@ -5,9 +5,7 @@ pub static DATA_FOLDER_NAME: &str = "BH3_Data";
 
 /// List of game telemetry servers
 pub static TELEMETRY_SERVERS: &[&str] = &[
-    concat!("tqos-yun.ant", "icheate", "xpert.com"),
-    concat!("down.ant", "icheate", "xpert.com"),
-    concat!("log-upload-os.m", "ih", "oy", "o.com"),
     concat!("log-upload-os.ho", "yov", "erse.com"),
-    concat!("sg-public-data-api.ho", "yov", "erse.com")
+    concat!("sg-public-data-api.ho", "yov", "erse.com"),
+    concat!("dump.gam", "esafe.q", "q.com")
 ];
