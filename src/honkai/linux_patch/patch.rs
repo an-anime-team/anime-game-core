@@ -106,8 +106,8 @@ impl MainPatch {
             PatchStatus::Testing { bh3base_hash, player_hash, .. } |
             PatchStatus::Available { bh3base_hash, player_hash, .. } => {
                 let status =
-                    &format!("{:x}", Md5::digest(std::fs::read(game_folder.as_ref().join("BH3Base.dll"))?)) == bh3base_hash &&
-                    &format!("{:x}", Md5::digest(std::fs::read(game_folder.as_ref().join("UnityPlayer.dll"))?)) == player_hash;
+                    &format!("{:x}", Md5::digest(std::fs::read(game_folder.as_ref().join("BH3Base.dll"))?)) != bh3base_hash &&
+                    &format!("{:x}", Md5::digest(std::fs::read(game_folder.as_ref().join("UnityPlayer.dll"))?)) != player_hash;
 
                 Ok(status)
             }
