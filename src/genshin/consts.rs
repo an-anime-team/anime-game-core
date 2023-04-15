@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 
 use super::voice_data::locale::VoiceLocale;
 
-static mut GAME_EDITION: GameEdition = GameEdition::default();
+static mut GAME_EDITION: GameEdition = GameEdition::Global;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameEdition {
@@ -55,7 +55,6 @@ impl GameEdition {
         }
     }
 
-    #[cfg(feature = "telemetry")]
     #[inline]
     pub fn telemetry_servers(&self) -> &[&str] {
         match self {
@@ -70,7 +69,7 @@ impl GameEdition {
         }
     }
 
-    pub fn from_system_lang(&self) -> Self {
+    pub fn from_system_lang() -> Self {
         #[allow(clippy::or_fun_call)]
         let locale = std::env::var("LC_ALL")
             .unwrap_or_else(|_| std::env::var("LC_MESSAGES")
