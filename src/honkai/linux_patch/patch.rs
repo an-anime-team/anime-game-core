@@ -5,7 +5,6 @@ use std::env::temp_dir;
 use serde::{Serialize, Deserialize};
 use md5::{Md5, Digest};
 
-use crate::traits::git_sync::RemoteGitSyncExt;
 use crate::version::Version;
 use crate::honkai::api;
 
@@ -24,19 +23,13 @@ struct PatchHashes {
     pub player: String
 }
 
-pub struct Patch {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MainPatch {
     pub folder: PathBuf,
     pub status: PatchStatus
 }
 
-impl RemoteGitSyncExt for Patch {
-    #[inline]
-    fn folder(&self) -> &Path {
-        self.folder.as_path()
-    }
-}
-
-impl Patch {
+impl MainPatch {
     /// Try to parse patch status
     /// 
     /// `patch_folder` should point to standard patch repository folder

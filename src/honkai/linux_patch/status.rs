@@ -1,6 +1,11 @@
+use std::path::{Path, PathBuf};
+
 use serde::{Serialize, Deserialize};
 
 use crate::version::*;
+use crate::traits::git_sync::RemoteGitSyncExt;
+
+use super::MainPatch;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PatchStatus {
@@ -22,5 +27,31 @@ pub enum PatchStatus {
         version: Version,
         bh3base_hash: String,
         player_hash: String
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Patch {
+    folder: PathBuf
+}
+
+impl RemoteGitSyncExt for Patch {
+    #[inline]
+    fn folder(&self) -> &Path {
+        self.folder.as_path()
+    }
+}
+
+impl Patch {
+    #[inline]
+    pub fn new<T: Into<PathBuf>>(folder: T) -> Self {
+        Self {
+            folder: folder.into()
+        }
+    }
+
+    #[inline]
+    pub fn main_patch(&self) -> anyhow::Result<MainPatch> {
+        MainPatch::from_folder(&self.folder)
     }
 }
