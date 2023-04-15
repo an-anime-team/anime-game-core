@@ -3,11 +3,6 @@
 /// Timeout is optional amount of seconds
 #[tracing::instrument(level = "trace")]
 pub fn available<T: AsRef<str> + std::fmt::Debug>(domain: T, timeout: Option<u64>) -> bool {
-    let mut request = minreq::head(format!("http://{}", domain.as_ref()));
-
-    if let Some(timeout) = timeout {
-        request = request.with_timeout(timeout);
-    }
-
-    request.send().is_ok()
+    let ips = dns_lookup::lookup_host(domain.as_ref()).unwrap();
+    !ips.contains(&"0.0.0.0".parse().unwrap())
 }
