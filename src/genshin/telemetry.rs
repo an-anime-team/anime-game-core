@@ -4,27 +4,24 @@ use super::consts::GameEdition;
 /// 
 /// If some of them is not disabled, then this function will return its address
 /// 
-/// Timeout param is optional number of seconds
-/// 
 /// ```
 /// use anime_game_core::genshin::telemetry;
 /// 
-/// // 3 seconds timeout
-/// if let None = telemetry::is_disabled(Some(3)) {
+/// if let Ok(None) = telemetry::is_disabled() {
 ///     println!("Telemetry is disabled");
 /// }
 /// ```
 #[tracing::instrument(level = "debug")]
-pub fn is_disabled(timeout: Option<u64>) -> Option<String> {
+pub fn is_disabled() -> anyhow::Result<Option<String>> {
     tracing::debug!("Checking telemetry servers status");
 
     for server in GameEdition::selected().telemetry_servers() {
-        if crate::check_domain::available(server, timeout) {
+        if crate::check_domain::available(server)? {
             tracing::warn!("Server is not disabled: {server}");
 
-            return Some(server.to_string());
+            return Ok(Some(server.to_string()));
         }
     }
 
-    None
+    Ok(None)
 }
