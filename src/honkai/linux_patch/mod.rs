@@ -1,10 +1,7 @@
 mod status;
-mod patch;
+mod main_patch;
+mod mfplat_patch;
 
 pub use status::*;
-pub use patch::*;
-
-pub mod prelude {
-    pub use super::status::*;
-    pub use super::patch::*;
-}
+pub use main_patch::*;
+pub use mfplat_patch::*;

@@ -18,5 +18,5 @@ pub mod prelude {
     pub use super::repairer;
 
     #[cfg(feature = "linux-patch")]
-    pub use super::linux_patch::prelude::*;
+    pub use super::linux_patch::*;
 }
