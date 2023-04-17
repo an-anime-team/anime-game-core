@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::ffi::OsStr;
 use std::process::{Command, Stdio};
-use std::env::temp_dir;
 
 use serde::{Serialize, Deserialize};
 use md5::{Md5, Digest};
@@ -29,16 +28,11 @@ impl MfplatPatch {
     }
 
     /// Apply available patch
-    pub fn apply<T: AsRef<OsStr>>(prefix_path: T) -> anyhow::Result<bool> {
+    pub fn apply(prefix_path: impl AsRef<OsStr>, temp_folder: impl AsRef<Path>) -> anyhow::Result<bool> {
         tracing::debug!("Applying wine prefix patch");
 
-        let temp_dir = temp_dir().join(".patch-applying");
-        let mfplat = temp_dir.join("mfplat.zip");
-
-        // Remove temp folder if it is for some reason already exists
-        if temp_dir.exists() {
-            std::fs::remove_dir_all(&temp_dir)?;
-        }
+        let temp_folder = temp_folder.as_ref();
+        let mfplat = temp_folder.join("mfplat.zip");
 
         // Download patch files
         Downloader::new(PATCH_URI)?.download(&mfplat, |_, _| {})?;
@@ -49,18 +43,19 @@ impl MfplatPatch {
         }
 
         // Extract patch files
-        Archive::open(mfplat)?.extract(&temp_dir)?;
+        Archive::open(&mfplat)?.extract(&temp_folder)?;
 
         // Run patch installer
         let output = Command::new("bash")
             .arg("mf-install-1.0/mf-install.sh")
             .env("WINEPREFIX", prefix_path.as_ref())
-            .current_dir(&temp_dir)
+            .current_dir(&temp_folder)
             .stdout(Stdio::piped())
             .output()?;
 
-        // Remove temp patch folder
-        std::fs::remove_dir_all(temp_dir)?;
+        // Remove temp patch files
+        std::fs::remove_dir_all(temp_folder.join("mf-install-1.0"))?;
+        std::fs::remove_file(mfplat)?;
 
         // Return patching status
         if let Ok(applied) = Self::is_applied(PathBuf::from(prefix_path.as_ref())) {
