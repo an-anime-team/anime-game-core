@@ -9,6 +9,9 @@ use super::MainPatch;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PatchStatus {
+    /// Patch is not available for selected region
+    NotAvailable,
+
     /// The patch is outdated and nothing was made to update it
     Outdated {
         current: Version,

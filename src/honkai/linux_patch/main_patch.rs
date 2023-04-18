@@ -14,7 +14,15 @@ use super::PatchStatus;
 struct PatchMetadata {
     pub version: String,
     pub testing: bool,
-    pub hashes: PatchHashes
+    pub hashes: Regions
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Regions {
+    pub global: Option<PatchHashes>,
+    pub china: Option<PatchHashes>,
+    pub sea: Option<PatchHashes>,
+    pub korea: Option<PatchHashes>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,25 +70,38 @@ impl MainPatch {
             });
         }
 
-        // Otherwise Testing / Available
-        if metadata.testing {
-            Ok(Self {
-                folder: patch_folder,
-                status: PatchStatus::Testing {
-                    version: patch_version,
-                    bh3base_hash: metadata.hashes.bh3base,
-                    player_hash: metadata.hashes.player
-                }
-            })
-        }
+        // TODO: region selection
 
-        else {
-            Ok(Self {
+        match metadata.hashes.global {
+            Some(hashes) => {
+                if metadata.testing {
+                    Ok(Self {
+                        folder: patch_folder,
+                        status: PatchStatus::Testing {
+                            version: patch_version,
+                            bh3base_hash: hashes.bh3base,
+                            player_hash: hashes.player
+                        }
+                    })
+                }
+        
+                else {
+                    Ok(Self {
+                        folder: patch_folder,
+                        status: PatchStatus::Available {
+                            version: patch_version,
+                            bh3base_hash: hashes.bh3base,
+                            player_hash: hashes.player
+                        }
+                    })
+                }
+            }
+
+            None => Ok(Self {
                 folder: patch_folder,
-                status: PatchStatus::Available {
-                    version: patch_version,
-                    bh3base_hash: metadata.hashes.bh3base,
-                    player_hash: metadata.hashes.player
+                status: PatchStatus::Outdated {
+                    current: patch_version,
+                    latest: latest_version
                 }
             })
         }
@@ -101,6 +122,7 @@ impl MainPatch {
     /// Check if the patch is applied to the game
     pub fn is_applied<T: AsRef<Path>>(&self, game_folder: T) -> anyhow::Result<bool> {
         match &self.status {
+            PatchStatus::NotAvailable |
             PatchStatus::Outdated { .. } => Ok(false),
 
             PatchStatus::Testing { bh3base_hash, player_hash, .. } |
@@ -119,6 +141,7 @@ impl MainPatch {
         tracing::debug!("Applying game patch");
 
         match &self.status {
+            PatchStatus::NotAvailable => anyhow::bail!("Patch for selected region is not available"),
             PatchStatus::Outdated { .. } => anyhow::bail!("Patch is outdated and can't be applied"),
 
             PatchStatus::Testing { .. } |
@@ -193,6 +216,7 @@ impl MainPatch {
         tracing::debug!("Reverting game patch");
 
         match &self.status {
+            PatchStatus::NotAvailable => anyhow::bail!("Patch for selected region is not available"),
             PatchStatus::Outdated { .. } => anyhow::bail!("Patch can't be reverted because it's outdated"),
 
             PatchStatus::Testing { .. } |
