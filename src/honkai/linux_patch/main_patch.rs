@@ -99,10 +99,7 @@ impl MainPatch {
 
             None => Ok(Self {
                 folder: patch_folder,
-                status: PatchStatus::Outdated {
-                    current: patch_version,
-                    latest: latest_version
-                }
+                status: PatchStatus::NotAvailable
             })
         }
     }
