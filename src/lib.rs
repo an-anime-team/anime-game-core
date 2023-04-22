@@ -13,11 +13,13 @@ pub mod check_domain;
 
 // Games-specific functionality
 
+mod games;
+
 #[cfg(feature = "genshin")]
-pub mod genshin;
+pub use games::genshin;
 
 #[cfg(feature = "honkai")]
-pub mod honkai;
+pub use games::honkai;
 
 // Core functionality
 
