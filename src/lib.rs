@@ -21,6 +21,9 @@ pub use games::genshin;
 #[cfg(feature = "honkai")]
 pub use games::honkai;
 
+#[cfg(feature = "star-rail")]
+pub use games::star_rail;
+
 // Core functionality
 
 #[cfg(feature = "external")]

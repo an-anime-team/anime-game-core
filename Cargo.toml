@@ -41,6 +41,7 @@ lazy_static = { version = "1.4.0", optional = true }
 [features]
 genshin = []
 honkai = []
+star-rail = []
 
 install = ["external", "dep:sysinfo", "dep:zip", "dep:tar", "dep:xz", "dep:bzip2", "dep:flate2"] # "dep:sevenz-rust"
 linux-patch = ["dep:md-5"]
