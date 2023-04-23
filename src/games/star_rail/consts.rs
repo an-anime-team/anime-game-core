@@ -45,24 +45,20 @@ impl GameEdition {
 
     #[inline]
     pub fn data_folder(&self) -> &str {
-        match self {
-            GameEdition::Global => concat!("Sta", "rRai", "l_Data"),
-
-            // FIXME update CN version's data folder name
-            GameEdition::China  => concat!("Sta", "rRai", "l_Data")
-        }
+        // Same data folder name for every region
+        concat!("Sta", "rRai", "l_Data")
     }
 
     #[inline]
     pub fn telemetry_servers(&self) -> &[&str] {
         match self {
             GameEdition::Global => &[
-                concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
-                concat!("overseauspider.", "yu", "ans", "hen", ".com")
+                concat!("log-upload-os.", "ho", "yo", "ver", "se.com"),
+                concat!("sg-public-data-api.ho", "yo", "ver", "se.com")
             ],
             GameEdition::China => &[
-                concat!("log-upload.", "mih", "oyo", ".com"),
-                concat!("uspider.", "yu", "ans", "hen", ".com")
+                concat!("log-upload.m", "iho", "yo.com"),
+                concat!("public-data-api.m", "iho", "yo.com")
             ]
         }
     }

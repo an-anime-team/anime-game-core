@@ -52,16 +52,16 @@ impl GameExt for Game {
             num
         }
 
-        let file = File::open(self.path.join(GameEdition::selected().data_folder()).join("globalgamemanagers"))?;
+        let file = File::open(self.path.join(GameEdition::selected().data_folder()).join("data.unity3d"))?;
 
-        // [0..9, .]
-        let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];
+        // [0..9]
+        let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes().skip(4000).take(10000) {
+        for byte in file.bytes().skip(2000).take(10000) {
             if let Ok(byte) = byte {
                 match byte {
                     0 => {
@@ -78,7 +78,7 @@ impl GameExt for Game {
                         }
                     }
 
-                    95 => {
+                    38 => {
                         if correct && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
                             return Ok(Version::new(
                                 bytes_to_num(&version[0]),

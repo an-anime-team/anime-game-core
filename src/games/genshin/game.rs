@@ -56,8 +56,8 @@ impl GameExt for Game {
 
         let file = File::open(self.path.join(GameEdition::selected().data_folder()).join("globalgamemanagers"))?;
 
-        // [0..9, .]
-        let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];
+        // [0..9]
+        let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
