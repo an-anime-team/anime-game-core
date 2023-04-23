@@ -52,7 +52,7 @@ impl GameExt for Game {
             num
         }
 
-        let file = File::open(self.path.join(DATA_FOLDER_NAME).join("globalgamemanagers"))?;
+        let file = File::open(self.path.join(GameEdition::selected().data_folder()).join("globalgamemanagers"))?;
 
         // [0..9, .]
         let allowed: [u8; 11] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 46];

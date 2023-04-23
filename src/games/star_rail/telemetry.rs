@@ -1,4 +1,4 @@
-use super::consts::TELEMETRY_SERVERS;
+use super::consts::GameEdition;
 
 /// Check whether telemetry servers disabled
 /// 
@@ -15,7 +15,7 @@ use super::consts::TELEMETRY_SERVERS;
 pub fn is_disabled() -> anyhow::Result<Option<String>> {
     tracing::debug!("Checking telemetry servers status");
 
-    for server in TELEMETRY_SERVERS {
+    for server in GameEdition::selected().telemetry_servers() {
         if crate::check_domain::available(server)? {
             tracing::warn!("Server is not disabled: {server}");
 
