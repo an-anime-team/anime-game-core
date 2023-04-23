@@ -5,6 +5,8 @@ use serde::{Serialize, Deserialize};
 use crate::version::*;
 use crate::traits::git_sync::RemoteGitSyncExt;
 
+use crate::star_rail::consts::GameEdition;
+
 use super::MainPatch;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,7 +56,7 @@ impl Patch {
     }
 
     #[inline]
-    pub fn main_patch(&self) -> anyhow::Result<MainPatch> {
-        MainPatch::from_folder(&self.folder)
+    pub fn main_patch(&self, region: GameEdition) -> anyhow::Result<MainPatch> {
+        MainPatch::from_folder(&self.folder, region)
     }
 }

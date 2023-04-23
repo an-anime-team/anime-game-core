@@ -5,7 +5,30 @@ use std::env::temp_dir;
 use serde::{Serialize, Deserialize};
 use md5::{Md5, Digest};
 
+use crate::version::Version;
+use crate::star_rail::api;
+use crate::star_rail::consts::GameEdition;
+
 use super::PatchStatus;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PatchMetadata {
+    pub global: Option<PatchRegion>,
+    pub china: Option<PatchRegion>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PatchRegion {
+    pub version: String,
+    pub testing: bool,
+    pub hashes: PatchHashes
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PatchHashes {
+    pub srbase: String,
+    pub player: String
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MainPatch {
@@ -17,13 +40,8 @@ impl MainPatch {
     /// Try to parse patch status
     /// 
     /// `patch_folder` should point to standard patch repository folder
-    pub fn from_folder<T: AsRef<Path>>(patch_folder: T) -> anyhow::Result<Self> where Self: Sized {
-        Ok(Self {
-            folder: patch_folder.as_ref().to_path_buf(),
-            status: PatchStatus::NotAvailable
-        })
-
-        /*let patch_folder = patch_folder.as_ref().to_path_buf();
+    pub fn from_folder<T: AsRef<Path>>(patch_folder: T, region: GameEdition) -> anyhow::Result<Self> where Self: Sized {
+        let patch_folder = patch_folder.as_ref().to_path_buf();
 
         // Immediately throw error if patch folder doesn't even exist
         // but it actually shouldn't be possible because we get this struct
@@ -35,9 +53,23 @@ impl MainPatch {
 
         // Get patch metadata
         let metadata: PatchMetadata = serde_json::from_str(&std::fs::read_to_string(patch_folder.join("version.json"))?)?;
-        let patch_version = Version::from_str(metadata.version).unwrap();
 
-        // Get latest available game version
+        // Select patch region
+        let metadata = match region {
+            GameEdition::Global => metadata.global,
+            GameEdition::China => metadata.china
+        };
+
+        // Check if patch for selected region is available
+        let Some(metadata) = metadata else {
+            return Ok(Self {
+                folder: patch_folder,
+                status: PatchStatus::NotAvailable
+            })
+        };
+
+        // Get patch and game versions
+        let patch_version = Version::from_str(metadata.version).unwrap();
         let latest_version = Version::from_str(api::request()?.data.game.latest.version).unwrap();
 
         // Return PatchStatus::Outdated if the patch is, well, outdated
@@ -51,38 +83,29 @@ impl MainPatch {
             });
         }
 
-        // TODO: region selection
-
-        match metadata.hashes.global {
-            Some(hashes) => {
-                if metadata.testing {
-                    Ok(Self {
-                        folder: patch_folder,
-                        status: PatchStatus::Testing {
-                            version: patch_version,
-                            bh3base_hash: hashes.bh3base,
-                            player_hash: hashes.player
-                        }
-                    })
-                }
-        
-                else {
-                    Ok(Self {
-                        folder: patch_folder,
-                        status: PatchStatus::Available {
-                            version: patch_version,
-                            bh3base_hash: hashes.bh3base,
-                            player_hash: hashes.player
-                        }
-                    })
-                }
-            }
-
-            None => Ok(Self {
+        // Then, return PatchStatus::Testing if the patch is in testing stage
+        else if metadata.testing {
+            Ok(Self {
                 folder: patch_folder,
-                status: PatchStatus::NotAvailable
+                status: PatchStatus::Testing {
+                    version: patch_version,
+                    srbase_hash: metadata.hashes.srbase,
+                    player_hash: metadata.hashes.player
+                }
             })
-        }*/
+        }
+
+        // Finally, return PatchStatus::Available if everything is stable
+        else {
+            Ok(Self {
+                folder: patch_folder,
+                status: PatchStatus::Available {
+                    version: patch_version,
+                    srbase_hash: metadata.hashes.srbase,
+                    player_hash: metadata.hashes.player
+                }
+            })
+        }
     }
 
     #[inline]
