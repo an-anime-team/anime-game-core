@@ -32,6 +32,7 @@ pub enum Update {
 }
 
 impl From<DownloadingError> for Update {
+    #[inline]
     fn from(err: DownloadingError) -> Self {
         Self::DownloadingError(err)
     }

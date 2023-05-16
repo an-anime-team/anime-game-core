@@ -448,22 +448,30 @@ impl VersionDiff {
                         if let Err(err) = hpatchz::patch(&file, &patch, &output) {
                             tracing::warn!("Failed to apply hdiff patch for {:?}: {err}", file);
 
-                            let mut integrity_files: Option<anyhow::Result<Option<IntegrityFile>>> = None;
+                            // TODO: rewrite this stuff somehow
+                            let mut integrity_file: Option<anyhow::Result<Option<IntegrityFile>>> = None;
 
-                            #[cfg(feature = "genshin")] {
-                                integrity_files = Some(crate::genshin::repairer::try_get_integrity_file(relative_file, None));
+                            #[cfg(feature = "genshin")]
+                            if integrity_file.is_none() {
+                                integrity_file = Some(crate::genshin::repairer::try_get_integrity_file(relative_file, None));
                             }
 
-                            #[cfg(feature = "honkai")] {
-                                integrity_files = Some(crate::honkai::repairer::try_get_integrity_file(relative_file, None));
+                            #[cfg(feature = "star-rail")]
+                            if integrity_file.is_none() {
+                                integrity_file = Some(crate::star_rail::repairer::try_get_integrity_file(relative_file, None));
                             }
 
-                            if let Some(integrity_files) = integrity_files {
+                            #[cfg(feature = "honkai")]
+                            if integrity_file.is_none() {
+                                integrity_file = Some(crate::honkai::repairer::try_get_integrity_file(relative_file, None));
+                            }
+
+                            if let Some(integrity_file) = integrity_file {
                                 tracing::debug!("Trying to repair corrupted file");
 
                                 // If we were able to get API response - it shouldn't be impossible
                                 // to also get integrity files list from the same API
-                                match integrity_files {
+                                match integrity_file {
                                     Ok(Some(integrity)) => {
                                         if !integrity.fast_verify(&path) {
                                             if let Err(err) = integrity.repair(&path) {
