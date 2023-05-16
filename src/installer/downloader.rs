@@ -68,7 +68,7 @@ impl Downloader {
         let uri = uri.as_ref();
 
         let header = minreq::head(uri)
-            .with_timeout(crate::DEFAULT_REQUESTS_TIMEOUT)
+            .with_timeout(*crate::REQUESTS_TIMEOUT)
             .send()?;
 
         let length = header.headers.get("content-length")
@@ -83,8 +83,8 @@ impl Downloader {
         })
     }
 
-    /// Get content length
     #[inline]
+    /// Get content length
     pub fn length(&self) -> Option<u64> {
         self.length
     }

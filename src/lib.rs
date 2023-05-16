@@ -1,10 +1,15 @@
 pub use minreq;
 
-/// Default requests timeout in seconds
-pub const DEFAULT_REQUESTS_TIMEOUT: u64 = 4;
-
 /// Core library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+lazy_static::lazy_static! {
+    /// Default requests timeout in seconds
+    pub static ref REQUESTS_TIMEOUT: u64 = match option_env!("LAUNCHER_REQUESTS_TIMEOUT") {
+        Some(timeout) => timeout.parse().unwrap_or(4),
+        None => 4
+    };
+}
 
 pub mod version;
 pub mod traits;

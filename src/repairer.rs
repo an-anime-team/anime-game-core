@@ -1,7 +1,7 @@
-use md5::{Md5, Digest};
-
 use std::path::PathBuf;
 use std::collections::HashSet;
+
+use md5::{Md5, Digest};
 
 use super::installer::downloader::{Downloader, DownloadingError};
 
@@ -22,24 +22,24 @@ impl IntegrityFile {
 
         let file_path: PathBuf = game_path.into().join(&self.path);
 
-        // Compare files' sizes. If they're different - they 100% different
-        match file_path.metadata() {
-            Ok(metadata) => {
-                if metadata.len() != self.size {
-                    false
-                }
+        // Get file metadata, or return false if it's unavailable
+        let Ok(metadata) = file_path.metadata() else {
+            return false;
+        };
 
-                else {
-                    tracing::trace!("Comparing hashes");
+        // Immediately return false if sizes aren't equal
+        if metadata.len() != self.size {
+            false
+        }
 
-                    // And if files' sizes are same we should compare their hashes
-                    match std::fs::read(&file_path) {
-                        Ok(hash) => format!("{:x}", Md5::digest(hash)).to_lowercase() == self.md5.to_lowercase(),
-                        Err(_) => false
-                    }
-                }
-            },
-            Err(_) => false
+        // Otherwise compare file hashes
+        else {
+            tracing::trace!("Comparing hashes");
+
+            match std::fs::read(&file_path) {
+                Ok(hash) => format!("{:x}", Md5::digest(hash)).to_lowercase() == self.md5.to_lowercase(),
+                Err(_) => false
+            }
         }
     }
 
@@ -48,10 +48,9 @@ impl IntegrityFile {
     pub fn fast_verify<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> bool {
         tracing::trace!("Verifying file");
 
-        match std::fs::metadata(game_path.into().join(&self.path)) {
-            Ok(metadata) => metadata.len() == self.size,
-            Err(_) => false
-        }
+        std::fs::metadata(game_path.into().join(&self.path))
+            .and_then(|metadata| Ok(metadata.len() == self.size))
+            .unwrap_or(false)
     }
 
     /// Replace remote file with the latest one

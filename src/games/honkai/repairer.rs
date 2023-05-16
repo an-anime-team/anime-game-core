@@ -9,7 +9,7 @@ fn try_get_some_integrity_files<T: AsRef<str>>(file_name: T, timeout: Option<u64
     let decompressed_path = api::request()?.data.game.latest.decompressed_path;
 
     let pkg_version = minreq::get(format!("{decompressed_path}/{}", file_name.as_ref()))
-        .with_timeout(timeout.unwrap_or(crate::DEFAULT_REQUESTS_TIMEOUT))
+        .with_timeout(timeout.unwrap_or(*crate::REQUESTS_TIMEOUT))
         .send()?;
 
     let mut files = Vec::new();

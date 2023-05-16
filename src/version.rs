@@ -15,6 +15,7 @@ impl Version {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     /// Get `Version` from the string
     /// 
     /// ```
@@ -22,7 +23,6 @@ impl Version {
     /// 
     /// let version = Version::from_str("1.10.2").expect("Failed to parse version string");
     /// ```
-    #[allow(clippy::should_implement_trait)]
     pub fn from_str<T: AsRef<str>>(str: T) -> Option<Self> {
         let parts = str.as_ref().split('.').collect::<Vec<&str>>();
 

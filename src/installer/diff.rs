@@ -137,10 +137,10 @@ pub enum VersionDiff {
 }
 
 impl VersionDiff {
+    #[inline]
     /// Get currently installed game version
     /// 
     /// Returns `None` on `VersionDiff::NotInstalled`
-    #[inline]
     pub fn current(&self) -> Option<Version> {
         match self {
             Self::Latest(current) |
@@ -152,8 +152,8 @@ impl VersionDiff {
         }
     }
 
-    /// Get latest available game version
     #[inline]
+    /// Get latest available game version
     pub fn latest(&self) -> Version {
         match self {
             Self::Latest(latest) |
@@ -164,8 +164,8 @@ impl VersionDiff {
         }
     }
 
-    /// Returns (download_size, unpacked_size) pair if it exists in current enum value
     #[inline]
+    /// Returns (download_size, unpacked_size) pair if it exists in current enum value
     pub fn size(&self) -> Option<(u64, u64)> {
         match self {
             // Can't be downloaded
@@ -179,8 +179,8 @@ impl VersionDiff {
         }
     }
 
-    /// Returns the path this difference should be installed to if it exists in current enum value
     #[inline]
+    /// Returns the path this difference should be installed to if it exists in current enum value
     pub fn unpacking_path(&self) -> Option<PathBuf> {
         match self {
             // Can't be downloaded
@@ -216,9 +216,9 @@ impl VersionDiff {
         }
     }
 
-    /// Try to download archive with the difference into the specified folder
     #[cfg(feature = "install")]
     #[tracing::instrument(level = "debug", skip(progress))]
+    /// Try to download archive with the difference into the specified folder
     pub fn download_in<T, Fp>(&mut self, folder: T, progress: Fp) -> Result<(), DiffDownloadError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
@@ -252,9 +252,9 @@ impl VersionDiff {
         }
     }
 
-    /// Try to download archive with the difference by specified path, including filename
     #[cfg(feature = "install")]
     #[tracing::instrument(level = "debug", skip(progress))]
+    /// Try to download archive with the difference by specified path, including filename
     pub fn download_to<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DiffDownloadError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
@@ -287,12 +287,12 @@ impl VersionDiff {
         Ok(())
     }
 
+    #[cfg(feature = "install")]
     /// Try to install the difference
     /// 
     /// This method can return `Err(DiffDownloadError::PathNotSpecified)` when `unpacking_path` is not specified.
     /// It's recommended to use `unpacking_path` before this method to be sure that current enum knows
     /// where the difference should be installed
-    #[cfg(feature = "install")]
     pub fn install<F>(&self, updater: F) -> Result<(), DiffDownloadError>
     where F: Fn(Update) + Clone + Send + 'static
     {
@@ -313,8 +313,8 @@ impl VersionDiff {
         }
     }
 
-    /// Try to install the difference by specified location
     #[cfg(feature = "install")]
+    /// Try to install the difference by specified location
     pub fn install_to<T, F>(&self, path: T, updater: F) -> Result<(), DiffDownloadError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
@@ -332,11 +332,11 @@ impl VersionDiff {
         }
     }
 
+    #[cfg(feature = "install")]
+    #[tracing::instrument(level = "debug", skip(updater))]
     /// Try to install the difference by specified location and temp folder
     /// 
     /// Same as `install_to` method if `temp_path` specified as `None` (uses default system temp folder)
-    #[cfg(feature = "install")]
-    #[tracing::instrument(level = "debug", skip(updater))]
     pub fn install_to_by<T, F>(&self, path: T, temp_path: Option<T>, updater: F) -> Result<(), DiffDownloadError>
     where
         T: Into<PathBuf> + std::fmt::Debug,
