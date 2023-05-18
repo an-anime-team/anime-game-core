@@ -218,8 +218,6 @@ impl Archive {
                         .arg(archive)
                         .arg("-d")
                         .arg(folder)
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
                         .output()?;
                 }
             }
@@ -243,13 +241,20 @@ impl Archive {
             Archive::SevenZ(archive) => {
                 // sevenz_rust::decompress_file(archive, folder.into())?;
 
+                // Workaround to allow 7z to overwrite files
+                // Somehow it manages to forbid itself to do this
+                Command::new("chmod")
+                    .arg("-R")
+                    .arg("755")
+                    .arg(&folder)
+                    .output()?;
+
+                // Extract the archive
                 Command::new("7z")
                     .arg("x")
                     .arg(archive)
                     .arg(format!("-o{}", folder.to_string_lossy()))
                     .arg("-aoa")
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
                     .output()?;
             }
         }
