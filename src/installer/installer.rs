@@ -1,6 +1,5 @@
-use std::env::temp_dir;
-use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
+use std::os::unix::prelude::PermissionsExt;
 
 use serde::{Serialize, Deserialize};
 
@@ -43,7 +42,10 @@ pub struct Installer {
     pub downloader: Downloader,
 
     /// Path to the temp folder used to store archive before unpacking
-    pub temp_folder: PathBuf
+    pub temp_folder: PathBuf,
+
+    /// Perform free space verifications before downloading file
+    pub check_free_space: bool
 }
 
 impl Installer {
@@ -51,14 +53,9 @@ impl Installer {
     pub fn new<T: AsRef<str>>(uri: T) -> Result<Self, minreq::Error> {
         Ok(Self {
             downloader: Downloader::new(uri.as_ref())?,
-            temp_folder: temp_dir()
+            temp_folder: std::env::temp_dir(),
+            check_free_space: true
         })
-    }
-
-    /// Specify path to the temp folder used to store archive before unpacking
-    #[inline]
-    pub fn set_temp_folder<T: Into<PathBuf>>(&mut self, path: T) {
-        self.temp_folder = path.into();
     }
 
     /// Get name of downloading file from uri
@@ -75,69 +72,85 @@ impl Installer {
         self.temp_folder.join(self.get_filename())
     }
 
+    #[inline]
+    /// Specify path to the temp folder used to store archive before unpacking
+    pub fn with_temp_folder(mut self, path: impl Into<PathBuf>) -> Self {
+        self.temp_folder = path.into();
+
+        self
+    }
+
+    #[inline]
+    /// Specify whether installer should check free space availability
+    pub fn with_free_space_check(mut self, check_free_space: bool) -> Self {
+        self.check_free_space = check_free_space;
+
+        self
+    }
+
     /// Download archive from specified uri and unpack it
-    #[tracing::instrument(level = "debug", skip(updater))]
-    pub fn install<T, F>(&mut self, unpack_to: T, updater: F)
-    where
-        T: Into<PathBuf> + std::fmt::Debug,
-        F: Fn(Update) + Clone + Send + 'static
-    {
+    pub fn install(&mut self, unpack_to: impl Into<PathBuf>, updater: impl Fn(Update) + Clone + Send + 'static) {
         tracing::trace!("Checking free space availability");
 
         let temp_path = self.get_temp_path();
         let unpack_to = unpack_to.into();
 
-        // Check available free space for archive itself
-        (updater)(Update::CheckingFreeSpace(temp_path.clone()));
+        // Perform free space verifications if needed
+        if self.check_free_space {
+            // Check available free space for archive itself
+            (updater)(Update::CheckingFreeSpace(temp_path.clone()));
 
-        match free_space::available(&temp_path) {
-            Some(space) => {
-                if let Some(required) = self.downloader.length() {
-                    // We can possibly store downloaded archive + unpacked data on the same disk
-                    let required = if free_space::is_same_disk(&temp_path, &unpack_to) {
-                        (required as f64 * 2.5).ceil() as u64
-                    } else {
-                        required
-                    };
+            let Some(space) = free_space::available(&temp_path) else {
+                tracing::error!("Path is not mounted: {:?}", temp_path);
 
-                    if space < required {
-                        (updater)(DownloadingError::NoSpaceAvailable(temp_path, required, space).into());
-
-                        return;
-                    }
-                }
-            },
-            None => {
                 (updater)(DownloadingError::PathNotMounted(temp_path).into());
 
                 return;
-            }
-        }
+            };
 
-        // Check available free space for unpacked archvie data (archive size * 1.5)
-        (updater)(Update::CheckingFreeSpace(unpack_to.clone()));
+            if let Some(required) = self.downloader.length() {
+                // We can possibly store downloaded archive + unpacked data on the same disk
+                let required = if free_space::is_same_disk(&temp_path, &unpack_to) {
+                    (required as f64 * 2.5).ceil() as u64
+                } else {
+                    required
+                };
 
-        match free_space::available(&unpack_to) {
-            Some(space) => {
-                if let Some(required) = self.downloader.length() {
-                    // We can possibly store downloaded archive + unpacked data on the same disk
-                    let required = if free_space::is_same_disk(&unpack_to, &temp_path) {
-                        (required as f64 * 2.5).ceil() as u64
-                    } else {
-                        (required as f64 * 1.5).ceil() as u64
-                    };
+                if space < required {
+                    tracing::error!("No free space available in the temp folder. Required: {required}. Available: {space}");
 
-                    if space < required {
-                        (updater)(DownloadingError::NoSpaceAvailable(unpack_to, required, space).into());
+                    (updater)(DownloadingError::NoSpaceAvailable(temp_path, required, space).into());
 
-                        return;
-                    }
+                    return;
                 }
-            },
-            None => {
+            }
+
+            // Check available free space for unpacked archvie data (archive size * 1.5)
+            (updater)(Update::CheckingFreeSpace(unpack_to.clone()));
+
+            let Some(space) = free_space::available(&unpack_to) else {
+                tracing::error!("Path is not mounted: {:?}", temp_path);
+
                 (updater)(DownloadingError::PathNotMounted(unpack_to).into());
 
                 return;
+            };
+
+            if let Some(required) = self.downloader.length() {
+                // We can possibly store downloaded archive + unpacked data on the same disk
+                let required = if free_space::is_same_disk(&unpack_to, &temp_path) {
+                    (required as f64 * 2.5).ceil() as u64
+                } else {
+                    (required as f64 * 1.5).ceil() as u64
+                };
+
+                if space < required {
+                    tracing::error!("No free space available in the installation folder. Required: {required}. Available: {space}");
+
+                    (updater)(DownloadingError::NoSpaceAvailable(unpack_to, required, space).into());
+
+                    return;
+                }
             }
         }
 
@@ -149,6 +162,8 @@ impl Installer {
         (updater)(Update::DownloadingStarted(temp_path.clone()));
 
         if let Err(err) = self.downloader.download(&temp_path, move |curr, total| (download_progress_updater)(Update::DownloadingProgress(curr, total))) {
+            tracing::error!("Failed to download archive: {err}");
+
             (updater)(Update::DownloadingError(err));
 
             return;
@@ -241,7 +256,8 @@ impl Installer {
 
                 handle_1.join().unwrap();
                 handle_2.join().unwrap();
-            },
+            }
+
             Err(err) => (updater)(Update::UnpackingError(err.to_string()))
         }
     }

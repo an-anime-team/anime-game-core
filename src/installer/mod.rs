@@ -1,7 +1,6 @@
 pub mod downloader;
 pub mod archives;
 pub mod installer;
-pub mod diff;
 pub mod free_space;
 
 pub mod prelude {
@@ -16,12 +15,5 @@ pub mod prelude {
     pub use super::installer::{
         Installer,
         Update as InstallerUpdate
-    };
-
-    pub use super::diff::{
-        VersionDiff,
-        TryGetDiff,
-        DiffDownloadError,
-        Update as DiffUpdate
     };
 }

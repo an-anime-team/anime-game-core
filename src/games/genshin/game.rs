@@ -3,15 +3,14 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::version::Version;
-use crate::traits::game::GameExt;
+use crate::traits::prelude::*;
 
 use super::api;
+use super::consts::*;
+use super::version_diff::*;
+
 use super::voice_data::locale::VoiceLocale;
 use super::voice_data::package::VoicePackage;
-use super::consts::*;
-
-#[cfg(feature = "install")]
-use crate::installer::diff::{VersionDiff, TryGetDiff};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
@@ -146,12 +145,10 @@ impl Game {
         // Should be unreachable!() instead of None to catch possible future errors
         unreachable!()
     }
-}
 
-#[cfg(feature = "install")]
-impl TryGetDiff for Game {
+    #[cfg(feature = "install")]
     #[tracing::instrument(level = "debug", ret)]
-    fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
+    pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
         let response = api::request()?;
@@ -166,10 +163,13 @@ impl TryGetDiff for Game {
                         return Ok(VersionDiff::NotInstalled {
                             latest: Version::from_str(&latest.version).unwrap(),
                             url: latest.path,
-                            download_size: latest.size.parse::<u64>().unwrap(),
+
+                            downloaded_size: latest.size.parse::<u64>().unwrap(),
                             unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                            unpacking_path: Some(self.path.clone()),
-                            version_file_path: None
+
+                            installation_path: Some(self.path.clone()),
+                            version_file_path: None,
+                            temp_folder: None
                         });
                     }
 
@@ -192,10 +192,13 @@ impl TryGetDiff for Game {
                                 current,
                                 latest: Version::from_str(predownload.latest.version).unwrap(),
                                 url: diff.path,
-                                download_size: diff.size.parse::<u64>().unwrap(),
+
+                                downloaded_size: diff.size.parse::<u64>().unwrap(),
                                 unpacked_size: diff.package_size.parse::<u64>().unwrap(),
-                                unpacking_path: Some(self.path.clone()),
-                                version_file_path: None
+
+                                installation_path: Some(self.path.clone()),
+                                version_file_path: None,
+                                temp_folder: None
                             });
                         }
                     }
@@ -213,10 +216,13 @@ impl TryGetDiff for Game {
                             current,
                             latest: Version::from_str(response.data.game.latest.version).unwrap(),
                             url: diff.path,
-                            download_size: diff.size.parse::<u64>().unwrap(),
+
+                            downloaded_size: diff.size.parse::<u64>().unwrap(),
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
-                            unpacking_path: Some(self.path.clone()),
-                            version_file_path: None
+
+                            installation_path: Some(self.path.clone()),
+                            version_file_path: None,
+                            temp_folder: None
                         });
                     }
                 }
@@ -236,10 +242,13 @@ impl TryGetDiff for Game {
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
                 url: latest.path,
-                download_size: latest.size.parse::<u64>().unwrap(),
+
+                downloaded_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                unpacking_path: Some(self.path.clone()),
-                version_file_path: None
+
+                installation_path: Some(self.path.clone()),
+                version_file_path: None,
+                temp_folder: None
             })
         }
     }

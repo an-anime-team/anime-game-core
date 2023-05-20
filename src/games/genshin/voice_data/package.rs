@@ -3,31 +3,32 @@ use std::path::{Path, PathBuf};
 use fs_extra::dir::get_size;
 
 use crate::version::Version;
+use crate::traits::version_diff::VersionDiffExt;
 
-use crate::genshin::{
-    voice_data::locale::VoiceLocale,
-    api::schema::VoicePack as RemoteVoicePack,
-    consts::get_voice_package_path,
-    api
+use crate::genshin::api::{
+    self,
+    schema::VoicePack as RemoteVoicePack
 };
 
+use crate::genshin::consts::get_voice_package_path;
+use crate::genshin::voice_data::locale::VoiceLocale;
+
 #[cfg(feature = "install")]
-use crate::installer::diff::{VersionDiff, TryGetDiff};
+use crate::genshin::version_diff::*;
 
 /// List of voiceover sizes
 /// 
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
-    //        English(US)   Japanese      Korean       Chinese
-    ("3.6.0", 11041879555,  12412351703,  9434697975,  9626464559),
-    ("3.5.0", 10352166715,  11641949699,  8861959147,  9062163032),
-    ("3.4.0", 9702104595,   10879201351,  8329592851,  8498622343),
-    ("3.3.0", 9183929971,   10250403911,  7896362859,  8047012675),
-    ("3.2.0", 8636001252,   9600770928,   7416414724,  7563358032)
+    //         English(US)   Japanese      Korean       Chinese
+    ("3.6.0",  11041879555,  12412351703,  9434697975,  9626464559),
+    ("3.5.0",  10352166715,  11641949699,  8861959147,  9062163032),
+    ("3.4.0",  9702104595,   10879201351,  8329592851,  8498622343),
+    ("3.3.0",  9183929971,   10250403911,  7896362859,  8047012675),
+    ("3.2.0",  8636001252,   9600770928,   7416414724,  7563358032)
 ];
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
-#[inline]
 pub fn get_voice_pack_sizes(locale: VoiceLocale) -> Vec<(String, u64)> {
     VOICE_PACKAGES_SIZES.into_iter().map(|item| {
         match locale {
@@ -40,12 +41,12 @@ pub fn get_voice_pack_sizes(locale: VoiceLocale) -> Vec<(String, u64)> {
 }
 
 /// Predict next value of slice using WMA
-#[inline]
 pub fn wma_predict(values: &[u64]) -> u64 {
     match values.len() {
         0 => 0,
         1 => values[0],
         2 => (values[1] as f64 * (values[1] as f64 / values[0] as f64)).round() as u64,
+
         n => {
             let mut weighted_sum = 0.0;
             let mut weighted_delim = 0.0;
@@ -61,13 +62,11 @@ pub fn wma_predict(values: &[u64]) -> u64 {
 }
 
 /// Predict new voice package size using WMA based on `VOICE_PACKAGES_SIZES` constant
-#[inline]
 pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
     wma_predict(&get_voice_pack_sizes(locale).into_iter().map(|item| item.1).rev().collect::<Vec<u64>>())
 }
 
 /// Find voice package with specified locale from list of packages
-#[inline]
 fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
     for pack in list {
         if pack.language == locale.to_code() {
@@ -85,6 +84,7 @@ pub enum VoicePackage {
         path: PathBuf,
         locale: VoiceLocale
     },
+
     NotInstalled {
         locale: VoiceLocale,
         version: Version,
@@ -97,7 +97,6 @@ impl VoicePackage {
     /// Voice packages can't be instaled wherever you want.
     /// Thus this method can return `None` in case the path
     /// doesn't point to a real voice package folder
-    #[inline]
     pub fn new<T: Into<PathBuf>>(path: T) -> Option<Self> {
         let path = path.into();
 
@@ -123,7 +122,6 @@ impl VoicePackage {
     /// 
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
     /// technically it can be installed. This method just don't know the game's path
-    #[inline]
     pub fn with_locale(locale: VoiceLocale) -> anyhow::Result<Self> {
         let latest = api::request()?.data.game.latest;
 
@@ -137,12 +135,12 @@ impl VoicePackage {
 
     // TODO: find_in(game_path: String, locale: VoiceLocale)
 
+    #[inline]
     /// Get installation status of this package
     /// 
     /// This method will return `false` if this package is `VoicePackage::NotInstalled` enum value
     /// 
     /// If you want to check it's actually installed - you'd need to use `is_installed_in`
-    #[inline]
     pub fn is_installed(&self) -> bool {
         match self {
             Self::Installed { .. } => true,
@@ -153,7 +151,6 @@ impl VoicePackage {
     /// Calculate voice package size in bytes
     /// 
     /// (unpacked size, Option(archive size))
-    #[inline]
     pub fn size(&self) -> (u64, Option<u64>) {
         match self {
             VoicePackage::Installed { path, .. } => (get_size(path).unwrap(), None),
@@ -164,10 +161,10 @@ impl VoicePackage {
         }
     }
 
+    #[inline]
     /// This method will return `true` if the package has `VoicePackage::Installed` enum value
     /// 
     /// If it's `VoicePackage::NotInstalled`, then this method will check `game_path`'s voices folder
-    #[inline]
     pub fn is_installed_in<T: AsRef<Path>>(&self, game_path: T) -> bool {
         match self {
             Self::Installed { .. } => true,
@@ -194,8 +191,8 @@ impl VoicePackage {
         Ok(packages)
     }
 
-    /// Get voice package locale
     #[inline]
+    /// Get voice package locale
     pub fn locale(&self) -> VoiceLocale {
         match self {
             Self::Installed { locale, .. } |
@@ -203,10 +200,10 @@ impl VoicePackage {
         }
     }
 
+    #[tracing::instrument(level = "debug", ret)]
     /// This method can fail to parse this package version.
     /// It also can mean that the corresponding folder doesn't
     /// contain voice package files
-    #[tracing::instrument(level = "debug", ret)]
     pub fn try_get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!("Trying to get {} voice package version", self.locale().to_code());
 
@@ -258,11 +255,11 @@ impl VoicePackage {
         }
     }
 
+    #[tracing::instrument(level = "trace", ret)]
     /// Try to delete voice package
     /// 
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
-    #[tracing::instrument(level = "trace", ret)]
     pub fn delete(&self) -> anyhow::Result<()> {
         tracing::trace!("Deleting {} voice package", self.locale().to_code());
 
@@ -297,11 +294,11 @@ impl VoicePackage {
         }
     }
 
+    #[tracing::instrument(level = "debug", ret)]
     /// Try to delete voice package from specific game directory
     /// 
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
-    #[tracing::instrument(level = "debug", ret)]
     pub fn delete_in<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> anyhow::Result<()> {
         tracing::debug!("Deleting {} voice package", self.locale().to_code());
 
@@ -318,12 +315,10 @@ impl VoicePackage {
 
         Ok(())
     }
-}
 
-#[cfg(feature = "install")]
-impl TryGetDiff for VoicePackage {
+    #[cfg(feature = "install")]
     #[tracing::instrument(level = "debug", ret)]
-    fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
+    pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for {} voice package", self.locale().to_code());
 
         let response = api::request()?;
@@ -348,10 +343,10 @@ impl TryGetDiff for VoicePackage {
                                 current,
                                 latest: Version::from_str(predownload.latest.version).unwrap(),
                                 url: diff.path,
-                                download_size: diff.size.parse::<u64>().unwrap(),
+                                downloaded_size: diff.size.parse::<u64>().unwrap(),
                                 unpacked_size: diff.package_size.parse::<u64>().unwrap(),
 
-                                unpacking_path: match self {
+                                installation_path: match self {
                                     VoicePackage::Installed { .. } => None,
                                     VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
                                 },
@@ -364,7 +359,9 @@ impl TryGetDiff for VoicePackage {
                                             None => None
                                         }
                                     }
-                                }
+                                },
+
+                                temp_folder: None
                             })
                         }
                     }
@@ -384,10 +381,10 @@ impl TryGetDiff for VoicePackage {
                             current,
                             latest: Version::from_str(response.data.game.latest.version).unwrap(),
                             url: diff.path,
-                            download_size: diff.size.parse::<u64>().unwrap(),
+                            downloaded_size: diff.size.parse::<u64>().unwrap(),
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
 
-                            unpacking_path: match self {
+                            installation_path: match self {
                                 VoicePackage::Installed { .. } => None,
                                 VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
                             },
@@ -400,7 +397,9 @@ impl TryGetDiff for VoicePackage {
                                         None => None
                                     }
                                 }
-                            }
+                            },
+
+                            temp_folder: None
                         })
                     }
                 }
@@ -420,10 +419,10 @@ impl TryGetDiff for VoicePackage {
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(response.data.game.latest.version).unwrap(),
                 url: latest.path,
-                download_size: latest.size.parse::<u64>().unwrap(),
+                downloaded_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),
 
-                unpacking_path: match self {
+                installation_path: match self {
                     VoicePackage::Installed { .. } => None,
                     VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
                 },
@@ -436,7 +435,9 @@ impl TryGetDiff for VoicePackage {
                             None => None
                         }
                     }
-                }
+                },
+
+                temp_folder: None
             })
         }
     }

@@ -2,8 +2,9 @@ use std::path::PathBuf;
 
 use cached::proc_macro::cached;
 
-use super::api;
 use crate::repairer::IntegrityFile;
+
+use super::api;
 use super::voice_data::locale::VoiceLocale;
 
 fn try_get_some_integrity_files<T: AsRef<str>>(file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {

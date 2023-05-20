@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use sysinfo::{System, SystemExt, DiskExt};
 
@@ -7,7 +7,7 @@ use sysinfo::{System, SystemExt, DiskExt};
 /// Get available free disk space by specified path
 /// 
 /// Can return `None` if path is not prefixed by any available disk
-pub fn available<T: Into<PathBuf>>(path: T) -> Option<u64> {
+pub fn available(path: impl AsRef<Path>) -> Option<u64> {
     let mut system = System::new();
 
     system.refresh_disks_list();
@@ -20,7 +20,7 @@ pub fn available<T: Into<PathBuf>>(path: T) -> Option<u64> {
         a.cmp(&b).reverse()
     });
 
-    let path: PathBuf = path.into();
+    let path = path.as_ref();
 
     for disk in system.disks() {
         if path.starts_with(disk.mount_point()) {
@@ -32,7 +32,7 @@ pub fn available<T: Into<PathBuf>>(path: T) -> Option<u64> {
 }
 
 /// Check if two paths exist on the same disk
-pub fn is_same_disk<T: Into<PathBuf>>(path1: T, path2: T) -> bool {
+pub fn is_same_disk(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> bool {
     let mut system = System::new();
 
     system.refresh_disks_list();
@@ -45,8 +45,8 @@ pub fn is_same_disk<T: Into<PathBuf>>(path1: T, path2: T) -> bool {
         a.cmp(&b).reverse()
     });
 
-    let path1: PathBuf = path1.into();
-    let path2: PathBuf = path2.into();
+    let path1 = path1.as_ref();
+    let path2 = path2.as_ref();
 
     for disk in system.disks() {
         let disk_path = disk.mount_point();

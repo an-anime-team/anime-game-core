@@ -95,7 +95,7 @@ impl Downloader {
     /// - `https://example.com` -> `index.html`
     pub fn get_filename(&self) -> &str {
         if let Some(pos) = self.uri.replace('\\', "/").rfind(|c| c == '/') {
-            if pos < self.uri.len() - 1 {
+            if !self.uri[pos + 1..].is_empty() {
                 return &self.uri[pos + 1..];
             }
         }
@@ -103,13 +103,7 @@ impl Downloader {
         "index.html"
     }
 
-    #[tracing::instrument(level = "debug", skip(progress), ret)]
-    pub fn download<T, Fp>(&mut self, path: T, progress: Fp) -> Result<(), DownloadingError>
-    where
-        T: Into<PathBuf> + std::fmt::Debug,
-        // `(curr, total)`
-        Fp: Fn(u64, u64) + Send + 'static
-    {
+    pub fn download(&mut self, path: impl Into<PathBuf>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), DownloadingError> {
         tracing::debug!("Checking free space availability");
 
         let path = path.into();
