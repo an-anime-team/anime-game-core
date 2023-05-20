@@ -52,7 +52,9 @@ impl Installer {
     #[inline]
     pub fn new<T: AsRef<str>>(uri: T) -> Result<Self, minreq::Error> {
         Ok(Self {
-            downloader: Downloader::new(uri.as_ref())?,
+            downloader: Downloader::new(uri.as_ref())?
+                .with_free_space_check(false),
+
             temp_folder: std::env::temp_dir(),
             check_free_space: true
         })

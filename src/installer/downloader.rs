@@ -60,7 +60,10 @@ pub struct Downloader {
 
     /// If true, then `Downloader` will try to continue downloading of the file.
     /// Otherwise it will re-download the file entirely
-    pub continue_downloading: bool
+    pub continue_downloading: bool,
+
+    /// Perform free space verifications before downloading file
+    pub check_free_space: bool
 }
 
 impl Downloader {
@@ -79,8 +82,17 @@ impl Downloader {
             length,
 
             chunk_size: DEFAULT_CHUNK_SIZE,
-            continue_downloading: true
+            continue_downloading: true,
+            check_free_space: true
         })
+    }
+
+    #[inline]
+    /// Specify whether installer should check free space availability
+    pub fn with_free_space_check(mut self, check_free_space: bool) -> Self {
+        self.check_free_space = check_free_space;
+
+        self
     }
 
     #[inline]
@@ -109,16 +121,18 @@ impl Downloader {
         let path = path.into();
 
         // Check available free space
-        match free_space::available(&path) {
-            Some(space) => {
-                if let Some(required) = self.length() {
-                    if space < required {
-                        return Err(DownloadingError::NoSpaceAvailable(path, required, space));
+        if self.check_free_space {
+            match free_space::available(&path) {
+                Some(space) => {
+                    if let Some(required) = self.length() {
+                        if space < required {
+                            return Err(DownloadingError::NoSpaceAvailable(path, required, space));
+                        }
                     }
                 }
+    
+                None => return Err(DownloadingError::PathNotMounted(path))
             }
-
-            None => return Err(DownloadingError::PathNotMounted(path))
         }
 
         let mut downloaded = 0;
