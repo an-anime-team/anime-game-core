@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use fs_extra::dir::get_size;
 
 use crate::version::Version;
-use crate::traits::version_diff::VersionDiffExt;
 
 use crate::genshin::api::{
     self,
@@ -300,17 +299,13 @@ impl VoicePackage {
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
     pub fn delete_in<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> anyhow::Result<()> {
-        tracing::debug!("Deleting {} voice package", self.locale().to_code());
-
-        let locale = match self {
-            VoicePackage::Installed { locale, .. } |
-            VoicePackage::NotInstalled { locale, .. } => locale
-        };
-
         let game_path = game_path.into();
+        let locale = self.locale();
+
+        tracing::debug!("Deleting {} voice package", locale.to_code());
 
         // Audio_<locale folder>_pkg_version
-        std::fs::remove_dir_all(get_voice_package_path(&game_path, locale.clone()))?;
+        std::fs::remove_dir_all(get_voice_package_path(&game_path, locale))?;
         std::fs::remove_file(game_path.join(format!("Audio_{}_pkg_version", locale.to_folder())))?;
 
         Ok(())
@@ -343,6 +338,7 @@ impl VoicePackage {
                                 current,
                                 latest: Version::from_str(predownload.latest.version).unwrap(),
                                 url: diff.path,
+
                                 downloaded_size: diff.size.parse::<u64>().unwrap(),
                                 unpacked_size: diff.package_size.parse::<u64>().unwrap(),
 
@@ -381,6 +377,7 @@ impl VoicePackage {
                             current,
                             latest: Version::from_str(response.data.game.latest.version).unwrap(),
                             url: diff.path,
+
                             downloaded_size: diff.size.parse::<u64>().unwrap(),
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
 
@@ -419,6 +416,7 @@ impl VoicePackage {
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(response.data.game.latest.version).unwrap(),
                 url: latest.path,
+
                 downloaded_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),
 

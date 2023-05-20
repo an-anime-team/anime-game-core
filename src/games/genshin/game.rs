@@ -30,8 +30,8 @@ impl GameExt for Game {
         self.path.as_path()
     }
 
-    /// Try to get latest game version
     #[tracing::instrument(level = "trace", ret)]
+    /// Try to get latest game version
     fn get_latest_version() -> anyhow::Result<Version> {
         tracing::trace!("Trying to get latest game version");
 
@@ -146,7 +146,6 @@ impl Game {
         unreachable!()
     }
 
-    #[cfg(feature = "install")]
     #[tracing::instrument(level = "debug", ret)]
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
