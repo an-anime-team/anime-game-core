@@ -83,6 +83,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
         url: String,
+
         downloaded_size: u64,
         unpacked_size: u64,
 
@@ -103,6 +104,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
         url: String,
+
         downloaded_size: u64,
         unpacked_size: u64,
 
@@ -128,6 +130,7 @@ pub enum VersionDiff {
     NotInstalled {
         latest: Version,
         url: String,
+
         downloaded_size: u64,
         unpacked_size: u64,
 
@@ -295,9 +298,9 @@ impl VersionDiffExt for VersionDiff {
             Self::Outdated { .. } => return Err(Self::Error::Outdated),
 
             // Can be downloaded
-            Self::Predownload { url: diff_url, .. } |
-            Self::Diff { url: diff_url, .. } |
-            Self::NotInstalled { url: diff_url, .. } => diff_url
+            Self::Predownload { url, .. } |
+            Self::Diff { url, .. } |
+            Self::NotInstalled { url, .. } => url
         })?;
 
         if let Err(err) = downloader.download(path.as_ref(), progress) {
