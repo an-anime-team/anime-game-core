@@ -7,9 +7,7 @@ use crate::traits::game::GameExt;
 
 use super::api;
 use super::consts::*;
-
-#[cfg(feature = "install")]
-use crate::installer::diff::{VersionDiff, TryGetDiff};
+use super::version_diff::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
@@ -29,8 +27,8 @@ impl GameExt for Game {
         self.path.as_path()
     }
 
-    /// Try to get latest game version
     #[tracing::instrument(level = "trace", ret)]
+    /// Try to get latest game version
     fn get_latest_version() -> anyhow::Result<Version> {
         tracing::trace!("Trying to get latest game version");
 
@@ -105,10 +103,9 @@ impl GameExt for Game {
     }
 }
 
-#[cfg(feature = "install")]
-impl TryGetDiff for Game {
+impl Game {
     #[tracing::instrument(level = "debug", ret)]
-    fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
+    pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
         let latest = api::request()?.data.game.latest;
@@ -131,10 +128,13 @@ impl TryGetDiff for Game {
                     current,
                     latest: Version::from_str(latest.version).unwrap(),
                     url: latest.path,
-                    download_size: latest.size.parse::<u64>().unwrap(),
+
+                    downloaded_size: latest.size.parse::<u64>().unwrap(),
                     unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                    unpacking_path: Some(self.path.clone()),
-                    version_file_path: None
+
+                    installation_path: Some(self.path.clone()),
+                    version_file_path: None,
+                    temp_folder: None
                 })
             }
         }
@@ -145,10 +145,13 @@ impl TryGetDiff for Game {
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
                 url: latest.path,
-                download_size: latest.size.parse::<u64>().unwrap(),
+
+                downloaded_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),
-                unpacking_path: Some(self.path.clone()),
-                version_file_path: None
+
+                installation_path: Some(self.path.clone()),
+                version_file_path: None,
+                temp_folder: None
             })
         }
     }
