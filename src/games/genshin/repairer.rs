@@ -1,14 +1,15 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cached::proc_macro::cached;
 
 use crate::repairer::IntegrityFile;
 
 use super::api;
+use super::consts::GameEdition;
 use super::voice_data::locale::VoiceLocale;
 
-fn try_get_some_integrity_files<T: AsRef<str>>(file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
-    let decompressed_path = api::request()?.data.game.latest.decompressed_path;
+fn try_get_some_integrity_files<T: AsRef<str>>(game_edition: GameEdition, file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
+    let decompressed_path = api::request(game_edition)?.data.game.latest.decompressed_path;
 
     let pkg_version = minreq::get(format!("{decompressed_path}/{}", file_name.as_ref()))
         .with_timeout(timeout.unwrap_or(*crate::REQUESTS_TIMEOUT))
@@ -32,14 +33,14 @@ fn try_get_some_integrity_files<T: AsRef<str>>(file_name: T, timeout: Option<u64
 
 /// Try to list latest game files
 #[cached(result)]
-pub fn try_get_integrity_files(timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
-    try_get_some_integrity_files("pkg_version", timeout)
+pub fn try_get_integrity_files(game_edition: GameEdition, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
+    try_get_some_integrity_files(game_edition, "pkg_version", timeout)
 }
 
 /// Try to list latest voice package files
 #[cached(result)]
-pub fn try_get_voice_integrity_files(locale: VoiceLocale, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
-    try_get_some_integrity_files(format!("Audio_{}_pkg_version", locale.to_folder()), timeout)
+pub fn try_get_voice_integrity_files(game_edition: GameEdition, locale: VoiceLocale, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
+    try_get_some_integrity_files(game_edition, format!("Audio_{}_pkg_version", locale.to_folder()), timeout)
 }
 
 /// Try to get specific integrity file
@@ -47,10 +48,10 @@ pub fn try_get_voice_integrity_files(locale: VoiceLocale, timeout: Option<u64>) 
 /// `relative_path` must be relative to the game's root folder, so
 /// if your file is e.g. `/path/to/[AnimeGame]/[AnimeGame_Data]/level0`, then root folder is `/path/to/[AnimeGame]`,
 /// and `relative_path` must be `[AnimeGame_Data]/level0`
-pub fn try_get_integrity_file<T: Into<PathBuf>>(relative_path: T, timeout: Option<u64>) -> anyhow::Result<Option<IntegrityFile>> {
-    let relative_path = relative_path.into();
+pub fn try_get_integrity_file(game_edition: GameEdition, relative_path: impl AsRef<Path>, timeout: Option<u64>) -> anyhow::Result<Option<IntegrityFile>> {
+    let relative_path = relative_path.as_ref();
 
-    if let Ok(files) = try_get_integrity_files(timeout) {
+    if let Ok(files) = try_get_integrity_files(game_edition, timeout) {
         for file in files {
             if file.path == relative_path {
                 return Ok(Some(file));
@@ -59,7 +60,7 @@ pub fn try_get_integrity_file<T: Into<PathBuf>>(relative_path: T, timeout: Optio
     }
 
     for lang in VoiceLocale::list() {
-        if let Ok(files) = try_get_voice_integrity_files(*lang, timeout) {
+        if let Ok(files) = try_get_voice_integrity_files(game_edition, *lang, timeout) {
             for file in files {
                 if file.path == relative_path {
                     return Ok(Some(file));
@@ -76,8 +77,8 @@ pub fn try_get_integrity_file<T: Into<PathBuf>>(relative_path: T, timeout: Optio
 /// ⚠️ Be aware that the game can create its own files after downloading, so "unused files" may not be really unused.
 /// It's strongly recommended to use this function only with manual control from user's side, in example to show him
 /// paths to these files and let him choose what to do with them
-pub fn try_get_unused_files<T: Into<PathBuf>>(game_dir: T, timeout: Option<u64>) -> anyhow::Result<Vec<PathBuf>> {
-    let used_files = try_get_integrity_files(timeout)?
+pub fn try_get_unused_files(game_edition: GameEdition, game_dir: impl Into<PathBuf>, timeout: Option<u64>) -> anyhow::Result<Vec<PathBuf>> {
+    let used_files = try_get_integrity_files(game_edition, timeout)?
         .into_iter()
         .map(|file| file.path)
         .collect::<Vec<PathBuf>>();
@@ -97,8 +98,8 @@ pub fn try_get_unused_files<T: Into<PathBuf>>(game_dir: T, timeout: Option<u64>)
 /// ⚠️ Be aware that the game can create its own files after downloading, so "unused files" may not be really unused.
 /// It's strongly recommended to use this function only with manual control from user's side, in example to show him
 /// paths to these files and let him choose what to do with them
-pub fn try_get_unused_voice_files<T: Into<PathBuf>>(game_dir: T, locale: VoiceLocale, timeout: Option<u64>) -> anyhow::Result<Vec<PathBuf>> {
-    let used_files = try_get_voice_integrity_files(locale, timeout)?
+pub fn try_get_unused_voice_files(game_edition: GameEdition, game_dir: impl Into<PathBuf>, locale: VoiceLocale, timeout: Option<u64>) -> anyhow::Result<Vec<PathBuf>> {
+    let used_files = try_get_voice_integrity_files(game_edition, locale, timeout)?
         .into_iter()
         .map(|file| file.path)
         .collect::<Vec<PathBuf>>();

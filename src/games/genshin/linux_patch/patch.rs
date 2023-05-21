@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use super::patches::*;
 
 use crate::version::*;
+use crate::genshin::consts::GameEdition;
 use crate::traits::git_sync::RemoteGitSyncExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,7 +72,8 @@ pub enum PatchStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Patch {
-    folder: PathBuf
+    folder: PathBuf,
+    edition: GameEdition
 }
 
 impl RemoteGitSyncExt for Patch {
@@ -83,19 +85,20 @@ impl RemoteGitSyncExt for Patch {
 
 impl Patch {
     #[inline]
-    pub fn new<T: Into<PathBuf>>(folder: T) -> Self {
+    pub fn new<T: Into<PathBuf>>(folder: T, game_edition: GameEdition) -> Self {
         Self {
-            folder: folder.into()
+            folder: folder.into(),
+            edition: game_edition
         }
     }
 
     #[inline]
     pub fn unity_player_patch(&self) -> anyhow::Result<UnityPlayerPatch> {
-        UnityPlayerPatch::from_folder(&self.folder)
+        UnityPlayerPatch::from_folder(&self.folder, self.edition)
     }
 
     #[inline]
     pub fn xlua_patch(&self) -> anyhow::Result<XluaPatch> {
-        XluaPatch::from_folder(&self.folder)
+        XluaPatch::from_folder(&self.folder, self.edition)
     }
 }

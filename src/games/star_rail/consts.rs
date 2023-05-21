@@ -2,7 +2,7 @@ use serde::{Serialize, Deserialize};
 
 static mut GAME_EDITION: GameEdition = GameEdition::Global;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameEdition {
     Global,
     China

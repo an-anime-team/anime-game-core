@@ -19,7 +19,7 @@ pub trait PatchExt {
     /// Try to parse patch status
     /// 
     /// `patch_folder` should point to standard patch repository folder
-    fn from_folder<T: AsRef<Path>>(patch_folder: T) -> anyhow::Result<Self> where Self: Sized;
+    fn from_folder<T: AsRef<Path>>(patch_folder: T, game_edition: GameEdition) -> anyhow::Result<Self> where Self: Sized;
 
     /// Get current patch repository folder
     fn folder(&self) -> &Path;
@@ -45,13 +45,14 @@ macro_rules! impl_patch {
             // but otherwise it breaks main window compatibility in
             // PerformAction event
             pub patch_folder: PathBuf,
-            pub status: PatchStatus
+            pub status: PatchStatus,
+            pub edition: GameEdition
         }
 
         // TODO: add tracing
 
         impl PatchExt for $name {
-            fn from_folder<T: AsRef<Path>>(patch_folder: T) -> anyhow::Result<Self> where Self: Sized {
+            fn from_folder<T: AsRef<Path>>(patch_folder: T, game_edition: GameEdition) -> anyhow::Result<Self> where Self: Sized {
                 let patch_folder = patch_folder.as_ref().to_path_buf();
 
                 // Immediately throw error if patch folder doesn't even exist
@@ -81,7 +82,8 @@ macro_rules! impl_patch {
                 if patch_folders.is_empty() {
                     return Ok(Self {
                         patch_folder,
-                        status: PatchStatus::NotAvailable
+                        status: PatchStatus::NotAvailable,
+                        edition: game_edition
                     });
                 }
 
@@ -90,7 +92,7 @@ macro_rules! impl_patch {
                 patch_folders.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
 
                 // Get latest available game version
-                let latest_version = Version::from_str(api::request()?.data.game.latest.version).unwrap();
+                let latest_version = Version::from_str(api::request(game_edition)?.data.game.latest.version).unwrap();
 
                 // TODO: move this stuff in function to use it in similar XluaPatch
                 // TODO: this loop executes only 1 time so better get rid of it right?
@@ -108,7 +110,8 @@ macro_rules! impl_patch {
                             status: PatchStatus::Outdated {
                                 current: version,
                                 latest: latest_version
-                            }
+                            },
+                            edition: game_edition
                         });
                     }
 
@@ -169,7 +172,8 @@ macro_rules! impl_patch {
                                     status: PatchStatus::Available {
                                         version,
                                         player_hash
-                                    }
+                                    },
+                                    edition: game_edition
                                 })
                             }
 
@@ -180,7 +184,8 @@ macro_rules! impl_patch {
                                     status: PatchStatus::Testing {
                                         version,
                                         player_hash
-                                    }
+                                    },
+                                    edition: game_edition
                                 })
                             }
                         }
@@ -191,7 +196,8 @@ macro_rules! impl_patch {
                             patch_folder,
                             status: PatchStatus::Preparation {
                                 version
-                            }
+                            },
+                            edition: game_edition
                         })
                     };
                 }
@@ -200,7 +206,8 @@ macro_rules! impl_patch {
                 // but well..
                 Ok(Self {
                     patch_folder,
-                    status: PatchStatus::NotAvailable
+                    status: PatchStatus::NotAvailable,
+                    edition: game_edition
                 })
             }
 
@@ -218,7 +225,7 @@ macro_rules! impl_patch {
                 let mut dll = game_folder.as_ref().to_path_buf();
 
                 if $data_subfolder {
-                    dll = dll.join(GameEdition::selected().data_folder());
+                    dll = dll.join(self.edition.data_folder());
                 }
 
                 let dll = std::fs::read(dll.join($patching_library))?;

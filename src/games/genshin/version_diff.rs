@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
+use super::consts::GameEdition;
+
 use crate::version::Version;
 use crate::traits::version_diff::VersionDiffExt;
 
@@ -76,13 +78,18 @@ impl From<minreq::Error> for DiffDownloadingError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VersionDiff {
     /// Latest version
-    Latest(Version),
+    Latest {
+        version: Version,
+        edition: GameEdition
+    },
 
     /// Component's update can be predownloaded, but you still can use it
     Predownload {
         current: Version,
         latest: Version,
+
         url: String,
+        edition: GameEdition,
 
         downloaded_size: u64,
         unpacked_size: u64,
@@ -103,7 +110,9 @@ pub enum VersionDiff {
     Diff {
         current: Version,
         latest: Version,
+
         url: String,
+        edition: GameEdition,
 
         downloaded_size: u64,
         unpacked_size: u64,
@@ -123,13 +132,15 @@ pub enum VersionDiff {
     /// Difference can't be calculated because installed version is too old
     Outdated {
         current: Version,
-        latest: Version
+        latest: Version,
+        edition: GameEdition
     },
 
     /// Component is not yet installed
     NotInstalled {
         latest: Version,
         url: String,
+        edition: GameEdition,
 
         downloaded_size: u64,
         unpacked_size: u64,
@@ -152,7 +163,7 @@ impl VersionDiff {
     pub fn version_file_path(&self) -> Option<PathBuf> {
         match self {
             // Can't be installed
-            Self::Latest(_) |
+            Self::Latest { .. } |
             Self::Outdated { .. } => None,
 
             // Can be installed
@@ -168,7 +179,7 @@ impl VersionDiff {
     pub fn temp_folder(&self) -> PathBuf {
         match self {
             // Can't be installed
-            Self::Latest(_) |
+            Self::Latest { .. } |
             Self::Outdated { .. } => std::env::temp_dir(),
 
             // Can be installed
@@ -184,7 +195,7 @@ impl VersionDiff {
     pub fn with_temp_folder(mut self, temp: PathBuf) -> Self {
         match &mut self {
             // Can't be installed
-            Self::Latest(_) |
+            Self::Latest { .. } |
             Self::Outdated { .. } => self,
 
             // Can be installed
@@ -212,10 +223,21 @@ impl VersionDiff {
 impl VersionDiffExt for VersionDiff {
     type Error = DiffDownloadingError;
     type Update = DiffUpdate;
+    type Edition = GameEdition;
+
+    fn edition(&self) -> GameEdition {
+        match self {
+            Self::Latest { edition, .. } |
+            Self::Predownload { edition, .. } |
+            Self::Diff { edition, .. } |
+            Self::Outdated { edition, .. } |
+            Self::NotInstalled { edition, .. } => *edition
+        }
+    }
 
     fn current(&self) -> Option<Version> {
         match self {
-            Self::Latest(current) |
+            Self::Latest { version: current, .. } |
             Self::Predownload { current, .. } |
             Self::Diff { current, .. } |
             Self::Outdated { current, .. } => Some(*current),
@@ -226,7 +248,7 @@ impl VersionDiffExt for VersionDiff {
 
     fn latest(&self) -> Version {
         match self {
-            Self::Latest(latest) |
+            Self::Latest { version: latest, .. } |
             Self::Predownload { latest, .. } |
             Self::Diff { latest, .. } |
             Self::Outdated { latest, .. } |
@@ -237,7 +259,7 @@ impl VersionDiffExt for VersionDiff {
     fn downloaded_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest(_) |
+            Self::Latest { .. } |
             Self::Outdated { .. } => None,
 
             // Can be installed
@@ -250,7 +272,7 @@ impl VersionDiffExt for VersionDiff {
     fn unpacked_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest(_) |
+            Self::Latest { .. } |
             Self::Outdated { .. } => None,
 
             // Can be installed
@@ -263,7 +285,7 @@ impl VersionDiffExt for VersionDiff {
     fn installation_path(&self) -> Option<&Path> {
         match self {
             // Can't be installed
-            Self::Latest(_) |
+            Self::Latest { .. } |
             Self::Outdated { .. } => None,
 
             // Can be installed
@@ -279,7 +301,7 @@ impl VersionDiffExt for VersionDiff {
     fn downloading_uri(&self) -> Option<String> {
         match self {
             // Can't be installed
-            Self::Latest(_) |
+            Self::Latest { .. } |
             Self::Outdated { .. } => None,
 
             // Can be installed
@@ -294,7 +316,7 @@ impl VersionDiffExt for VersionDiff {
 
         let mut downloader = Downloader::new(match self {
             // Can't be downloaded
-            Self::Latest(_) => return Err(Self::Error::AlreadyLatest),
+            Self::Latest { .. } => return Err(Self::Error::AlreadyLatest),
             Self::Outdated { .. } => return Err(Self::Error::Outdated),
 
             // Can be downloaded
@@ -317,7 +339,7 @@ impl VersionDiffExt for VersionDiff {
 
         match self {
             // Can't be downloaded
-            Self::Latest(_) => return Err(Self::Error::AlreadyLatest),
+            Self::Latest { .. } => return Err(Self::Error::AlreadyLatest),
             Self::Outdated { .. } => return Err(Self::Error::Outdated),
 
             _ => ()
@@ -416,7 +438,7 @@ impl VersionDiffExt for VersionDiff {
 
                     // If we were able to get API response - it shouldn't be impossible
                     // to also get integrity files list from the same API
-                    match super::repairer::try_get_integrity_file(relative_file, Some(*crate::REQUESTS_TIMEOUT)) {
+                    match super::repairer::try_get_integrity_file(self.edition(), relative_file, Some(*crate::REQUESTS_TIMEOUT)) {
                         Ok(Some(integrity)) => {
                             if !integrity.fast_verify(&path) {
                                 if let Err(err) = integrity.repair(&path) {

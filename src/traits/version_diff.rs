@@ -10,6 +10,12 @@ pub trait VersionDiffExt {
     /// as the current installation progress update
     type Update;
 
+    /// Type that will represent the game edition this `VersionDiff` belongs to
+    type Edition;
+
+    /// Get selected game edition
+    fn edition(&self) -> Self::Edition;
+
     /// Return currently installed version
     /// 
     /// Return `None` if it's not installed

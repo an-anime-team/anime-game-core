@@ -9,7 +9,7 @@ use crate::genshin::api::{
     schema::VoicePack as RemoteVoicePack
 };
 
-use crate::genshin::consts::get_voice_package_path;
+use crate::genshin::consts::*;
 use crate::genshin::voice_data::locale::VoiceLocale;
 
 #[cfg(feature = "install")]
@@ -81,14 +81,16 @@ fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoi
 pub enum VoicePackage {
     Installed {
         path: PathBuf,
-        locale: VoiceLocale
+        locale: VoiceLocale,
+        game_edition: GameEdition
     },
 
     NotInstalled {
         locale: VoiceLocale,
         version: Version,
         data: RemoteVoicePack,
-        game_path: Option<PathBuf>
+        game_path: Option<PathBuf>,
+        game_edition: GameEdition
     }
 }
 
@@ -96,7 +98,7 @@ impl VoicePackage {
     /// Voice packages can't be instaled wherever you want.
     /// Thus this method can return `None` in case the path
     /// doesn't point to a real voice package folder
-    pub fn new<T: Into<PathBuf>>(path: T) -> Option<Self> {
+    pub fn new<T: Into<PathBuf>>(path: T, game_edition: GameEdition) -> Option<Self> {
         let path = path.into();
 
         if path.exists() && path.is_dir() {
@@ -104,10 +106,13 @@ impl VoicePackage {
                 Some(name) => match VoiceLocale::from_str(name.to_string_lossy()) {
                     Some(locale) => Some(Self::Installed {
                         path,
-                        locale
+                        locale,
+                        game_edition
                     }),
+
                     None => None
-                },
+                }
+
                 None => None
             }
         }
@@ -121,15 +126,24 @@ impl VoicePackage {
     /// 
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
     /// technically it can be installed. This method just don't know the game's path
-    pub fn with_locale(locale: VoiceLocale) -> anyhow::Result<Self> {
-        let latest = api::request()?.data.game.latest;
+    pub fn with_locale(locale: VoiceLocale, game_edition: GameEdition) -> anyhow::Result<Self> {
+        let latest = api::request(game_edition)?.data.game.latest;
 
         Ok(Self::NotInstalled {
             locale,
             version: Version::from_str(latest.version).unwrap(),
             data: find_voice_pack(latest.voice_packs, locale),
-            game_path: None
+            game_path: None,
+            game_edition
         })
+    }
+
+    #[inline]
+    pub fn game_edition(&self) -> GameEdition {
+        match self {
+            Self::Installed { game_edition, .. } |
+            Self::NotInstalled { game_edition, .. } => *game_edition
+        }
     }
 
     // TODO: find_in(game_path: String, locale: VoiceLocale)
@@ -167,13 +181,13 @@ impl VoicePackage {
     pub fn is_installed_in<T: AsRef<Path>>(&self, game_path: T) -> bool {
         match self {
             Self::Installed { .. } => true,
-            Self::NotInstalled { locale, .. } => get_voice_package_path(game_path, *locale).exists()
+            Self::NotInstalled { locale, .. } => get_voice_package_path(game_path, self.game_edition(), *locale).exists()
         }
     }
 
     /// Get list of latest voice packages
-    pub fn list_latest() -> anyhow::Result<Vec<VoicePackage>> {
-        let response = api::request()?;
+    pub fn list_latest(game_edition: GameEdition) -> anyhow::Result<Vec<VoicePackage>> {
+        let response = api::request(game_edition)?;
 
         let mut packages = Vec::new();
         let version = Version::from_str(response.data.game.latest.version).unwrap();
@@ -183,7 +197,8 @@ impl VoicePackage {
                 locale: VoiceLocale::from_str(&package.language).unwrap(),
                 version: version.clone(),
                 data: package,
-                game_path: None
+                game_path: None,
+                game_edition
             });
         }
 
@@ -207,10 +222,10 @@ impl VoicePackage {
         tracing::debug!("Trying to get {} voice package version", self.locale().to_code());
 
         match &self {
-            Self::NotInstalled { locale: _, version, data: _, game_path: _} => Ok(*version),
-            Self::Installed { path, locale } => {
+            Self::NotInstalled { version, .. } => Ok(*version),
+            Self::Installed { path, locale, game_edition } => {
                 let package_size = get_size(&path)?;
-                let response = api::request()?;
+                let response = api::request(*game_edition)?;
 
                 match std::fs::read(path.join(".version")) {
                     Ok(curr) => {
@@ -305,7 +320,7 @@ impl VoicePackage {
         tracing::debug!("Deleting {} voice package", locale.to_code());
 
         // Audio_<locale folder>_pkg_version
-        std::fs::remove_dir_all(get_voice_package_path(&game_path, locale))?;
+        std::fs::remove_dir_all(get_voice_package_path(&game_path, self.game_edition(), locale))?;
         std::fs::remove_file(game_path.join(format!("Audio_{}_pkg_version", locale.to_folder())))?;
 
         Ok(())
@@ -316,7 +331,8 @@ impl VoicePackage {
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for {} voice package", self.locale().to_code());
 
-        let response = api::request()?;
+        let game_edition = self.game_edition();
+        let response = api::request(game_edition)?;
 
         if self.is_installed() {
             let current = self.try_get_version()?;
@@ -351,19 +367,23 @@ impl VoicePackage {
                                     VoicePackage::Installed { path, .. } => Some(path.join(".version")),
                                     VoicePackage::NotInstalled { game_path, .. } => {
                                         match game_path {
-                                            Some(game_path) => Some(get_voice_package_path(game_path, self.locale()).join(".version")),
+                                            Some(game_path) => Some(get_voice_package_path(game_path, game_edition, self.locale()).join(".version")),
                                             None => None
                                         }
                                     }
                                 },
 
-                                temp_folder: None
+                                temp_folder: None,
+                                edition: game_edition
                             })
                         }
                     }
                 }
 
-                Ok(VersionDiff::Latest(current))
+                Ok(VersionDiff::Latest {
+                    version: current,
+                    edition: game_edition
+                })
             }
 
             else {
@@ -390,20 +410,22 @@ impl VoicePackage {
                                 VoicePackage::Installed { path, .. } => Some(path.join(".version")),
                                 VoicePackage::NotInstalled { game_path, .. } => {
                                     match game_path {
-                                        Some(game_path) => Some(get_voice_package_path(game_path, self.locale()).join(".version")),
+                                        Some(game_path) => Some(get_voice_package_path(game_path, game_edition, self.locale()).join(".version")),
                                         None => None
                                     }
                                 }
                             },
 
-                            temp_folder: None
+                            temp_folder: None,
+                            edition: game_edition
                         })
                     }
                 }
 
                 Ok(VersionDiff::Outdated {
                     current,
-                    latest: Version::from_str(response.data.game.latest.version).unwrap()
+                    latest: Version::from_str(response.data.game.latest.version).unwrap(),
+                    edition: game_edition
                 })
             }
         }
@@ -429,13 +451,14 @@ impl VoicePackage {
                     VoicePackage::Installed { path, .. } => Some(path.join(".version")),
                     VoicePackage::NotInstalled { game_path, .. } => {
                         match game_path {
-                            Some(game_path) => Some(get_voice_package_path(game_path, self.locale()).join(".version")),
+                            Some(game_path) => Some(get_voice_package_path(game_path, game_edition, self.locale()).join(".version")),
                             None => None
                         }
                     }
                 },
 
-                temp_folder: None
+                temp_folder: None,
+                edition: game_edition
             })
         }
     }

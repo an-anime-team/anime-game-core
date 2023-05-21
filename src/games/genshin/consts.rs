@@ -4,9 +4,7 @@ use serde::{Serialize, Deserialize};
 
 use super::voice_data::locale::VoiceLocale;
 
-static mut GAME_EDITION: GameEdition = GameEdition::Global;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameEdition {
     Global,
     China
@@ -23,20 +21,6 @@ impl GameEdition {
     #[inline]
     pub fn list() -> &'static [GameEdition] {
         &[Self::Global, Self::China]
-    }
-
-    #[inline]
-    pub fn selected() -> Self {
-        unsafe {
-            GAME_EDITION
-        }
-    }
-
-    #[inline]
-    pub fn select(self) {
-        unsafe {
-            GAME_EDITION = self;
-        }
     }
 
     #[inline]
@@ -85,13 +69,13 @@ impl GameEdition {
 }
 
 #[inline]
-pub fn get_voice_packages_path<T: AsRef<Path>>(game_path: T) -> PathBuf {
+pub fn get_voice_packages_path<T: AsRef<Path>>(game_path: T, game_edition: GameEdition) -> PathBuf {
     game_path.as_ref()
-        .join(GameEdition::selected().data_folder())
+        .join(game_edition.data_folder())
         .join("StreamingAssets/AudioAssets")
 }
 
 #[inline]
-pub fn get_voice_package_path<T: AsRef<Path>>(game_path: T, locale: VoiceLocale) -> PathBuf {
-    get_voice_packages_path(game_path).join(locale.to_folder())
+pub fn get_voice_package_path<T: AsRef<Path>>(game_path: T, game_edition: GameEdition, locale: VoiceLocale) -> PathBuf {
+    get_voice_packages_path(game_path, game_edition).join(locale.to_folder())
 }
