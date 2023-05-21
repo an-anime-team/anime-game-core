@@ -137,24 +137,6 @@ impl Game {
         Ok(packages)
     }
 
-    /// Try to get game's edition from its folder
-    /// 
-    /// Will return `None` if the game is not installed
-    pub fn get_edition(&self) -> Option<GameEdition> {
-        if !self.path.exists() {
-            return None;
-        }
-
-        for edition in [GameEdition::Global, GameEdition::China] {
-            if self.path.join(edition.data_folder()).exists() {
-                return Some(edition);
-            }
-        }
-
-        // Should be unreachable!() instead of None to catch possible future errors
-        unreachable!()
-    }
-
     #[tracing::instrument(level = "debug", ret)]
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");

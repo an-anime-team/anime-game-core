@@ -11,14 +11,18 @@ use super::version_diff::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
-    path: PathBuf
+    path: PathBuf,
+    edition: GameEdition
 }
 
 impl GameExt for Game {
+    type Edition = GameEdition;
+
     #[inline]
-    fn new<T: Into<PathBuf>>(path: T) -> Self {
+    fn new(path: impl Into<PathBuf>, edition: GameEdition) -> Self {
         Self {
-            path: path.into()
+            path: path.into(),
+            edition
         }
     }
 
@@ -27,13 +31,18 @@ impl GameExt for Game {
         self.path.as_path()
     }
 
+    #[inline]
+    fn edition(&self) -> GameEdition {
+        self.edition
+    }
+
     #[tracing::instrument(level = "trace", ret)]
     /// Try to get latest game version
-    fn get_latest_version() -> anyhow::Result<Version> {
+    fn get_latest_version(edition: GameEdition) -> anyhow::Result<Version> {
         tracing::trace!("Trying to get latest game version");
 
         // I assume game's API can't return incorrect version format right? Right?
-        Ok(Version::from_str(api::request()?.data.game.latest.version).unwrap())
+        Ok(Version::from_str(api::request(edition)?.data.game.latest.version).unwrap())
     }
 
     #[tracing::instrument(level = "debug", ret)]
@@ -50,7 +59,7 @@ impl GameExt for Game {
             num
         }
 
-        let file = File::open(self.path.join(GameEdition::selected().data_folder()).join("data.unity3d"))?;
+        let file = File::open(self.path.join(self.edition.data_folder()).join("data.unity3d"))?;
 
         // [0..9]
         let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
@@ -112,7 +121,7 @@ impl Game {
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
-        let response = api::request()?;
+        let response = api::request(self.edition)?;
 
         if self.is_installed() {
             let current = match self.get_version() {
@@ -124,6 +133,7 @@ impl Game {
                         return Ok(VersionDiff::NotInstalled {
                             latest: Version::from_str(&latest.version).unwrap(),
                             url: latest.path,
+                            edition: self.edition,
 
                             downloaded_size: latest.size.parse::<u64>().unwrap(),
                             unpacked_size: latest.package_size.parse::<u64>().unwrap(),
@@ -152,7 +162,9 @@ impl Game {
                             return Ok(VersionDiff::Predownload {
                                 current,
                                 latest: Version::from_str(predownload.latest.version).unwrap(),
+
                                 url: diff.path,
+                                edition: self.edition,
 
                                 downloaded_size: diff.size.parse::<u64>().unwrap(),
                                 unpacked_size: diff.package_size.parse::<u64>().unwrap(),
@@ -165,7 +177,10 @@ impl Game {
                     }
                 }
 
-                Ok(VersionDiff::Latest(current))
+                Ok(VersionDiff::Latest {
+                    version: current,
+                    edition: self.edition
+                })
             }
 
             else {
@@ -176,7 +191,9 @@ impl Game {
                         return Ok(VersionDiff::Diff {
                             current,
                             latest: Version::from_str(response.data.game.latest.version).unwrap(),
+
                             url: diff.path,
+                            edition: self.edition,
 
                             downloaded_size: diff.size.parse::<u64>().unwrap(),
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
@@ -190,7 +207,8 @@ impl Game {
 
                 Ok(VersionDiff::Outdated {
                     current,
-                    latest: Version::from_str(response.data.game.latest.version).unwrap()
+                    latest: Version::from_str(response.data.game.latest.version).unwrap(),
+                    edition: self.edition
                 })
             }
         }
@@ -203,6 +221,7 @@ impl Game {
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
                 url: latest.path,
+                edition: self.edition,
 
                 downloaded_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),

@@ -33,14 +33,15 @@ struct PatchHashes {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MainPatch {
     pub folder: PathBuf,
-    pub status: PatchStatus
+    pub status: PatchStatus,
+    pub edition: GameEdition
 }
 
 impl MainPatch {
     /// Try to parse patch status
     /// 
     /// `patch_folder` should point to standard patch repository folder
-    pub fn from_folder<T: AsRef<Path>>(patch_folder: T, region: GameEdition) -> anyhow::Result<Self> where Self: Sized {
+    pub fn from_folder<T: AsRef<Path>>(patch_folder: T, game_edition: GameEdition) -> anyhow::Result<Self> where Self: Sized {
         let patch_folder = patch_folder.as_ref().to_path_buf();
 
         // Immediately throw error if patch folder doesn't even exist
@@ -55,7 +56,7 @@ impl MainPatch {
         let metadata: PatchMetadata = serde_json::from_str(&std::fs::read_to_string(patch_folder.join("version.json"))?)?;
 
         // Select patch region
-        let metadata = match region {
+        let metadata = match game_edition {
             GameEdition::Global => metadata.global,
             GameEdition::China => metadata.china
         };
@@ -64,13 +65,14 @@ impl MainPatch {
         let Some(metadata) = metadata else {
             return Ok(Self {
                 folder: patch_folder,
-                status: PatchStatus::NotAvailable
+                status: PatchStatus::NotAvailable,
+                edition: game_edition
             })
         };
 
         // Get patch and game versions
         let patch_version = Version::from_str(metadata.version).unwrap();
-        let latest_version = Version::from_str(api::request()?.data.game.latest.version).unwrap();
+        let latest_version = Version::from_str(api::request(game_edition)?.data.game.latest.version).unwrap();
 
         // Return PatchStatus::Outdated if the patch is, well, outdated
         if patch_version < latest_version {
@@ -79,7 +81,8 @@ impl MainPatch {
                 status: PatchStatus::Outdated {
                     current: patch_version,
                     latest: latest_version
-                }
+                },
+                edition: game_edition
             });
         }
 
@@ -91,7 +94,8 @@ impl MainPatch {
                     version: patch_version,
                     srbase_hash: metadata.hashes.srbase,
                     player_hash: metadata.hashes.player
-                }
+                },
+                edition: game_edition
             })
         }
 
@@ -103,7 +107,8 @@ impl MainPatch {
                     version: patch_version,
                     srbase_hash: metadata.hashes.srbase,
                     player_hash: metadata.hashes.player
-                }
+                },
+                edition: game_edition
             })
         }
     }

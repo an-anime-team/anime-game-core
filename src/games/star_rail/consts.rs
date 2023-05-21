@@ -1,7 +1,5 @@
 use serde::{Serialize, Deserialize};
 
-static mut GAME_EDITION: GameEdition = GameEdition::Global;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameEdition {
     Global,
@@ -19,20 +17,6 @@ impl GameEdition {
     #[inline]
     pub fn list() -> &'static [GameEdition] {
         &[Self::Global, Self::China]
-    }
-
-    #[inline]
-    pub fn selected() -> Self {
-        unsafe {
-            GAME_EDITION
-        }
-    }
-
-    #[inline]
-    pub fn select(self) {
-        unsafe {
-            GAME_EDITION = self;
-        }
     }
 
     #[inline]
