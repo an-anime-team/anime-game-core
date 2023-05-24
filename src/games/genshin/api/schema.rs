@@ -41,8 +41,13 @@ pub struct Latest {
     pub package_size: String,
     pub decompressed_path: String,
     pub voice_packs: Vec<VoicePack>,
+    pub segments: Vec<Segment>
+}
 
-    // pub segments
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Segment {
+    pub path: String,
+    pub md5: String
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
