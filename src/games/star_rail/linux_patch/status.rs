@@ -37,7 +37,8 @@ pub enum PatchStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Patch {
-    folder: PathBuf
+    folder: PathBuf,
+    edition: GameEdition
 }
 
 impl RemoteGitSyncExt for Patch {
@@ -49,14 +50,15 @@ impl RemoteGitSyncExt for Patch {
 
 impl Patch {
     #[inline]
-    pub fn new<T: Into<PathBuf>>(folder: T) -> Self {
+    pub fn new<T: Into<PathBuf>>(folder: T, game_edition: GameEdition) -> Self {
         Self {
-            folder: folder.into()
+            folder: folder.into(),
+            edition: game_edition
         }
     }
 
     #[inline]
-    pub fn main_patch(&self, region: GameEdition) -> anyhow::Result<MainPatch> {
-        MainPatch::from_folder(&self.folder, region)
+    pub fn main_patch(&self) -> anyhow::Result<MainPatch> {
+        MainPatch::from_folder(&self.folder, self.edition)
     }
 }
