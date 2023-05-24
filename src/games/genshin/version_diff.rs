@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::io::{Read, Write};
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -52,7 +53,7 @@ pub enum DiffDownloadingError {
     #[error("Components version is too outdated and can't be updated")]
     Outdated,
 
-    /// Failed to fetch remove data. Redirected from `Downloader`
+    /// Failed to fetch remote data. Redirected from `Downloader`
     #[error("{0}")]
     DownloadingError(#[from] DownloadingError),
 
@@ -66,7 +67,10 @@ pub enum DiffDownloadingError {
     /// your game installation path and thus indicates that it doesn't know
     /// where this package needs to be installed
     #[error("Path to the component's downloading folder is not specified")]
-    PathNotSpecified
+    PathNotSpecified,
+
+    #[error("{0}")]
+    IoError(String)
 }
 
 impl From<minreq::Error> for DiffDownloadingError {
@@ -139,7 +143,7 @@ pub enum VersionDiff {
     /// Component is not yet installed
     NotInstalled {
         latest: Version,
-        url: String,
+        urls: Vec<String>,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -306,29 +310,84 @@ impl VersionDiffExt for VersionDiff {
 
             // Can be installed
             Self::Predownload { url, .. } |
-            Self::Diff { url, .. } |
-            Self::NotInstalled { url, .. } => Some(url.to_owned())
+            Self::Diff { url, .. } => Some(url.to_owned()),
+
+            // Special case
+            // TODO: can break something (in future)?
+            Self::NotInstalled { urls, .. } => Some(urls[0][..urls[0].len() - 4].to_string())
         }
     }
 
     fn download_as(&mut self, path: impl AsRef<Path>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), Self::Error> {
         tracing::debug!("Downloading version difference");
 
-        let mut downloader = Downloader::new(match self {
+        match self {
             // Can't be downloaded
             Self::Latest { .. } => return Err(Self::Error::AlreadyLatest),
             Self::Outdated { .. } => return Err(Self::Error::Outdated),
 
             // Can be downloaded
             Self::Predownload { url, .. } |
-            Self::Diff { url, .. } |
-            Self::NotInstalled { url, .. } => url
-        })?;
+            Self::Diff { url, .. } => {
+                let mut downloader = Downloader::new(url)?;
 
-        if let Err(err) = downloader.download(path.as_ref(), progress) {
-            tracing::error!("Failed to download version difference: {err}");
+                if let Err(err) = downloader.download(path.as_ref(), progress) {
+                    tracing::error!("Failed to download version difference: {err}");
 
-            return Err(err.into());
+                    return Err(err.into());
+                }
+            }
+
+            // Special case
+            Self::NotInstalled { urls, .. } => {
+                let path = path.as_ref();
+
+                for (i, url) in urls.iter().enumerate() {
+                    let mut downloader = Downloader::new(url)?;
+
+                    if let Err(err) = downloader.download(path.join(i.to_string()), progress) {
+                        tracing::error!("Failed to download version difference: {err}");
+
+                        return Err(err.into());
+                    }
+                }
+
+                if path.exists() {
+                    if let Err(err) = std::fs::remove_file(&path) {
+                        return Err(Self::Error::IoError(err.to_string()));
+                    }
+                }
+
+                match std::fs::File::create(&path) {
+                    Ok(mut file) => {
+                        let mut buffer = [0; 8192]; // 8192 bytes RAM buffer
+
+                        for i in 0..urls.len() {
+                            let part_file_path = path.join(i.to_string());
+
+                            match std::fs::File::open(&part_file_path) {
+                                Ok(mut part) => {
+                                    while let Ok(n) = part.read(&mut buffer) {
+                                        if n == 0 {
+                                            break;
+                                        }
+
+                                        file.write(&buffer[..n]);
+                                    }
+                                }
+
+                                Err(err) => return Err(Self::Error::IoError(err.to_string()))
+                            }
+
+                            if let Err(err) = std::fs::remove_file(&part_file_path) {
+                                return Err(Self::Error::IoError(err.to_string()));
+                            }
+                        }
+                    }
+
+                    Err(err) => return Err(Self::Error::IoError(err.to_string()))
+                }
+            }
         }
 
         Ok(())
