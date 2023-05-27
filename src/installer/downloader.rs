@@ -88,6 +88,22 @@ impl Downloader {
     }
 
     #[inline]
+    /// Specify downloading chunk size
+    pub fn with_chunk_size(mut self, chunk_size: usize) -> Self {
+        self.chunk_size = chunk_size;
+
+        self
+    }
+
+    #[inline]
+    /// Specify whether installer should continue downloading of the file
+    pub fn with_continue_downloading(mut self, continue_downloading: bool) -> Self {
+        self.continue_downloading = continue_downloading;
+
+        self
+    }
+
+    #[inline]
     /// Specify whether installer should check free space availability
     pub fn with_free_space_check(mut self, check_free_space: bool) -> Self {
         self.check_free_space = check_free_space;
