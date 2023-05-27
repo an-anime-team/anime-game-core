@@ -358,6 +358,8 @@ impl VersionDiffExt for VersionDiff {
             // Don't perform space checks in the Installer because we're doing it here
             .with_free_space_check(false);
 
+        (updater)(InstallerUpdate::CheckingFreeSpace(installer.temp_folder.to_path_buf()));
+
         // Check available free space for archive itself
         let Some(space) = free_space::available(&installer.temp_folder) else {
             tracing::error!("Path is not mounted: {:?}", installer.temp_folder);
@@ -378,9 +380,11 @@ impl VersionDiffExt for VersionDiff {
             return Err(DownloadingError::NoSpaceAvailable(installer.temp_folder, required, space).into());
         }
 
+        (updater)(InstallerUpdate::CheckingFreeSpace(path.to_path_buf()));
+
         // Check available free space for unpacked archvie data
         let Some(space) = free_space::available(&path) else {
-            tracing::error!("Path is not mounted: {:?}", installer.temp_folder);
+            tracing::error!("Path is not mounted: {:?}", &path);
 
             return Err(DownloadingError::PathNotMounted(path.to_path_buf()).into());
         };
