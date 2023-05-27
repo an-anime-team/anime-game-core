@@ -56,10 +56,12 @@ install = [
 
     "dep:xz",
     "dep:bzip2",
-    "dep:flate2"
+    "dep:flate2",
+
+    "dep:md-5"
 ]
 
-linux-patch = ["dep:md-5"]
+linux-patch = []
 external = ["dep:kinda-virtual-fs"]
 
 all = [
