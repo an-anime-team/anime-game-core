@@ -4,6 +4,7 @@ version = "1.10.4"
 authors = ["Nikita Podvirnyy <suimin.tu.mu.ga.mi@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"
+repository = "https://github.com/an-anime-team/anime-game-core"
 edition = "2021"
 
 [dependencies]
