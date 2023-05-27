@@ -1,4 +1,4 @@
-pub static API_BASE_URI: &str = "https://prod-awscdn-gamestarter.kurogame.net/";
+pub static API_BASE_URI: &str = "https://prod-awscdn-gamestarter.kurogame.net";
 pub static API_DATA_URI: &str = "https://prod-awscdn-gamestarter.kurogame.net/pcstarter/prod/game/G143/4/index.json";
 
 /// Name of the game's data folder

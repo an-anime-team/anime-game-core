@@ -44,7 +44,7 @@ pub enum Update {
     DownloadingStarted,
 
     /// `(downloaded files, total files)`
-    DownloadingProgress(usize, usize),
+    DownloadingProgress(u64, u64),
 
     DownloadingFinished
 }
@@ -223,11 +223,14 @@ impl VersionDiffExt for VersionDiff {
 
         // Download updated files
         let total = files.len();
+        let mut downloaded = 0;
 
         (updater)(Update::DownloadingStarted);
 
         for (i, file) in files.into_iter().enumerate() {
-            tracing::info!("Updating {file} ({}/{total})...", i + 1);
+            tracing::info!("Updating {url}/{file} ({}/{total})...", i + 1);
+
+            let file_path = path.join(file.strip_prefix('/').unwrap());
 
             Downloader::new(format!("{url}/{file}"))?
                 // Don't check availability of disk space as it was done before
@@ -237,10 +240,18 @@ impl VersionDiffExt for VersionDiff {
                 .with_continue_downloading(false)
 
                 // Download outdated file
-                .download(path.join(file), |_, _| {})?;
+                .download(&file_path, |_, _| {})?;
 
-            (updater)(Update::DownloadingProgress(i + 1, total));
+            // Will always work so that's ok
+            if let Ok(metadata) = file_path.metadata() {
+                downloaded += metadata.len();
+            }
+
+            (updater)(Update::DownloadingProgress(downloaded, required));
         }
+
+        // Just in case
+        (updater)(Update::DownloadingProgress(required, required));
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than

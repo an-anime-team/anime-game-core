@@ -113,7 +113,6 @@ impl GameExt for Game {
 }
 
 impl Game {
-    #[tracing::instrument(level = "debug", ret)]
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
@@ -150,10 +149,8 @@ impl Game {
 
         let latest = api::game::request()?.default;
 
-        if self.is_installed() {
-            let current = self.get_version()?;
-
-            if latest.version == current {
+        if let Ok(current) = self.get_version() {
+            if current == latest.version {
                 tracing::debug!("Game version is latest");
 
                 Ok(VersionDiff::Latest(current))
@@ -168,7 +165,7 @@ impl Game {
                     current,
                     latest: Version::from_str(latest.version).unwrap(),
 
-                    unpacked_url: latest.resourcesBasePath,
+                    unpacked_url: format!("{API_BASE_URI}/{}", latest.resourcesBasePath),
                     files,
                     total_size,
 
@@ -186,7 +183,7 @@ impl Game {
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
 
-                unpacked_url: latest.resourcesBasePath,
+                unpacked_url: format!("{API_BASE_URI}/{}", latest.resourcesBasePath),
                 files,
                 total_size,
 
