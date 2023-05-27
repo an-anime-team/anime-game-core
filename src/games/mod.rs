@@ -6,3 +6,6 @@ pub mod star_rail;
 
 #[cfg(feature = "honkai")]
 pub mod honkai;
+
+#[cfg(feature = "pgr")]
+pub mod pgr;

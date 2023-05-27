@@ -42,6 +42,7 @@ kinda-virtual-fs = { version = "0.1.1", optional = true }
 genshin = []
 star-rail = []
 honkai = []
+pgr = []
 
 install = [
     # Only genshin need it so perhaps I should

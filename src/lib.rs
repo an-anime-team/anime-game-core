@@ -23,11 +23,14 @@ mod games;
 #[cfg(feature = "genshin")]
 pub use games::genshin;
 
+#[cfg(feature = "star-rail")]
+pub use games::star_rail;
+
 #[cfg(feature = "honkai")]
 pub use games::honkai;
 
-#[cfg(feature = "star-rail")]
-pub use games::star_rail;
+#[cfg(feature = "pgr")]
+pub use games::pgr;
 
 // Core functionality
 
