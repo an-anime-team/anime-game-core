@@ -120,7 +120,10 @@ impl Game {
             let mut files = Vec::new();
             let mut total_size = 0;
 
-            for file in api::resource::request()?.resource {
+            for mut file in api::resource::request()?.resource {
+                // Remove "/" from the beginning of the path
+                file.dest = file.dest.strip_prefix('/').unwrap().to_string();
+
                 let file_path = game_path.join(&file.dest);
 
                 // Add file here if it is not downloaded

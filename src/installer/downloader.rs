@@ -132,12 +132,12 @@ impl Downloader {
     }
 
     pub fn download(&mut self, path: impl Into<PathBuf>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), DownloadingError> {
-        tracing::debug!("Checking free space availability");
-
         let path = path.into();
 
         // Check available free space
         if self.check_free_space {
+            tracing::debug!("Checking free space availability");
+
             match free_space::available(&path) {
                 Some(space) => {
                     if let Some(required) = self.length() {

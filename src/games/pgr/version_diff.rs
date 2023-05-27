@@ -3,8 +3,12 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
-use crate::{version::Version, installer::prelude::Downloader};
+use crate::version::Version;
+use crate::installer::downloader::Downloader;
 use crate::traits::version_diff::VersionDiffExt;
+
+/// Amount of threads `VersionDiff` will use to download stuff
+pub const DOWNLOADER_THREADS: usize = 4;
 
 #[cfg(feature = "install")]
 use crate::installer::{
@@ -222,32 +226,66 @@ impl VersionDiffExt for VersionDiff {
         }
 
         // Download updated files
-        let total = files.len();
+        let total_files = files.len();
         let mut downloaded = 0;
+
+        let workers = std::cmp::min(total_files, DOWNLOADER_THREADS);
+        let files_per_worker = total_files / workers;
+
+        let mut workers_joiners = Vec::with_capacity(workers);
+        let (send, recv) = std::sync::mpsc::channel();
 
         (updater)(Update::DownloadingStarted);
 
-        for (i, file) in files.into_iter().enumerate() {
-            tracing::info!("Updating {url}/{file} ({}/{total})...", i + 1);
+        tracing::info!("Initiating {workers}/{DOWNLOADER_THREADS} workers ({files_per_worker} files per thread)");
 
-            let file_path = path.join(file.strip_prefix('/').unwrap());
+        for i in 0..workers {
+            let i = files_per_worker * i;
 
-            Downloader::new(format!("{url}/{file}"))?
-                // Don't check availability of disk space as it was done before
-                .with_free_space_check(false)
+            let worker_files = files[i..].to_vec();
+            let worker_send = send.clone();
 
-                // Overwrite outdated file instead of trying to continue its downloading
-                .with_continue_downloading(false)
+            let url = url.clone();
+            let path = path.to_path_buf();
 
-                // Download outdated file
-                .download(&file_path, |_, _| {})?;
+            workers_joiners.push(std::thread::spawn(move || {
+                for file in worker_files {
+                    tracing::info!("Updating {url}/{file}");
 
-            // Will always work so that's ok
-            if let Ok(metadata) = file_path.metadata() {
-                downloaded += metadata.len();
-            }
+                    let file_path = path.join(&file);
+
+                    Downloader::new(format!("{url}/{file}"))
+                        .expect("Failed to initialize downloader")
+
+                        // Don't check availability of disk space as it was done before
+                        .with_free_space_check(false)
+
+                        // Overwrite outdated file instead of trying to continue its downloading
+                        .with_continue_downloading(false)
+
+                        // Download outdated file
+                        .download(&file_path, |_, _| {})
+
+                        .expect("Failed to download file");
+
+                    // Will always work so that's ok
+                    if let Ok(metadata) = file_path.metadata() {
+                        worker_send.send(metadata.len()).unwrap();
+                    }
+                }
+            }));
+        }
+
+        drop(send);
+
+        while let Ok(size) = recv.recv() {
+            downloaded += size;
 
             (updater)(Update::DownloadingProgress(downloaded, required));
+        }
+
+        for joiner in workers_joiners {
+            joiner.join().expect("Failed to join worker");
         }
 
         // Just in case
