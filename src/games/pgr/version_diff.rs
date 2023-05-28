@@ -256,8 +256,9 @@ impl VersionDiffExt for VersionDiff {
 
         for i in 0..workers {
             let i = files_per_worker * i;
+            let j = std::cmp::min(files_per_worker * (i + 1), total_files);
 
-            let worker_files = files[i..].to_vec();
+            let worker_files = files[i..j].to_vec();
             let worker_send = send.clone();
 
             let url = url.clone();
@@ -265,7 +266,7 @@ impl VersionDiffExt for VersionDiff {
 
             workers_joiners.push(std::thread::spawn(move || {
                 for file in worker_files {
-                    tracing::info!("Updating {url}/{file}");
+                    tracing::debug!("Updating {url}/{file}");
 
                     let file_path = path.join(&file);
 

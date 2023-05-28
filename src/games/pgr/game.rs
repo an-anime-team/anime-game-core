@@ -159,13 +159,21 @@ impl Game {
                 }
             }
 
+            // Push `globalgamemanagers` to the end of the list to not to break launcher compatibility
+            let game_data_file = format!("{DATA_FOLDER_NAME}/globalgamemanagers");
+
+            if files.contains(&game_data_file) {
+                files.retain(|file| file != &game_data_file);
+                files.push(game_data_file);
+            }
+
             Ok((files, total_size))
         }
 
         let latest = api::game::request()?.default;
 
         if let Ok(current) = self.get_version() {
-            if current == latest.version {
+            if current >= Version::from_str(&latest.version).unwrap() {
                 tracing::debug!("Game version is latest");
 
                 Ok(VersionDiff::Latest(current))
