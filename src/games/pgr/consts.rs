@@ -8,3 +8,6 @@ pub const DATA_FOLDER_NAME: &str = "PGR_Data";
 pub const TELEMETRY_SERVERS: &[&str] = &[
     // TODO
 ];
+
+/// Default amount of threads `VersionDiff` will use to download stuff
+pub const DEFAULT_DOWNLOADER_THREADS: usize = 4;

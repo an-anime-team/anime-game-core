@@ -13,7 +13,10 @@ use super::version_diff::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
-    path: PathBuf
+    path: PathBuf,
+
+    /// Compare files sizes instead of computing md5 hashes. `false` by default
+    pub fast_verify: bool
 }
 
 impl GameExt for Game {
@@ -27,7 +30,8 @@ impl GameExt for Game {
     #[inline]
     fn new(path: impl Into<PathBuf>, _edition: Self::Edition) -> Self {
         Self {
-            path: path.into()
+            path: path.into(),
+            fast_verify: false
         }
     }
 
@@ -113,10 +117,18 @@ impl GameExt for Game {
 }
 
 impl Game {
+    #[inline]
+    pub fn with_fast_verify(self, fast_verify: bool) -> Self {
+        Self {
+            fast_verify,
+            ..self
+        }
+    }
+
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
-        fn get_files(game_path: &PathBuf) -> anyhow::Result<(Vec<String>, u64)> {
+        fn get_files(game_path: &PathBuf, fast_verify: bool) -> anyhow::Result<(Vec<String>, u64)> {
             let mut files = Vec::new();
             let mut total_size = 0;
 
@@ -136,8 +148,8 @@ impl Game {
                 // Or try to get downloaded file's metadata
                 else if let Ok(metadata) = file_path.metadata() {
                     // And compare updated file size with downloaded one. If they're equal,
-                    // then as well compare their md5 hashes
-                    if metadata.len() != file.size || format!("{:x}", Md5::digest(std::fs::read(file_path)?)).to_ascii_lowercase() != file.md5.to_ascii_lowercase() {
+                    // then as well compare their md5 hashes if fast_verify = false
+                    if metadata.len() != file.size || (!fast_verify && format!("{:x}", Md5::digest(std::fs::read(file_path)?)).to_ascii_lowercase() != file.md5.to_ascii_lowercase()) {
                         files.push(file.dest.clone());
 
                         // Add only files difference in size to the total download size
@@ -162,7 +174,7 @@ impl Game {
             else {
                 tracing::debug!("Game is outdated: {} -> {}", current, latest.version);
 
-                let (files, total_size) = get_files(&self.path)?;
+                let (files, total_size) = get_files(&self.path, self.fast_verify)?;
 
                 Ok(VersionDiff::Outdated {
                     current,
@@ -173,7 +185,9 @@ impl Game {
                     total_size,
 
                     installation_path: Some(self.path.clone()),
-                    version_file_path: None
+                    version_file_path: None,
+
+                    threads: DEFAULT_DOWNLOADER_THREADS
                 })
             }
         }
@@ -181,7 +195,7 @@ impl Game {
         else {
             tracing::debug!("Game is not installed");
 
-            let (files, total_size) = get_files(&self.path)?;
+            let (files, total_size) = get_files(&self.path, self.fast_verify)?;
 
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
@@ -191,7 +205,9 @@ impl Game {
                 total_size,
 
                 installation_path: Some(self.path.clone()),
-                version_file_path: None
+                version_file_path: None,
+
+                threads: DEFAULT_DOWNLOADER_THREADS
             })
         }
     }

@@ -7,9 +7,6 @@ use crate::version::Version;
 use crate::installer::downloader::Downloader;
 use crate::traits::version_diff::VersionDiffExt;
 
-/// Amount of threads `VersionDiff` will use to download stuff
-pub const DOWNLOADER_THREADS: usize = 4;
-
 #[cfg(feature = "install")]
 use crate::installer::{
     downloader::DownloadingError,
@@ -75,7 +72,10 @@ pub enum VersionDiff {
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
-        version_file_path: Option<PathBuf>
+        version_file_path: Option<PathBuf>,
+
+        /// Amount of threads to use during downloading
+        threads: usize
     },
 
     /// Component is not yet installed
@@ -92,7 +92,10 @@ pub enum VersionDiff {
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
-        version_file_path: Option<PathBuf>
+        version_file_path: Option<PathBuf>,
+
+        /// Amount of threads to use during downloading
+        threads: usize
     }
 }
 
@@ -117,6 +120,17 @@ impl VersionDiff {
             // Can be installed
             Self::Outdated { files, .. } |
             Self::NotInstalled { files, .. } => Some(files.clone())
+        }
+    }
+
+    pub fn threads(&self) -> Option<usize> {
+        match self {
+            // Can't be installed
+            Self::Latest(_) => None,
+
+            // Can be installed
+            Self::Outdated { threads, .. } |
+            Self::NotInstalled { threads, .. } => Some(*threads)
         }
     }
 }
@@ -209,6 +223,7 @@ impl VersionDiffExt for VersionDiff {
         let url = self.downloading_uri().expect("Failed to retreive downloading url");
         let required = self.unpacked_size().expect("Failed to retreive total size");
         let files = self.files().expect("Failed to retreive list of files for downloading");
+        let threads = self.threads().expect("Failed to retreive amount of threads");
 
         (updater)(Update::CheckingFreeSpace(path.to_path_buf()));
 
@@ -229,7 +244,7 @@ impl VersionDiffExt for VersionDiff {
         let total_files = files.len();
         let mut downloaded = 0;
 
-        let workers = std::cmp::min(total_files, DOWNLOADER_THREADS);
+        let workers = std::cmp::min(total_files, threads);
         let files_per_worker = total_files / workers;
 
         let mut workers_joiners = Vec::with_capacity(workers);
@@ -237,7 +252,7 @@ impl VersionDiffExt for VersionDiff {
 
         (updater)(Update::DownloadingStarted);
 
-        tracing::info!("Initiating {workers}/{DOWNLOADER_THREADS} workers ({files_per_worker} files per thread)");
+        tracing::info!("Initiating {workers}/{threads} workers ({files_per_worker} files per thread)");
 
         for i in 0..workers {
             let i = files_per_worker * i;
