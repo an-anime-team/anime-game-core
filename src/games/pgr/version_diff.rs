@@ -1,4 +1,7 @@
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
+use std::collections::VecDeque;
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -100,6 +103,11 @@ pub enum VersionDiff {
 }
 
 impl VersionDiff {
+    thread_local! {
+        /// Thread-local: last "curr" value received from downloader callback
+        static TL_OLD_BYTES: RefCell<u64> = RefCell::new(0);
+    }
+    
     /// Get `.version` file path
     pub fn version_file_path(&self) -> Option<PathBuf> {
         match self {
@@ -241,35 +249,45 @@ impl VersionDiffExt for VersionDiff {
         }
 
         // Download updated files
-        let total_files = files.len();
         let mut downloaded = 0;
 
-        let workers = std::cmp::min(total_files, threads);
-        let files_per_worker = total_files / workers;
+        let file_queue = Arc::new(Mutex::new(VecDeque::from(files)));
 
-        let mut workers_joiners = Vec::with_capacity(workers);
+        let mut workers_joiners = Vec::with_capacity(threads);
         let (send, recv) = std::sync::mpsc::channel();
 
         (updater)(Update::DownloadingStarted);
 
-        tracing::info!("Initiating {workers}/{threads} workers ({files_per_worker} files per thread)");
+        tracing::info!("Initiating {threads} workers");
 
-        for i in 0..workers {
-            let i = files_per_worker * i;
-            let j = std::cmp::min(files_per_worker * (i + 1), total_files);
-
-            let worker_files = files[i..j].to_vec();
+        for _ in 0..threads {
+            let worker_queue = file_queue.clone();
             let worker_send = send.clone();
 
             let url = url.clone();
             let path = path.to_path_buf();
 
             workers_joiners.push(std::thread::spawn(move || {
-                for file in worker_files {
+                loop {
+                    // Take next file from the queue
+                    let file_option = worker_queue.lock().unwrap().pop_front();
+                    if file_option.is_none() {
+                        // Break if there are no files left
+                        break;
+                    }
+                        
+                    let file = file_option.unwrap();
+                                      
                     tracing::debug!("Updating {url}/{file}");
-
+                    
                     let file_path = path.join(&file);
-
+                    let file_send = worker_send.clone();
+                    
+                    // We've started downloading a new file, so set old_bytes to 0
+                    VersionDiff::TL_OLD_BYTES.with(|old_bytes| {
+                        *old_bytes.borrow_mut() = 0;
+                    });
+                    
                     Downloader::new(format!("{url}/{file}"))
                         .expect("Failed to initialize downloader")
 
@@ -280,14 +298,15 @@ impl VersionDiffExt for VersionDiff {
                         .with_continue_downloading(false)
 
                         // Download outdated file
-                        .download(&file_path, |_, _| {})
-
+                        .download(&file_path, move |curr, _total| {
+                            VersionDiff::TL_OLD_BYTES.with(|old_bytes| {
+                                // Calculate and send how many bytes we've downloaded since last report
+                                file_send.send(curr - *old_bytes.borrow()).unwrap();
+                                *old_bytes.borrow_mut() = curr;
+                            });
+                        })
+                    
                         .expect("Failed to download file");
-
-                    // Will always work so that's ok
-                    if let Ok(metadata) = file_path.metadata() {
-                        worker_send.send(metadata.len()).unwrap();
-                    }
                 }
             }));
         }
