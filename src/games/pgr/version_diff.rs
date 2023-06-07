@@ -107,7 +107,7 @@ impl VersionDiff {
         /// Thread-local: last "curr" value received from downloader callback
         static TL_OLD_BYTES: RefCell<u64> = RefCell::new(0);
     }
-    
+
     /// Get `.version` file path
     pub fn version_file_path(&self) -> Option<PathBuf> {
         match self {
@@ -268,26 +268,17 @@ impl VersionDiffExt for VersionDiff {
             let path = path.to_path_buf();
 
             workers_joiners.push(std::thread::spawn(move || {
-                loop {
-                    // Take next file from the queue
-                    let file_option = worker_queue.lock().unwrap().pop_front();
-                    if file_option.is_none() {
-                        // Break if there are no files left
-                        break;
-                    }
-                        
-                    let file = file_option.unwrap();
-                                      
+                while let Some(file) = worker_queue.lock().unwrap().pop_front() {
                     tracing::debug!("Updating {url}/{file}");
-                    
+
                     let file_path = path.join(&file);
                     let file_send = worker_send.clone();
-                    
+
                     // We've started downloading a new file, so set old_bytes to 0
                     VersionDiff::TL_OLD_BYTES.with(|old_bytes| {
                         *old_bytes.borrow_mut() = 0;
                     });
-                    
+
                     Downloader::new(format!("{url}/{file}"))
                         .expect("Failed to initialize downloader")
 
@@ -302,10 +293,11 @@ impl VersionDiffExt for VersionDiff {
                             VersionDiff::TL_OLD_BYTES.with(|old_bytes| {
                                 // Calculate and send how many bytes we've downloaded since last report
                                 file_send.send(curr - *old_bytes.borrow()).unwrap();
+
                                 *old_bytes.borrow_mut() = curr;
                             });
                         })
-                    
+
                         .expect("Failed to download file");
                 }
             }));
