@@ -19,6 +19,6 @@ Unified library to controll different games installations. Provides basic instru
 | [An Anime Game](https://github.com/an-anime-team/an-anime-game-launcher) | `gen-shin` (without dash) |
 | [The Honkers Railway](https://github.com/an-anime-team/the-honkers-railway-launcher) | `star-rail` |
 | [Honkers](https://github.com/an-anime-team/honkers-launcher) | `hon-kai` (without dash) |
-| PGR | `pgr` |
+| [Punishing: Gray Raven](https://github.com/an-anime-team/an-anime-borb-launcher) | `pgr` |
 
 ⚠️ This library does not bind 7z archives format support, and would require `7z` binary available in user's system. This format may be used in games like honkers
