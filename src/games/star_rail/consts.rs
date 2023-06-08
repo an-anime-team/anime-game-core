@@ -48,13 +48,13 @@ impl GameEdition {
     }
 
     pub fn from_system_lang() -> Self {
-        #[allow(clippy::or_fun_call)]
         let locale = std::env::var("LC_ALL")
             .unwrap_or_else(|_| std::env::var("LC_MESSAGES")
             .unwrap_or_else(|_| std::env::var("LANG")
-            .unwrap_or(String::from("en_us"))));
+            .unwrap_or(String::from("en_us"))))
+            .to_ascii_lowercase();
 
-        if locale.len() > 4 && &locale[..5].to_ascii_lowercase() == "zh_cn" {
+        if locale.starts_with("zh_cn") {
             Self::China
         } else {
             Self::Global
