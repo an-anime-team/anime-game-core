@@ -10,4 +10,4 @@ pub const TELEMETRY_SERVERS: &[&str] = &[
 ];
 
 /// Default amount of threads `VersionDiff` will use to download stuff
-pub const DEFAULT_DOWNLOADER_THREADS: usize = 4;
+pub const DEFAULT_DOWNLOADER_THREADS: usize = 8;
