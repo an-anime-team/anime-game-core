@@ -42,18 +42,6 @@ impl From<minreq::Error> for DiffDownloadingError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Update {
-    CheckingFreeSpace(PathBuf),
-
-    DownloadingStarted,
-
-    /// `(downloaded files, total files)`
-    DownloadingProgress(u64, u64),
-
-    DownloadingFinished
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VersionDiff {
     /// Latest version
     Latest(Version),
@@ -145,7 +133,7 @@ impl VersionDiff {
 
 impl VersionDiffExt for VersionDiff {
     type Error = DiffDownloadingError;
-    type Update = Update;
+    type Update = InstallerUpdate;
     type Edition = ();
 
     #[inline]

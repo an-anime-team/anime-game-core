@@ -23,6 +23,8 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiffUpdate {
+    CheckingFreeSpace(PathBuf),
+
     InstallerUpdate(InstallerUpdate),
 
     ApplyingHdiffStarted,
@@ -358,7 +360,7 @@ impl VersionDiffExt for VersionDiff {
             // Don't perform space checks in the Installer because we're doing it here
             .with_free_space_check(false);
 
-        (updater)(InstallerUpdate::CheckingFreeSpace(installer.temp_folder.to_path_buf()));
+        (updater)(DiffUpdate::CheckingFreeSpace(installer.temp_folder.to_path_buf()));
 
         // Check available free space for archive itself
         let Some(space) = free_space::available(&installer.temp_folder) else {
@@ -380,7 +382,7 @@ impl VersionDiffExt for VersionDiff {
             return Err(DownloadingError::NoSpaceAvailable(installer.temp_folder, required, space).into());
         }
 
-        (updater)(InstallerUpdate::CheckingFreeSpace(path.to_path_buf()));
+        (updater)(DiffUpdate::CheckingFreeSpace(path.to_path_buf()));
 
         // Check available free space for unpacked archvie data
         let Some(space) = free_space::available(&path) else {
