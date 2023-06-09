@@ -45,7 +45,10 @@ pub struct Installer {
     pub temp_folder: PathBuf,
 
     /// Perform free space verifications before downloading file
-    pub check_free_space: bool
+    pub check_free_space: bool,
+
+    /// How `Downloader` should save the file before unpacking it
+    pub filename: Option<String>
 }
 
 impl Installer {
@@ -56,7 +59,8 @@ impl Installer {
                 .with_free_space_check(false),
 
             temp_folder: std::env::temp_dir(),
-            check_free_space: true
+            check_free_space: true,
+            filename: None
         })
     }
 
@@ -66,7 +70,7 @@ impl Installer {
     /// - `https://example.com` -> `index.html`
     #[inline]
     pub fn get_filename(&self) -> &str {
-        self.downloader.get_filename()
+        self.filename.as_deref().unwrap_or(self.downloader.get_filename())
     }
 
     #[inline]
@@ -86,6 +90,14 @@ impl Installer {
     /// Specify whether installer should check free space availability
     pub fn with_free_space_check(mut self, check_free_space: bool) -> Self {
         self.check_free_space = check_free_space;
+
+        self
+    }
+
+    #[inline]
+    /// Specify name of the file `Downloader` will save archive as before unpacking it
+    pub fn with_filename(mut self, filename: String) -> Self {
+        self.filename = Some(filename);
 
         self
     }
