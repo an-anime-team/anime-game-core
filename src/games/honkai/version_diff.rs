@@ -142,6 +142,12 @@ impl VersionDiff {
 impl VersionDiffExt for VersionDiff {
     type Error = DiffDownloadingError;
     type Update = InstallerUpdate;
+    type Edition = ();
+
+    #[inline]
+    fn edition(&self) -> Self::Edition {
+        ()
+    }
 
     fn current(&self) -> Option<Version> {
         match self {

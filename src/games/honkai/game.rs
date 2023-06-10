@@ -15,8 +15,10 @@ pub struct Game {
 }
 
 impl GameExt for Game {
+    type Edition = ();
+
     #[inline]
-    fn new<T: Into<PathBuf>>(path: T) -> Self {
+    fn new(path: impl Into<PathBuf>, _edition: ()) -> Self {
         Self {
             path: path.into()
         }
@@ -27,9 +29,14 @@ impl GameExt for Game {
         self.path.as_path()
     }
 
+    #[inline]
+    fn edition(&self) -> Self::Edition {
+        ()
+    }
+
     #[tracing::instrument(level = "trace", ret)]
     /// Try to get latest game version
-    fn get_latest_version() -> anyhow::Result<Version> {
+    fn get_latest_version(edition: Self::Edition) -> anyhow::Result<Version> {
         tracing::trace!("Trying to get latest game version");
 
         // I assume game's API can't return incorrect version format right? Right?
