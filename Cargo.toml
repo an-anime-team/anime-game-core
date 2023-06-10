@@ -1,6 +1,6 @@
 [package]
 name = "anime-game-core"
-version = "1.11.8"
+version = "1.12.0"
 authors = ["Nikita Podvirnyy <suimin.tu.mu.ga.mi@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"
@@ -62,11 +62,14 @@ install = [
     "dep:md-5"
 ]
 
-linux-patch = []
 external = ["dep:kinda-virtual-fs"]
+
+patches = []
+patch-dawn = ["genshin"]
+patch-jadeite = []
 
 all = [
     "install",
-    "linux-patch",
-    "external"
+    "external",
+    "patches"
 ]

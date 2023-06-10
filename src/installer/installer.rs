@@ -96,8 +96,8 @@ impl Installer {
 
     #[inline]
     /// Specify name of the file `Downloader` will save archive as before unpacking it
-    pub fn with_filename(mut self, filename: String) -> Self {
-        self.filename = Some(filename);
+    pub fn with_filename(mut self, filename: impl ToString) -> Self {
+        self.filename = Some(filename.to_string());
 
         self
     }

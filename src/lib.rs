@@ -16,6 +16,9 @@ pub mod traits;
 pub mod prettify_bytes;
 pub mod check_domain;
 
+#[cfg(feature = "patches")]
+pub mod patches;
+
 // Games-specific functionality
 
 mod games;
@@ -48,6 +51,9 @@ pub mod prelude {
     pub use super::prettify_bytes::prettify_bytes;
 
     pub use super::traits::prelude::*;
+
+    #[cfg(feature = "patches")]
+    pub use super::patches::prelude::*;
 
     #[cfg(feature = "genshin")]
     pub use super::genshin::prelude as genshin;

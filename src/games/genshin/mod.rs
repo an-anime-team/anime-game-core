@@ -8,9 +8,6 @@ pub mod telemetry;
 #[cfg(feature = "install")]
 pub mod repairer;
 
-#[cfg(feature = "linux-patch")]
-pub mod linux_patch;
-
 pub mod prelude {
     pub use super::consts::*;
     pub use super::version_diff::*;
