@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use crate::version::Version;
 use crate::installer::downloader::Downloader;
+use crate::installer::installer::Update as InstallerUpdate;
 use crate::traits::version_diff::VersionDiffExt;
 
 #[cfg(feature = "install")]
@@ -221,7 +222,7 @@ impl VersionDiffExt for VersionDiff {
         let files = self.files().expect("Failed to retreive list of files for downloading");
         let threads = self.threads().expect("Failed to retreive amount of threads");
 
-        (updater)(Update::CheckingFreeSpace(path.to_path_buf()));
+        (updater)(InstallerUpdate::CheckingFreeSpace(path.to_path_buf()));
 
         // Check available free space
         let Some(space) = free_space::available(&path) else {
@@ -244,7 +245,7 @@ impl VersionDiffExt for VersionDiff {
         let mut workers_joiners = Vec::with_capacity(threads);
         let (send, recv) = std::sync::mpsc::channel();
 
-        (updater)(Update::DownloadingStarted);
+        (updater)(InstallerUpdate::DownloadingStarted(path.to_path_buf()));
 
         tracing::info!("Initiating {threads} workers");
 
@@ -296,7 +297,7 @@ impl VersionDiffExt for VersionDiff {
         while let Ok(size) = recv.recv() {
             downloaded += size;
 
-            (updater)(Update::DownloadingProgress(downloaded, required));
+            (updater)(InstallerUpdate::DownloadingProgress(downloaded, required));
         }
 
         for joiner in workers_joiners {
@@ -304,7 +305,7 @@ impl VersionDiffExt for VersionDiff {
         }
 
         // Just in case
-        (updater)(Update::DownloadingProgress(required, required));
+        (updater)(InstallerUpdate::DownloadingProgress(required, required));
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
@@ -316,7 +317,7 @@ impl VersionDiffExt for VersionDiff {
             std::fs::write(version_path, self.latest().version);
         }
 
-        (updater)(Update::DownloadingFinished);
+        (updater)(InstallerUpdate::DownloadingFinished);
 
         Ok(())
     }
