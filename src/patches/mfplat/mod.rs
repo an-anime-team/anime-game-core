@@ -10,6 +10,8 @@ use crate::installer::{
     archives::Archive
 };
 
+// TODO: consider moving it to the wincompatlib
+
 const PATCH_URI: &str = "https://github.com/z0z0z/mf-install/archive/refs/tags/1.0.zip";
 const PATCH_HASH: &str = "51340459ae099fe3aaa5f7f1bb98ae1c";
 const MFPLAT_DLL_HASH: &str = "54b5dcd55b223bc5df50b82e1e9e86b1";

@@ -65,9 +65,10 @@ install = [
 external = ["dep:kinda-virtual-fs"]
 
 patches = []
-patch-dawn = ["genshin"]
+patch-dawn = []
 patch-jadeite = []
 patch-mfplat = []
+patch-mfc140 = []
 
 all = [
     "install",
