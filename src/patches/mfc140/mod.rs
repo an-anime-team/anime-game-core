@@ -20,10 +20,19 @@ pub fn is_installed(wine_prefix: impl AsRef<Path>) -> bool {
 }
 
 pub fn install(wine_prefix: impl AsRef<Path>, temp: Option<impl Into<PathBuf>>) -> anyhow::Result<()> {
-    let temp = temp.map(|path| path.into()).unwrap_or_else(std::env::temp_dir);
+    let temp = temp
+        .map(|path| path.into())
+        .unwrap_or_else(std::env::temp_dir)
+        .join("mfc140");
 
-    let vcredist = temp.join("vcredist/vc_redist.x86.exe");
-    let vcredist_extracted = temp.join("vcredist/extracted");
+    if temp.exists() {
+        std::fs::remove_dir_all(&temp)?;
+    }
+
+    std::fs::create_dir_all(&temp)?;
+
+    let vcredist = temp.join("vc_redist.x86.exe");
+    let vcredist_extracted = temp.join("extracted");
 
     Downloader::new(URL)?
         .with_continue_downloading(false)
@@ -61,6 +70,8 @@ pub fn install(wine_prefix: impl AsRef<Path>, temp: Option<impl Into<PathBuf>>) 
 
         std::fs::copy(vcredist_extracted.join(lib), dest)?;
     }
+
+    std::fs::remove_dir_all(temp)?;
 
     Ok(())
 }
