@@ -12,6 +12,27 @@ use xz::read::XzDecoder as XzReader;
 use bzip2::read::BzDecoder as Bz2Reader;
 use flate2::read::GzDecoder as GzReader;
 
+/// Get 7z binary if some is available
+fn get7z() -> anyhow::Result<String> {
+    let result = Command::new("7z")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output();
+
+    if result.is_ok() {
+        return Ok(String::from("7z"));
+    }
+
+    Command::new("7za")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output()?;
+
+    Ok(String::from("7za"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Size {
     Compressed(u64),
@@ -84,13 +105,13 @@ impl Archive {
     }
 
     /// Tar archives may forbid you to extract them if you call this method
-    pub fn get_entries(&mut self) -> Vec<Entry> {
+    pub fn get_entries(&mut self) -> anyhow::Result<Vec<Entry>> {
         let mut entries = Vec::new();
 
         match self {
             Archive::Zip(_, zip) => {
                 for i in 0..zip.len() {
-                    let entry = zip.by_index(i).unwrap();
+                    let entry = zip.by_index(i)?;
 
                     entries.push(Entry {
                         name: entry.name().to_string(),
@@ -103,10 +124,10 @@ impl Archive {
             }
 
             Archive::Tar(_, tar) => {
-                for entry in tar.entries().unwrap() {
+                for entry in tar.entries()? {
                     if let Ok(entry) = entry {
                         entries.push(Entry {
-                            name: entry.path().unwrap().to_str().unwrap().to_string(),
+                            name: entry.path()?.to_str().unwrap().to_string(),
                             size: Size::Compressed(entry.size())
                         });
                     }
@@ -114,10 +135,10 @@ impl Archive {
             }
 
             Archive::TarXz(_, tar) => {
-                for entry in tar.entries().unwrap() {
+                for entry in tar.entries()? {
                     if let Ok(entry) = entry {
                         entries.push(Entry {
-                            name: entry.path().unwrap().to_str().unwrap().to_string(),
+                            name: entry.path()?.to_str().unwrap().to_string(),
                             size: Size::Compressed(entry.size())
                         });
                     }
@@ -125,10 +146,10 @@ impl Archive {
             }
 
             Archive::TarGz(_, tar) => {
-                for entry in tar.entries().unwrap() {
+                for entry in tar.entries()? {
                     if let Ok(entry) = entry {
                         entries.push(Entry {
-                            name: entry.path().unwrap().to_str().unwrap().to_string(),
+                            name: entry.path()?.to_str().unwrap().to_string(),
                             size: Size::Compressed(entry.size())
                         });
                     }
@@ -136,10 +157,10 @@ impl Archive {
             }
 
             Archive::TarBz2(_, tar) => {
-                for entry in tar.entries().unwrap() {
+                for entry in tar.entries()? {
                     if let Ok(entry) = entry {
                         entries.push(Entry {
-                            name: entry.path().unwrap().to_str().unwrap().to_string(),
+                            name: entry.path()?.to_str().unwrap().to_string(),
                             size: Size::Compressed(entry.size())
                         });
                     }
@@ -166,15 +187,14 @@ impl Archive {
                     entries.push(entry);
                 }*/
 
-                let output = Command::new("7z")
+                let output = Command::new(get7z()?)
                     .arg("l")
-                    .arg(path)
+                    .arg(&path)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
-                    .output()
-                    .unwrap();
+                    .output()?;
 
-                let output = String::from_utf8(output.stdout).unwrap();
+                let output = String::from_utf8(output.stdout)?;
 
                 let output = output.split("-------------------").collect::<Vec<&str>>();
                 let output = output[1..output.len() - 1].join("-------------------");
@@ -184,7 +204,7 @@ impl Archive {
                         let words = line.split("  ").filter_map(|word| {
                             let word = word.trim();
 
-                            if word == "" {
+                            if word.is_empty() {
                                 None
                             } else {
                                 Some(word)
@@ -193,14 +213,14 @@ impl Archive {
 
                         entries.push(Entry {
                             name: words[words.len() - 1].to_string(),
-                            size: Size::Uncompressed(words[1].parse::<u64>().unwrap())
+                            size: Size::Uncompressed(words[1].parse::<u64>()?)
                         });
                     }
                 }
             }
         }
 
-        entries
+        Ok(entries)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -250,7 +270,7 @@ impl Archive {
                     .output()?;
 
                 // Extract the archive
-                Command::new("7z")
+                Command::new(get7z()?)
                     .arg("x")
                     .arg(archive)
                     .arg(format!("-o{}", folder.to_string_lossy()))

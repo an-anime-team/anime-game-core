@@ -190,7 +190,10 @@ impl Installer {
                 // Temporary workaround as we can't get archive extraction process
                 // directly - we'll spawn it in another thread and check this archive entries appearence in the filesystem
                 let mut total = 0;
-                let entries = archive.get_entries();
+
+                let entries = archive
+                    .get_entries()
+                    .expect("Failed to get archive entries");
 
                 for entry in &entries {
                     total += entry.size.get_size();
