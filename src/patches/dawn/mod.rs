@@ -1,15 +1,13 @@
-mod patch;
-mod patches;
-
-pub use patch::*;
-pub use patches::*;
+pub mod patch;
+pub mod player_patch;
 
 pub mod prelude {
     pub use super::patch::{
+        PatchExt,
         Patch,
         PatchStatus,
         Regions as PatchRegions
     };
 
-    pub use super::patches::*;
+    pub use super::player_patch::*;
 }

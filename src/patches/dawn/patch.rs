@@ -2,21 +2,21 @@ use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Deserialize};
 
-use super::patches::*;
-
 use crate::version::*;
 use crate::genshin::consts::GameEdition;
 use crate::traits::git_sync::RemoteGitSyncExt;
 
+use super::prelude::*;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Regions {
-    /// `UnityPlayer.dll` / `Plugins/xlua.dll` md5 hash
+    /// `UnityPlayer.dll` md5 hash
     Global(String),
-    
-    /// `UnityPlayer.dll` / `Plugins/xlua.dll` md5 hash
+
+    /// `UnityPlayer.dll` md5 hash
     China(String),
 
-    /// `UnityPlayer.dll` / `Plugins/xlua.dll` md5 hashes for different regions
+    /// `UnityPlayer.dll` md5 hashes for different regions
     Both {
         global: String,
         china: String
@@ -70,6 +70,32 @@ pub enum PatchStatus {
     }
 }
 
+// Not really needed because is used only once, but I'll keep
+// it here for perhaps some future use, like returning of
+// xlua patch or something
+
+pub trait PatchExt {
+    /// Try to parse patch status
+    /// 
+    /// `patch_folder` should point to standard patch repository folder
+    fn from_folder(patch_folder: impl AsRef<Path>, game_edition: GameEdition) -> anyhow::Result<Self> where Self: Sized;
+
+    /// Get current patch repository folder
+    fn folder(&self) -> &Path;
+
+    /// Get latest available patch status
+    fn status(&self) -> &PatchStatus;
+
+    /// Check if the patch is applied to the game
+    fn is_applied(&self, game_folder: impl AsRef<Path>) -> anyhow::Result<bool>;
+
+    /// Apply available patch
+    fn apply(&self, game_folder: impl AsRef<Path>, use_root: bool) -> anyhow::Result<()>;
+
+    /// Revert available patch
+    fn revert(&self, game_folder: impl AsRef<Path>, forced: bool) -> anyhow::Result<()>;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Patch {
     folder: PathBuf,
@@ -93,12 +119,7 @@ impl Patch {
     }
 
     #[inline]
-    pub fn unity_player_patch(&self) -> anyhow::Result<UnityPlayerPatch> {
-        UnityPlayerPatch::from_folder(&self.folder, self.edition)
-    }
-
-    #[inline]
-    pub fn xlua_patch(&self) -> anyhow::Result<XluaPatch> {
-        XluaPatch::from_folder(&self.folder, self.edition)
+    pub fn player_patch(&self) -> anyhow::Result<PlayerPatch> {
+        PlayerPatch::from_folder(&self.folder, self.edition)
     }
 }
