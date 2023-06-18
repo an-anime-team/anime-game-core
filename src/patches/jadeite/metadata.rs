@@ -4,6 +4,9 @@ use serde_json::Value as JsonValue;
 
 use crate::version::Version;
 
+#[cfg(feature = "star-rail")]
+use crate::games::star_rail::consts::GameEdition as StarRailGameEdition;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JadeiteMetadata {
     pub hi3rd: JadeiteHi3rdMetadata,
@@ -63,14 +66,16 @@ impl From<&JsonValue> for JadeiteHi3rdMetadata {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JadeiteHsrMetadata {
-    pub global: JadeitePatchStatus
+    pub global: JadeitePatchStatus,
+    pub china: JadeitePatchStatus
 }
 
 impl Default for JadeiteHsrMetadata {
     #[inline]
     fn default() -> Self {
         Self {
-            global: JadeitePatchStatus::default()
+            global: JadeitePatchStatus::default(),
+            china: JadeitePatchStatus::default()
         }
     }
 }
@@ -81,7 +86,22 @@ impl From<&JsonValue> for JadeiteHsrMetadata {
             global: match value.get("global") {
                 Some(status) => JadeitePatchStatus::from(status),
                 None => JadeitePatchStatus::default()
+            },
+
+            china: match value.get("china") {
+                Some(status) => JadeitePatchStatus::from(status),
+                None => JadeitePatchStatus::default()
             }
+        }
+    }
+}
+
+#[cfg(feature = "star-rail")]
+impl JadeiteHsrMetadata {
+    pub fn for_edition(&self, edition: StarRailGameEdition) -> JadeitePatchStatus {
+        match edition {
+            StarRailGameEdition::Global => self.global,
+            StarRailGameEdition::China => self.china
         }
     }
 }
