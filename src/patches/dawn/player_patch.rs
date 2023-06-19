@@ -70,18 +70,19 @@ impl PatchExt for PlayerPatch {
         // Get latest available game version
         let latest_version = Version::from_str(api::request(game_edition)?.data.game.latest.version).unwrap();
 
-        let patch_folder = &patch_folders[0];
+        // Get latest available patch version
+        let latest_patch_folder = &patch_folders[0];
 
         // Get patch version from folder name
         // may look not really safe but it pretty much should be...
-        let file_name = patch_folder.file_name().to_string_lossy().bytes().collect::<Vec<u8>>();
+        let file_name = latest_patch_folder.file_name().to_string_lossy().bytes().collect::<Vec<u8>>();
 
         let version = Version::new(file_name[0] - b'0', file_name[1] - b'0', file_name[2] - b'0');
 
         // Return PatchStatus::Outdated if the patch is, well, outdated
         if version < latest_version {
             return Ok(Self {
-                patch_folder: patch_folder.path(),
+                patch_folder,
                 status: PatchStatus::Outdated {
                     current: version,
                     latest: latest_version
@@ -91,7 +92,7 @@ impl PatchExt for PlayerPatch {
         }
 
         // Read patch.sh file
-        let patch_script = std::fs::read_to_string(patch_folder.path().join("patch.sh"))?;
+        let patch_script = std::fs::read_to_string(latest_patch_folder.path().join("patch.sh"))?;
 
         // Try to get available player hashes
         let mut hashes = Vec::with_capacity(2);
@@ -143,7 +144,7 @@ impl PatchExt for PlayerPatch {
                 // If patch.sh contains STABILITY_MARK - then it's stable version
                 if patch_script.contains(STABILITY_MARK) {
                     Ok(Self {
-                        patch_folder: patch_folder.path(),
+                        patch_folder,
                         status: PatchStatus::Available {
                             version,
                             player_hash
@@ -155,7 +156,7 @@ impl PatchExt for PlayerPatch {
                 // Otherwise it's in testing
                 else {
                     Ok(Self {
-                        patch_folder: patch_folder.path(),
+                        patch_folder,
                         status: PatchStatus::Testing {
                             version,
                             player_hash
@@ -168,7 +169,7 @@ impl PatchExt for PlayerPatch {
             // Failed to parse UnityPlayer.dll hashes -> likely in preparation state
             // but also could be changed file structure, or something else
             None => Ok(Self {
-                patch_folder: patch_folder.path(),
+                patch_folder,
                 status: PatchStatus::Preparation {
                     version
                 },
