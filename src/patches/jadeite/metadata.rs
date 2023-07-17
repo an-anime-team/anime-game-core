@@ -9,11 +9,36 @@ use crate::games::star_rail::consts::GameEdition as StarRailGameEdition;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JadeiteMetadata {
+    pub games: JadeiteGamesMetadata
+}
+
+impl Default for JadeiteMetadata {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            games: JadeiteGamesMetadata::default()
+        }
+    }
+}
+
+impl From<&JsonValue> for JadeiteMetadata {
+    fn from(value: &JsonValue) -> Self {
+        Self {
+            games: match value.get("games") {
+                Some(games) => JadeiteGamesMetadata::from(games),
+                None => JadeiteGamesMetadata::default()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct JadeiteGamesMetadata {
     pub hi3rd: JadeiteHi3rdMetadata,
     pub hsr: JadeiteHsrMetadata
 }
 
-impl Default for JadeiteMetadata {
+impl Default for JadeiteGamesMetadata {
     #[inline]
     fn default() -> Self {
         Self {
@@ -23,7 +48,7 @@ impl Default for JadeiteMetadata {
     }
 }
 
-impl From<&JsonValue> for JadeiteMetadata {
+impl From<&JsonValue> for JadeiteGamesMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
             hi3rd: match value.get("hi3rd") {
