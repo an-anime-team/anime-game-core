@@ -136,8 +136,8 @@ impl Game {
                     latest: Version::from_str(latest.version).unwrap(),
                     url: latest.path,
 
-                    downloaded_size: latest.size.parse::<u64>().unwrap(),
-                    unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                    downloaded_size: latest.package_size.parse::<u64>().unwrap(),
+                    unpacked_size: latest.size.parse::<u64>().unwrap(),
 
                     installation_path: Some(self.path.clone()),
                     version_file_path: None,
@@ -153,8 +153,8 @@ impl Game {
                 latest: Version::from_str(&latest.version).unwrap(),
                 url: latest.path,
 
-                downloaded_size: latest.size.parse::<u64>().unwrap(),
-                unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                downloaded_size: latest.package_size.parse::<u64>().unwrap(),
+                unpacked_size: latest.size.parse::<u64>().unwrap(),
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,

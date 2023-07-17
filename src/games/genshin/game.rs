@@ -155,8 +155,8 @@ impl Game {
                             url: latest.path,
                             edition: self.edition,
 
-                            downloaded_size: latest.size.parse::<u64>().unwrap(),
-                            unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                            downloaded_size: latest.package_size.parse::<u64>().unwrap(),
+                            unpacked_size: latest.size.parse::<u64>().unwrap(),
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -186,8 +186,8 @@ impl Game {
                                 url: diff.path,
                                 edition: self.edition,
 
-                                downloaded_size: diff.size.parse::<u64>().unwrap(),
-                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                downloaded_size: diff.package_size.parse::<u64>().unwrap(),
+                                unpacked_size: diff.size.parse::<u64>().unwrap(),
 
                                 installation_path: Some(self.path.clone()),
                                 version_file_path: None,
@@ -215,8 +215,8 @@ impl Game {
                             url: diff.path,
                             edition: self.edition,
 
-                            downloaded_size: diff.size.parse::<u64>().unwrap(),
-                            unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                            downloaded_size: diff.package_size.parse::<u64>().unwrap(),
+                            unpacked_size: diff.size.parse::<u64>().unwrap(),
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -243,8 +243,8 @@ impl Game {
                 url: latest.path,
                 edition: self.edition,
 
-                downloaded_size: latest.size.parse::<u64>().unwrap(),
-                unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                downloaded_size: latest.package_size.parse::<u64>().unwrap(),
+                unpacked_size: latest.size.parse::<u64>().unwrap(),
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,
