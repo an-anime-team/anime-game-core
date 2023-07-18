@@ -9,7 +9,14 @@ pub mod metadata;
 
 pub const REPO_URI: &str = "https://codeberg.org/mkrsym1/jadeite";
 pub const REPO_API_URI: &str = "https://codeberg.org/api/v1/repos/mkrsym1/jadeite/releases/latest";
-pub const METADATA_URI: &str = "https://codeberg.org/mkrsym1/jadeite/raw/branch/master/metadata.json";
+
+pub const METADATA_URIS: &[&str] = &[
+    // Primary
+    "https://codeberg.org/mkrsym1/jadeite/raw/branch/master/metadata.json",
+
+    // Mirrors
+    "https://notabug.org/mkrsym1/jadeite-mirror/raw/master/metadata.json"
+];
 
 #[inline]
 pub fn is_installed(folder: impl AsRef<Path>) -> bool {
@@ -55,7 +62,21 @@ pub fn get_latest() -> anyhow::Result<JadeiteLatest> {
 #[cfg(feature = "install")]
 #[cached::proc_macro::cached(result)]
 pub fn get_metadata() -> anyhow::Result<metadata::JadeiteMetadata> {
-    Ok(metadata::JadeiteMetadata::from(&minreq::get(METADATA_URI).send()?.json::<serde_json::Value>()?))
+    for uri in METADATA_URIS {
+        let Ok(resp) = minreq::get(*uri).send() else {
+            tracing::warn!("Could not reach '{uri}'. Attempting to use next fallback");
+            continue;
+        };
+
+        let Ok(json) = resp.json::<serde_json::Value>() else {
+            tracing::warn!("Got invalid response from '{uri}'. Attempting to use next fallback");
+            continue;
+        };
+
+        return Ok(metadata::JadeiteMetadata::from(&json));
+    }
+
+    anyhow::bail!("Could not get metadata from any of the mirrors");
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

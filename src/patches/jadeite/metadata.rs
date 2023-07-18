@@ -9,6 +9,7 @@ use crate::games::star_rail::consts::GameEdition as StarRailGameEdition;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JadeiteMetadata {
+    pub jadeite: JadeitePatchMetadata,
     pub games: JadeiteGamesMetadata
 }
 
@@ -16,6 +17,7 @@ impl Default for JadeiteMetadata {
     #[inline]
     fn default() -> Self {
         Self {
+            jadeite: JadeitePatchMetadata::default(),
             games: JadeiteGamesMetadata::default()
         }
     }
@@ -24,9 +26,41 @@ impl Default for JadeiteMetadata {
 impl From<&JsonValue> for JadeiteMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
+            jadeite: match value.get("jadeite") {
+                Some(jadeite) => JadeitePatchMetadata::from(jadeite),
+                None => JadeitePatchMetadata::default()
+            },
+            
             games: match value.get("games") {
                 Some(games) => JadeiteGamesMetadata::from(games),
                 None => JadeiteGamesMetadata::default()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct JadeitePatchMetadata {
+    pub version: Version
+}
+
+impl Default for JadeitePatchMetadata {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            version: Version::new(0, 0, 0)
+        }
+    }
+}
+
+impl From<&JsonValue> for JadeitePatchMetadata {
+    fn from(value: &JsonValue) -> Self {
+        let default = Self::default();
+
+        Self {
+            version: match value.get("version").and_then(|version| version.as_str()) {
+                Some(version) => Version::from_str(version).unwrap_or(default.version),
+                None => default.version
             }
         }
     }
