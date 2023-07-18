@@ -15,7 +15,7 @@ pub const METADATA_URIS: &[&str] = &[
     "https://codeberg.org/mkrsym1/jadeite/raw/branch/master/metadata.json",
 
     // Mirrors
-    // ...add mirrors here
+    "https://notabug.org/mkrsym1/jadeite-mirror/raw/master/metadata.json"
 ];
 
 #[inline]
