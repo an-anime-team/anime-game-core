@@ -4,6 +4,7 @@ use cached::proc_macro::cached;
 
 use super::api;
 use super::consts::GameEdition;
+
 use crate::repairer::IntegrityFile;
 
 fn try_get_some_integrity_files<T: AsRef<str>>(game_edition: GameEdition, file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {

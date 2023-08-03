@@ -7,34 +7,22 @@ use crate::version::Version;
 #[cfg(feature = "star-rail")]
 use crate::games::star_rail::consts::GameEdition as StarRailGameEdition;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct JadeiteMetadata {
     pub jadeite: JadeitePatchMetadata,
     pub games: JadeiteGamesMetadata
 }
 
-impl Default for JadeiteMetadata {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            jadeite: JadeitePatchMetadata::default(),
-            games: JadeiteGamesMetadata::default()
-        }
-    }
-}
-
 impl From<&JsonValue> for JadeiteMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            jadeite: match value.get("jadeite") {
-                Some(jadeite) => JadeitePatchMetadata::from(jadeite),
-                None => JadeitePatchMetadata::default()
-            },
-            
-            games: match value.get("games") {
-                Some(games) => JadeiteGamesMetadata::from(games),
-                None => JadeiteGamesMetadata::default()
-            }
+            jadeite: value.get("jadeite")
+                .map(JadeitePatchMetadata::from)
+                .unwrap_or_default(),
+
+            games: value.get("games")
+                .map(JadeiteGamesMetadata::from)
+                .unwrap_or_default()
         }
     }
 }
@@ -58,99 +46,90 @@ impl From<&JsonValue> for JadeitePatchMetadata {
         let default = Self::default();
 
         Self {
-            version: match value.get("version").and_then(|version| version.as_str()) {
-                Some(version) => Version::from_str(version).unwrap_or(default.version),
-                None => default.version
-            }
+            version: value.get("version")
+                .and_then(|version| version.as_str())
+                .and_then(Version::from_str)
+                .unwrap_or(default.version)
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct JadeiteGamesMetadata {
     pub hi3rd: JadeiteHi3rdMetadata,
     pub hsr: JadeiteHsrMetadata
 }
 
-impl Default for JadeiteGamesMetadata {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            hi3rd: JadeiteHi3rdMetadata::default(),
-            hsr: JadeiteHsrMetadata::default()
-        }
-    }
-}
-
 impl From<&JsonValue> for JadeiteGamesMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            hi3rd: match value.get("hi3rd") {
-                Some(status) => JadeiteHi3rdMetadata::from(status),
-                None => JadeiteHi3rdMetadata::default()
-            },
+            hi3rd: value.get("hi3rd")
+                .map(JadeiteHi3rdMetadata::from)
+                .unwrap_or_default(),
 
-            hsr: match value.get("hsr") {
-                Some(status) => JadeiteHsrMetadata::from(status),
-                None => JadeiteHsrMetadata::default()
-            }
+            hsr: value.get("hsr")
+                .map(JadeiteHsrMetadata::from)
+                .unwrap_or_default()
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct JadeiteHi3rdMetadata {
-    pub global: JadeitePatchStatus
-}
-
-impl Default for JadeiteHi3rdMetadata {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            global: JadeitePatchStatus::default()
-        }
-    }
+    pub global: JadeitePatchStatus,
+    pub sea: JadeitePatchStatus,
+    pub china: JadeitePatchStatus,
+    pub taiwan: JadeitePatchStatus,
+    pub korea: JadeitePatchStatus,
+    pub japan: JadeitePatchStatus
 }
 
 impl From<&JsonValue> for JadeiteHi3rdMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            global: match value.get("global") {
-                Some(status) => JadeitePatchStatus::from(status),
-                None => JadeitePatchStatus::default()
-            }
+            global: value.get("global")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default(),
+
+            sea: value.get("sea")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default(),
+
+            china: value.get("china")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default(),
+
+            taiwan: value.get("taiwan")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default(),
+
+            korea: value.get("korea")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default(),
+
+            japan: value.get("japan")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default()
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct JadeiteHsrMetadata {
     pub global: JadeitePatchStatus,
     pub china: JadeitePatchStatus
 }
 
-impl Default for JadeiteHsrMetadata {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            global: JadeitePatchStatus::default(),
-            china: JadeitePatchStatus::default()
-        }
-    }
-}
-
 impl From<&JsonValue> for JadeiteHsrMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            global: match value.get("global") {
-                Some(status) => JadeitePatchStatus::from(status),
-                None => JadeitePatchStatus::default()
-            },
+            global: value.get("global")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default(),
 
-            china: match value.get("china") {
-                Some(status) => JadeitePatchStatus::from(status),
-                None => JadeitePatchStatus::default()
-            }
+            china: value.get("china")
+                .map(JadeitePatchStatus::from)
+                .unwrap_or_default()
         }
     }
 }
@@ -186,15 +165,15 @@ impl From<&JsonValue> for JadeitePatchStatus {
         let default = Self::default();
 
         Self {
-            status: match value.get("status").and_then(|status| status.as_str()) {
-                Some(status) => JadeitePatchStatusVariant::from(status),
-                None => default.status
-            },
+            status: value.get("status")
+                .and_then(|status| status.as_str())
+                .map(JadeitePatchStatusVariant::from)
+                .unwrap_or(default.status),
 
-            version: match value.get("version").and_then(|version| version.as_str()) {
-                Some(version) => Version::from_str(version).unwrap_or(default.version),
-                None => default.version
-            }
+            version: value.get("version")
+                .and_then(|version| version.as_str())
+                .and_then(Version::from_str)
+                .unwrap_or(default.version)
         }
     }
 }

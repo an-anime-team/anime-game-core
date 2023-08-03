@@ -53,13 +53,7 @@ impl GameExt for Game {
         tracing::debug!("Trying to get installed game version");
 
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
-            let mut num: u8 = 0;
-        
-            for i in 0..bytes.len() {
-                num += u8::from(bytes[i] - 48) * u8::pow(10, (bytes.len() - i - 1).try_into().unwrap());
-            }
-        
-            num
+            bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - '0' as u8))
         }
 
         let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;

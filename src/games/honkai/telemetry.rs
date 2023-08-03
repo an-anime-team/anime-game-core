@@ -1,4 +1,4 @@
-use super::consts::TELEMETRY_SERVERS;
+use super::consts::GameEdition;
 
 /// Check whether telemetry servers disabled
 /// 
@@ -6,16 +6,17 @@ use super::consts::TELEMETRY_SERVERS;
 /// 
 /// ```
 /// use anime_game_core::honkai::telemetry;
+/// use anime_game_core::honkai::consts::GameEdition;
 /// 
-/// if let Ok(None) = telemetry::is_disabled() {
+/// if let Ok(None) = telemetry::is_disabled(GameEdition::Global) {
 ///     println!("Telemetry is disabled");
 /// }
 /// ```
 #[tracing::instrument(level = "debug")]
-pub fn is_disabled() -> anyhow::Result<Option<String>> {
+pub fn is_disabled(game_edition: GameEdition) -> anyhow::Result<Option<String>> {
     tracing::debug!("Checking telemetry servers status");
 
-    for server in TELEMETRY_SERVERS {
+    for server in game_edition.telemetry_servers() {
         if crate::check_domain::available(server)? {
             tracing::warn!("Server is not disabled: {server}");
 

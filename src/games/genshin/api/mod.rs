@@ -9,7 +9,7 @@ use crate::genshin::consts::GameEdition;
 )]
 #[tracing::instrument(level = "trace")]
 pub fn request(game_edition: GameEdition) -> anyhow::Result<schema::Response> {
-    tracing::trace!("Fetching API");
+    tracing::trace!("Fetching API for {:?}", game_edition);
 
     let mut schema: schema::Response = minreq::get(game_edition.api_uri())
         .with_timeout(*crate::REQUESTS_TIMEOUT)

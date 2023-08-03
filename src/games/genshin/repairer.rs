@@ -2,11 +2,11 @@ use std::path::{Path, PathBuf};
 
 use cached::proc_macro::cached;
 
-use crate::repairer::IntegrityFile;
-
 use super::api;
 use super::consts::GameEdition;
 use super::voice_data::locale::VoiceLocale;
+
+use crate::repairer::IntegrityFile;
 
 fn try_get_some_integrity_files<T: AsRef<str>>(game_edition: GameEdition, file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
     let decompressed_path = api::request(game_edition)?.data.game.latest.decompressed_path;

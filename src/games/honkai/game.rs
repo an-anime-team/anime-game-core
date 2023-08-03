@@ -11,16 +11,18 @@ use super::version_diff::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
-    path: PathBuf
+    path: PathBuf,
+    edition: GameEdition
 }
 
 impl GameExt for Game {
-    type Edition = ();
+    type Edition = GameEdition;
 
     #[inline]
-    fn new(path: impl Into<PathBuf>, _edition: ()) -> Self {
+    fn new(path: impl Into<PathBuf>, edition: GameEdition) -> Self {
         Self {
-            path: path.into()
+            path: path.into(),
+            edition
         }
     }
 
@@ -31,7 +33,7 @@ impl GameExt for Game {
 
     #[inline]
     fn edition(&self) -> Self::Edition {
-        ()
+        self.edition
     }
 
     #[tracing::instrument(level = "trace", ret)]
@@ -40,7 +42,7 @@ impl GameExt for Game {
         tracing::trace!("Trying to get latest game version");
 
         // I assume game's API can't return incorrect version format right? Right?
-        Ok(Version::from_str(api::request()?.data.game.latest.version).unwrap())
+        Ok(Version::from_str(api::request(edition)?.data.game.latest.version).unwrap())
     }
 
     #[tracing::instrument(level = "debug", ret)]
@@ -48,16 +50,10 @@ impl GameExt for Game {
         tracing::debug!("Trying to get installed game version");
 
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
-            let mut num: u8 = 0;
-        
-            for i in 0..bytes.len() {
-                num += u8::from(bytes[i] - 48) * u8::pow(10, (bytes.len() - i - 1).try_into().unwrap());
-            }
-        
-            num
+            bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - '0' as u8))
         }
 
-        let file = File::open(self.path.join(DATA_FOLDER_NAME).join("globalgamemanagers"))?;
+        let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
 
         // [0..9]
         let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
@@ -115,7 +111,7 @@ impl Game {
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
-        let latest = api::request()?.data.game.latest;
+        let latest = api::request(self.edition)?.data.game.latest;
 
         if self.is_installed() {
             let current = self.get_version()?;
