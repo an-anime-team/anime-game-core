@@ -1,0 +1,5 @@
+{
+    "editor.tabCompletion": "on",
+    "diffEditor.codeLens": true,
+    "rust-analyzer.showUnlinkedFileNotification": false
+}
