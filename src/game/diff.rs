@@ -10,5 +10,5 @@ pub trait GetDiffExt {
 
 pub trait DiffExt {
     /// Install diff to the game
-    fn install(&self, game: &impl GameExt);
+    fn install(&self);
 }

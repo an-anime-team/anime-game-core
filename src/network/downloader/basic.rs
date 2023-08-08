@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs::File;
 use std::thread::JoinHandle;
 use std::cell::Cell;
@@ -39,7 +39,7 @@ pub struct Downloader {
     continue_downloading: bool
 }
 
-impl DownloaderExt for Downloader {
+impl DownloaderExt<Error> for Downloader {
     type Error = Error;
     type Updater = Updater<Error>;
 
@@ -175,7 +175,7 @@ pub struct Updater<Error> {
 
 impl<Error> Updater<Error> {
     fn update(&self) {
-        if let Ok((downloaded, content_size_hint)) = self.updates_receiver.recv() {
+        while let Ok((downloaded, content_size_hint)) = self.updates_receiver.try_recv() {
             self.current_progress.set(self.current_progress.take() + downloaded);
             self.content_size_hint.set(content_size_hint);
         }
@@ -217,7 +217,7 @@ impl<Error> UpdaterExt<Error> for Updater<Error> {
     }
 
     #[inline]
-    fn current_size(&self) -> usize {
+    fn current(&self) -> usize {
         // self.download_path.exists()
         //     .then(|| self.download_path.metadata()
         //         .map(|metadata| metadata.len())
@@ -230,7 +230,7 @@ impl<Error> UpdaterExt<Error> for Updater<Error> {
     }
 
     #[inline]
-    fn total_size(&self) -> usize {
+    fn total(&self) -> usize {
         self.update();
 
         let size_hint = self.content_size_hint.get();
