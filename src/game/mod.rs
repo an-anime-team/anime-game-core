@@ -15,13 +15,16 @@ pub trait GameExt {
     type Error;
 
     /// Create game manager instance
-    fn new<T: DriverExt + 'static>(driver: impl Into<T>, edition: Self::Edition) -> Self;
+    fn new(driver: impl DriverExt + 'static, edition: Self::Edition) -> Self;
 
     /// Get currently selected game files driver
     fn driver(&self) -> &dyn DriverExt;
 
     /// Get currently selected game edition
     fn edition(&self) -> Self::Edition;
+
+    /// Check if the game is installed
+    fn is_installed(&self) -> bool;
 
     /// Get installed game version
     fn get_version(&self) -> Result<Version, Self::Error>;

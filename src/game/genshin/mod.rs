@@ -65,9 +65,9 @@ impl GameExt for Game {
     type Error = Error;
 
     #[inline]
-    fn new<T: DriverExt + 'static>(driver: impl Into<T>, edition: Self::Edition) -> Self {
+    fn new(driver: impl DriverExt + 'static, edition: Self::Edition) -> Self {
         Self {
-            driver: Rc::new(Box::new(driver.into())),
+            driver: Rc::new(Box::new(driver)),
             edition
         }
     }
@@ -80,6 +80,11 @@ impl GameExt for Game {
     #[inline]
     fn edition(&self) -> Self::Edition {
         self.edition
+    }
+
+    #[inline]
+    fn is_installed(&self) -> bool {
+        self.driver.exists(OsStr::new(&format!("{}/globalgamemanagers", self.edition.data_folder())))
     }
 
     fn get_version(&self) -> Result<Version, Self::Error> {
