@@ -1,4 +1,4 @@
-use super::GameExt;
+use crate::updater::UpdaterExt;
 
 pub trait GetDiffExt {
     type Diff;
@@ -9,6 +9,14 @@ pub trait GetDiffExt {
 }
 
 pub trait DiffExt {
-    /// Install diff to the game
-    fn install(&self);
+    type Updater: UpdaterExt;
+
+    /// Check if current diff is installable
+    fn is_installable(&self) -> bool;
+
+    /// Install diff
+    /// 
+    /// Return `None` if current diff
+    /// is not supposed to be installed (e.g. `Latest`)
+    fn install(self) -> Option<Self::Updater>;
 }

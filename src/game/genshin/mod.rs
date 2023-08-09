@@ -9,8 +9,10 @@ use crate::game::version::{
 };
 
 use crate::filesystem::DriverExt;
-use crate::game::GameExt;
 use crate::network::api::ApiExt;
+
+use super::GameExt;
+use super::diff::GetDiffExt;
 
 pub mod component;
 pub mod api;
@@ -22,6 +24,7 @@ use component::{
 };
 
 use api::Api;
+use diff::Diff;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -64,7 +67,7 @@ impl Edition {
 }
 
 pub struct Game {
-    driver: Rc<Box<dyn DriverExt>>,
+    driver: Rc<dyn DriverExt>,
     edition: Edition
 }
 
@@ -76,18 +79,18 @@ impl GameExt for Game {
     #[inline]
     fn new(driver: impl DriverExt + 'static, edition: Self::Edition) -> Self {
         Self {
-            driver: Rc::new(Box::new(driver)),
+            driver: Rc::new(driver),
             edition
         }
     }
 
     #[inline]
-    fn driver(&self) -> &dyn DriverExt {
-        self.driver.as_ref().as_ref()
+    fn get_driver(&self) -> Rc<dyn DriverExt> {
+        self.driver.clone()
     }
 
     #[inline]
-    fn edition(&self) -> Self::Edition {
+    fn get_edition(&self) -> Self::Edition {
         self.edition
     }
 
@@ -172,5 +175,34 @@ impl GameExt for Game {
                     variant: ComponentVariant::from(voiceover)
                 })
                 .collect())
+    }
+}
+
+impl GetDiffExt for Game {
+    type Diff = Diff;
+    type Error = Error;
+
+    fn get_diff(&self) -> Result<Self::Diff, Self::Error> {
+        let current = self.get_version()?;
+
+        let response = &Api::fetch(self.edition).as_ref()
+            .map_err(Error::from)?.data;
+
+        if current == response.game.latest.version.parse()? {
+            Ok(Diff::Latest)
+        }
+
+        else {
+            for diff in &response.game.diffs {
+                if current == diff.version.parse()? {
+                    return Ok(Diff::Available {
+                        download_uri: diff.path.to_owned(),
+                        driver: self.driver.clone()
+                    });
+                }
+            }
+
+            Ok(Diff::NotAvailable)
+        }
     }
 }

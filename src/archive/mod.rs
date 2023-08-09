@@ -16,10 +16,10 @@ use sevenz::Archive as SevenZip;
 use zip::Archive as Zip;
 use tar::Archive as Tar;
 
-pub trait ArchiveExt<UpdaterError> {
+pub trait ArchiveExt {
     type Error;
     type Entry;
-    type Updater: UpdaterExt<UpdaterError>;
+    type Updater: UpdaterExt;
 
     fn open(file: impl AsRef<Path>) -> Result<Self, Self::Error> where Self: Sized;
     fn entries(&self) -> Result<Vec<Self::Entry>, Self::Error>;

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::filesystem::DriverExt;
 
 pub mod version;
@@ -18,10 +20,10 @@ pub trait GameExt {
     fn new(driver: impl DriverExt + 'static, edition: Self::Edition) -> Self;
 
     /// Get currently selected game files driver
-    fn driver(&self) -> &dyn DriverExt;
+    fn get_driver(&self) -> Rc<dyn DriverExt>;
 
     /// Get currently selected game edition
-    fn edition(&self) -> Self::Edition;
+    fn get_edition(&self) -> Self::Edition;
 
     /// Check if the game is installed
     fn is_installed(&self) -> bool;

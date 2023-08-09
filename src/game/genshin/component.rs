@@ -26,7 +26,7 @@ pub struct Component {
     pub download_uri: String,
     pub latest_version: Version,
     pub edition: Edition,
-    pub driver: Rc<Box<dyn DriverExt>>
+    pub driver: Rc<dyn DriverExt>
 }
 
 impl ComponentExt for Component {

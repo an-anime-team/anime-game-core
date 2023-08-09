@@ -4,9 +4,9 @@ use crate::updater::UpdaterExt;
 
 pub mod basic;
 
-pub trait DownloaderExt<UpdaterError> {
+pub trait DownloaderExt {
     type Error;
-    type Updater: UpdaterExt<UpdaterError>;
+    type Updater: UpdaterExt;
 
     /// Create downloader instance for given URI
     fn new(uri: impl AsRef<str>) -> Self;

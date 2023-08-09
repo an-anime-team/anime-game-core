@@ -1,9 +1,13 @@
-pub trait UpdaterExt<Error> {
+pub trait UpdaterExt {
+    type Status;
+    type Error;
+    type Result;
+
     /// Check task's status
-    fn status(&mut self) -> Result<bool, &Error>;
+    fn status(&mut self) -> Result<Self::Status, &Self::Error>;
 
     /// Wait for task to complete
-    fn wait(self) -> Result<(), Error>;
+    fn wait(self) -> Result<Self::Result, Self::Error>;
 
     /// Get current progress
     fn current(&self) -> usize;

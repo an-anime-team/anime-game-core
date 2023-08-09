@@ -24,6 +24,7 @@
 /// Наконец, стандартный вариант - обычная папка с игрой, как это всегда и было.
 
 use std::ffi::OsStr;
+use std::path::PathBuf;
 use std::io::Result;
 
 pub mod physical;
@@ -40,4 +41,43 @@ pub trait DriverExt {
 
     /// Read directory content
     fn read_dir(&self, name: &OsStr) -> Result<std::fs::ReadDir>;
+
+    /// Create new transition
+    /// 
+    /// Transitions are needed to store intermediate downloaded data.
+    /// For example, when there's a new update in the game, its `Diff`
+    /// will create new transition (e.g. new folder on the disk), download
+    /// all the stuff there, and then finish transition by merging this folder's
+    /// content with already installed game
+    /// 
+    /// Concept of transitions is not useful for general approach
+    /// of storing all the game's files in one folder, but is needed for alternative ones
+    fn create_transition(&self, name: &str) -> Result<PathBuf>;
+
+    /// Get transition path by name
+    fn get_transition(&self, name: &str) -> Option<PathBuf>;
+
+    /// Get list of all available transitions and their paths
+    fn list_transitions(&self) -> Vec<(String, PathBuf)>;
+
+    /// Finish transition
+    fn finish_transition(&self, name: &str) -> Result<()>;
+
+    /// Remove transition
+    fn remove_transition(&self, name: &str) -> Result<()>;
+}
+
+/// Get UUID from the given string
+/// 
+/// Needed for internal drivers work
+pub fn get_uuid(text: impl AsRef<[u8]>) -> String {
+    let mut uuid = [0; 16];
+
+    for (i, byte) in text.as_ref().into_iter().enumerate() {
+        uuid[i % 16] ^= *byte;
+    }
+
+    uuid::Builder::from_bytes(uuid)
+        .into_uuid()
+        .to_string()
 }

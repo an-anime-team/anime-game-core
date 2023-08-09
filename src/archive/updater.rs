@@ -57,9 +57,13 @@ impl BasicUpdater {
     }
 }
 
-impl UpdaterExt<flume::SendError<usize>> for BasicUpdater {
+impl UpdaterExt for BasicUpdater {
+    type Error = flume::SendError<usize>;
+    type Status = bool;
+    type Result = ();
+
     #[inline]
-    fn status(&mut self) -> Result<bool, &flume::SendError<usize>> {
+    fn status(&mut self) -> Result<Self::Status, &Self::Error> {
         if let Some(status_updater) = self.status_updater.take() {
             if !status_updater.is_finished() {
                 self.status_updater = Some(status_updater);
@@ -79,7 +83,7 @@ impl UpdaterExt<flume::SendError<usize>> for BasicUpdater {
     }
 
     #[inline]
-    fn wait(mut self) -> Result<(), flume::SendError<usize>> {
+    fn wait(mut self) -> Result<Self::Result, Self::Error> {
         if let Some(worker) = self.status_updater.take() {
             return worker.join().expect("Failed to join thread");
         }

@@ -39,9 +39,9 @@ pub struct Downloader {
     continue_downloading: bool
 }
 
-impl DownloaderExt<Error> for Downloader {
+impl DownloaderExt for Downloader {
     type Error = Error;
-    type Updater = Updater<Error>;
+    type Updater = Updater;
 
     #[inline]
     fn new(uri: impl AsRef<str>) -> Self {
@@ -161,7 +161,7 @@ impl DownloaderExt<Error> for Downloader {
     }
 }
 
-pub struct Updater<Error> {
+pub struct Updater {
     worker: Option<JoinHandle<Result<(), Error>>>,
     worker_result: Option<Result<(), Error>>,
     updates_receiver: flume::Receiver<(usize, (usize, Option<usize>))>,
@@ -173,7 +173,7 @@ pub struct Updater<Error> {
     // download_path: PathBuf
 }
 
-impl<Error> Updater<Error> {
+impl Updater {
     fn update(&self) {
         while let Ok((downloaded, content_size_hint)) = self.updates_receiver.try_recv() {
             self.current_progress.set(self.current_progress.take() + downloaded);
@@ -182,8 +182,12 @@ impl<Error> Updater<Error> {
     }
 }
 
-impl<Error> UpdaterExt<Error> for Updater<Error> {
-    fn status(&mut self) -> Result<bool, &Error> {
+impl UpdaterExt for Updater {
+    type Error = Error;
+    type Status = bool;
+    type Result = ();
+
+    fn status(&mut self) -> Result<Self::Status, &Self::Error> {
         self.update();
 
         if let Some(worker) = self.worker.take() {
@@ -204,7 +208,7 @@ impl<Error> UpdaterExt<Error> for Updater<Error> {
         }
     }
 
-    fn wait(mut self) -> Result<(), Error> {
+    fn wait(mut self) -> Result<Self::Result, Self::Error> {
         if let Some(worker) = self.worker.take() {
             return worker.join().expect("Failed to join downloader thread");
         }

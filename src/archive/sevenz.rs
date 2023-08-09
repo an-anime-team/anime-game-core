@@ -38,7 +38,7 @@ pub struct Archive {
     path: PathBuf
 }
 
-impl ArchiveExt<flume::SendError<usize>> for Archive {
+impl ArchiveExt for Archive {
     type Error = Error;
     type Entry = BasicEntry;
     type Updater = BasicUpdater;
