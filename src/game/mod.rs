@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::filesystem::DriverExt;
 
@@ -20,7 +20,7 @@ pub trait GameExt {
     fn new(driver: impl DriverExt + 'static, edition: Self::Edition) -> Self;
 
     /// Get currently selected game files driver
-    fn get_driver(&self) -> Rc<dyn DriverExt>;
+    fn get_driver(&self) -> Arc<dyn DriverExt>;
 
     /// Get currently selected game edition
     fn get_edition(&self) -> Self::Edition;

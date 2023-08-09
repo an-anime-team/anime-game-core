@@ -29,7 +29,7 @@ use std::io::Result;
 
 pub mod physical;
 
-pub trait DriverExt {
+pub trait DriverExt: Send + Sync {
     /// Check if entry exists
     fn exists(&self, name: &OsStr) -> bool;
 
@@ -41,6 +41,8 @@ pub trait DriverExt {
 
     /// Read directory content
     fn read_dir(&self, name: &OsStr) -> Result<std::fs::ReadDir>;
+
+    // TODO: create_transition must return an updater
 
     /// Create new transition
     /// 
@@ -60,6 +62,8 @@ pub trait DriverExt {
     /// Get list of all available transitions and their paths
     fn list_transitions(&self) -> Vec<(String, PathBuf)>;
 
+    // TODO: finish/return transition must return an updater
+
     /// Finish transition
     fn finish_transition(&self, name: &str) -> Result<()>;
 
@@ -73,7 +77,7 @@ pub trait DriverExt {
 pub fn get_uuid(text: impl AsRef<[u8]>) -> String {
     let mut uuid = [0; 16];
 
-    for (i, byte) in text.as_ref().into_iter().enumerate() {
+    for (i, byte) in text.as_ref().iter().enumerate() {
         uuid[i % 16] ^= *byte;
     }
 

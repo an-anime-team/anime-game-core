@@ -87,7 +87,7 @@ impl DriverExt for Driver {
     fn finish_transition(&self, name: &str) -> Result<()> {
         fn move_files(from: PathBuf, to: PathBuf) -> Result<()> {
             if !to.exists() {
-                std::fs::create_dir_all(&to);
+                std::fs::create_dir_all(&to)?;
             }
 
             for file in from.read_dir()?.flatten() {
@@ -95,7 +95,7 @@ impl DriverExt for Driver {
                     if file.path().is_dir() {
                         move_files(file.path(), to.join(file_name))?;
 
-                        std::fs::remove_dir_all(file.path());
+                        std::fs::remove_dir_all(file.path())?;
                     }
 
                     else {
@@ -105,7 +105,7 @@ impl DriverExt for Driver {
                 }
             }
 
-            std::fs::remove_dir_all(from);
+            std::fs::remove_dir_all(from)?;
 
             Ok(())
         }
@@ -120,7 +120,7 @@ impl DriverExt for Driver {
 
         std::fs::remove_file(path.join(".transition"))?;
 
-        move_files(path, self.parent_path)
+        move_files(path, self.parent_path.clone())
     }
 
     fn remove_transition(&self, name: &str) -> Result<()> {

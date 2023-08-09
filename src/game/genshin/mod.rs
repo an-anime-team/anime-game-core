@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use serde::{Serialize, Deserialize};
 
@@ -58,6 +58,15 @@ impl Default for Edition {
 }
 
 impl Edition {
+    #[inline]
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::China  => "china"
+        }
+    }
+
+    #[inline]
     pub fn data_folder(&self) -> &'static str {
         match self {
             Self::Global => concat!("Gen", "shin", "Imp", "act_Data"),
@@ -67,7 +76,7 @@ impl Edition {
 }
 
 pub struct Game {
-    driver: Rc<dyn DriverExt>,
+    driver: Arc<dyn DriverExt>,
     edition: Edition
 }
 
@@ -79,13 +88,13 @@ impl GameExt for Game {
     #[inline]
     fn new(driver: impl DriverExt + 'static, edition: Self::Edition) -> Self {
         Self {
-            driver: Rc::new(driver),
+            driver: Arc::new(driver),
             edition
         }
     }
 
     #[inline]
-    fn get_driver(&self) -> Rc<dyn DriverExt> {
+    fn get_driver(&self) -> Arc<dyn DriverExt> {
         self.driver.clone()
     }
 
@@ -194,10 +203,13 @@ impl GetDiffExt for Game {
 
         else {
             for diff in &response.game.diffs {
-                if current == diff.version.parse()? {
+                let diff_version = diff.version.parse()?;
+
+                if current == diff_version {
                     return Ok(Diff::Available {
                         download_uri: diff.path.to_owned(),
-                        driver: self.driver.clone()
+                        driver: self.driver.clone(),
+                        transition_name: format!("edition:{}-from:v{current}-to:v{diff_version}", self.edition.to_str())
                     });
                 }
             }

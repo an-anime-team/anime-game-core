@@ -1,5 +1,4 @@
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 use std::ffi::OsStr;
 
 use crate::filesystem::DriverExt;
@@ -7,7 +6,7 @@ use crate::game::component::ComponentExt;
 use crate::game::version::Version;
 
 use super::api::schema::Voiceover as VoiceoverSchema;
-use super::{Game, Edition};
+use super::Edition;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Variant {
@@ -26,7 +25,7 @@ pub struct Component {
     pub download_uri: String,
     pub latest_version: Version,
     pub edition: Edition,
-    pub driver: Rc<dyn DriverExt>
+    pub driver: Arc<dyn DriverExt>
 }
 
 impl ComponentExt for Component {
