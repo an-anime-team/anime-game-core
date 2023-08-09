@@ -1,6 +1,8 @@
 use std::ffi::OsStr;
 use std::rc::Rc;
 
+use serde::{Serialize, Deserialize};
+
 use crate::game::version::{
     Version,
     Error as VersionError
@@ -39,10 +41,17 @@ pub enum Error {
     VersionParseError(#[from] VersionError)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Edition {
     Global,
     China
+}
+
+impl Default for Edition {
+    #[inline]
+    fn default() -> Self {
+        Self::Global
+    }
 }
 
 impl Edition {
