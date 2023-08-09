@@ -42,13 +42,15 @@ impl DriverExt for Driver {
 
     fn create_transition(&self, name: &str) -> Result<PathBuf> {
         loop {
+            let uuid = get_uuid(name);
+
             let path = self.parent_path
                 .join(".transitions")
-                .join(get_uuid(name));
+                .join(&uuid);
 
             if !path.exists() {
                 std::fs::create_dir_all(&path)?;
-                std::fs::write(path.join(".transition"), name)?;
+                std::fs::write(path.join(format!(".{uuid}")), name)?;
 
                 return Ok(path);
             }
@@ -71,9 +73,16 @@ impl DriverExt for Driver {
         self.parent_path.join(".transitions").read_dir()
             .map(|files| {
                 files.flatten()
-                    .filter(|file| file.path().is_dir() && file.path().join(".transition").exists())
+                    .filter(|file| {
+                        let uuid = format!(".{}", file.file_name().to_string_lossy());
+
+                        file.path().is_dir() &&
+                        file.path().join(uuid).exists()
+                    })
                     .flat_map(|file| {
-                        if let Ok(name) = std::fs::read_to_string(file.path().join(".transition")) {
+                        let uuid = format!(".{}", file.file_name().to_string_lossy());
+
+                        if let Ok(name) = std::fs::read_to_string(file.path().join(uuid)) {
                             Some((name, file.path()))
                         } else {
                             None
@@ -110,17 +119,19 @@ impl DriverExt for Driver {
             Ok(())
         }
 
+        let uuid = get_uuid(name);
+
         let path = self.parent_path
             .join(".transitions")
-            .join(get_uuid(name));
+            .join(&uuid);
 
         if !path.exists() {
             return Ok(());
         }
 
-        std::fs::remove_file(path.join(".transition"))?;
+        move_files(path, self.parent_path.clone())?;
 
-        move_files(path, self.parent_path.clone())
+        std::fs::remove_file(self.parent_path.join(uuid))
     }
 
     fn remove_transition(&self, name: &str) -> Result<()> {
