@@ -23,10 +23,10 @@ pub enum Error {
     #[error("Failed to send message through the flume channel: {0}")]
     FlumeSendError(String),
 
-    #[error("{0}")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("{0}")]
+    #[error("Failed to fetch data: {0}")]
     Minreq(#[from] minreq::Error)
 }
 

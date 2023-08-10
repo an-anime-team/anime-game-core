@@ -16,10 +16,10 @@ use crate::archive;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("{0}")]
+    #[error("Downloader error: {0}")]
     DownloaderError(#[from] DownloaderError),
 
-    #[error("{0}")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
     #[error("Failed to send message through the flume channel: {0}")]

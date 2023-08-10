@@ -31,13 +31,13 @@ pub enum Error {
     #[error("Failed to parse installed game version")]
     GameVersionParseError,
 
-    #[error("{0}")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("{0}")]
+    #[error("Failed to fetch data: {0}")]
     Minreq(#[from] minreq::Error),
 
-    #[error("{0}")]
+    #[error("Failed to fetch data: {0}")]
     MinreqRef(#[from] &'static minreq::Error),
 
     #[error("Failed to parse version: {0}")]
@@ -192,29 +192,35 @@ impl GetDiffExt for Game {
     type Error = Error;
 
     fn get_diff(&self) -> Result<Self::Diff, Self::Error> {
-        let current = self.get_version()?;
+        // let current = self.get_version()?;
 
-        let response = &Api::fetch(self.edition).as_ref()
-            .map_err(Error::from)?.data;
+        // let response = &Api::fetch(self.edition).as_ref()
+        //     .map_err(Error::from)?.data;
 
-        if current == response.game.latest.version.parse()? {
-            Ok(Diff::Latest)
-        }
+        // if current == response.game.latest.version.parse()? {
+        //     Ok(Diff::Latest)
+        // }
 
-        else {
-            for diff in &response.game.diffs {
-                let diff_version = diff.version.parse()?;
+        // else {
+        //     for diff in &response.game.diffs {
+        //         let diff_version = diff.version.parse()?;
 
-                if current == diff_version {
-                    return Ok(Diff::Available {
-                        download_uri: diff.path.to_owned(),
-                        driver: self.driver.clone(),
-                        transition_name: format!("edition:{}-from:v{current}-to:v{diff_version}", self.edition.to_str())
-                    });
-                }
-            }
+        //         if current == diff_version {
+        //             return Ok(Diff::Available {
+        //                 download_uri: diff.path.to_owned(),
+        //                 driver: self.driver.clone(),
+        //                 transition_name: format!("edition:{}-from:v{current}-to:v{diff_version}", self.edition.to_str())
+        //             });
+        //         }
+        //     }
 
-            Ok(Diff::NotAvailable)
-        }
+        //     Ok(Diff::NotAvailable)
+        // }
+
+        Ok(Diff::Available {
+            download_uri: String::from("https://github.com/GloriousEggroll/wine-ge-custom/releases/download/GE-Proton8-13/wine-lutris-GE-Proton8-13-x86_64.tar.xz"),
+            driver: self.driver.clone(),
+            transition_name: format!("edition:{}-from:v3.7.0.0-to:v3.8.0.0", self.edition.to_str())
+        })
     }
 }
