@@ -49,14 +49,21 @@ impl ArchiveExt for Archive {
                 }
             }))
             .flat_map(|mut words| {
-                let size = words.nth(2).map(|size| size.parse());
+                let flags = words.next();
+                let size = words.nth(1).map(|size| size.parse());
                 let path = words.last().map(PathBuf::from);
 
-                if let (Some(path), Some(Ok(size))) = (path, size) {
-                    Some(BasicEntry {
-                        path,
-                        size
-                    })
+                if let (Some(flags), Some(path), Some(Ok(size))) = (flags, path, size) {
+                    // Skip symlinks
+                    // FIXME: parse them as well
+                    if flags.starts_with('l') {
+                        None
+                    } else {
+                        Some(BasicEntry {
+                            path,
+                            size
+                        })
+                    }
                 } else {
                     None
                 } 

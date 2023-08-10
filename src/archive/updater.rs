@@ -8,11 +8,21 @@ use crate::updater::UpdaterExt;
 
 pub const UPDATER_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub type Error = flume::SendError<usize>;
+// pub type Error = flume::SendError<usize>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Failed to send message through the flume channel: {0}")]
+    FlumeSendError(#[from] flume::SendError<usize>),
+
+    #[error("Failed to wait for updater's process end: {0}")]
+    ProcessWaitError(#[from] std::io::Error),
+
+    #[error("Failed to execute updater process")]
+    ProcessError
+}
 
 pub struct BasicUpdater {
-    _process: Child,
-
     status_updater: Option<JoinHandle<Result<(), Error>>>,
     status_updater_result: Option<Result<(), Error>>,
 
@@ -23,12 +33,10 @@ pub struct BasicUpdater {
 }
 
 impl BasicUpdater {
-    pub fn new(process: Child, mut files: Vec<PathBuf>) -> Self {
+    pub fn new(mut process: Child, mut files: Vec<PathBuf>) -> Self {
         let (send, recv) = flume::unbounded();
 
         Self {
-            _process: process,
-
             incrementer: recv,
 
             current: Cell::new(0),
@@ -53,7 +61,11 @@ impl BasicUpdater {
                     std::thread::sleep(UPDATER_TIMEOUT);
                 }
 
-                Ok(())
+                if process.wait()?.success() {
+                    Ok(())
+                } else {
+                    Err(Error::ProcessError)
+                }
             }))
         }
     }

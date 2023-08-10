@@ -62,24 +62,25 @@ pub fn entries(archive: impl AsRef<Path>) -> Option<Vec<BasicEntry>> {
 /// and extract its entries if this format is supported
 pub fn extract(archive: impl AsRef<Path>, extract_to: impl AsRef<Path>) -> Option<BasicUpdater> {
     let archive = archive.as_ref();
+    let path = archive.to_string_lossy();
 
     if !archive.is_file() {
         None
     }
 
-    else if archive.ends_with(".tar.xz") || archive.ends_with(".tar.gz") || archive.ends_with(".tar.bz2") || archive.ends_with(".tar") {
+    else if path.ends_with(".tar.xz") || path.ends_with(".tar.gz") || path.ends_with(".tar.bz2") || path.ends_with(".tar") {
         Tar::open(archive)
             .and_then(|archive| archive.extract(extract_to))
             .ok()
     }
 
-    else if archive.ends_with(".zip") {
+    else if path.ends_with(".zip") {
         Zip::open(archive)
             .and_then(|archive| archive.extract(extract_to))
             .ok()
     }
 
-    else if archive.ends_with(".7z") {
+    else if path.ends_with(".7z") {
         SevenZip::open(archive)
             .and_then(|archive| archive.extract(extract_to))
             .ok()

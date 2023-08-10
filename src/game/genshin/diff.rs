@@ -23,7 +23,10 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Failed to send message through the flume channel: {0}")]
-    FlumeSendError(String)
+    FlumeSendError(String),
+
+    #[error("Unable to extract archive")]
+    UnableToExtractArchive
 }
 
 #[derive(Clone)]
@@ -88,6 +91,26 @@ impl DiffExt for Diff {
                         return Err(Error::FlumeSendError(err.to_string()));
                     }
                 }
+
+                // Extract archive
+
+                let Some(mut updater) = archive::extract(&archive, &path) else {
+                    return Err(Error::UnableToExtractArchive);
+                };
+
+                while let Ok(false) = updater.status() {
+                    let update = (
+                        Status::Unpacking,
+                        updater.current(),
+                        updater.total()
+                    );
+
+                    if let Err(err) = sender.send(update) {
+                        return Err(Error::FlumeSendError(err.to_string()));
+                    }
+                }
+
+                std::fs::remove_file(archive)?;
 
                 // Finish transition
 
