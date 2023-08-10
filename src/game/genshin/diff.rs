@@ -97,6 +97,12 @@ impl DiffExt for Diff {
 
                 driver.finish_transition(&transition_name)?;
 
+                // Finish diff
+
+                if let Err(err) = sender.send((Status::Finished, 0, 1)) {
+                    return Err(Error::FlumeSendError(err.to_string()));
+                }
+
                 Ok(())
             }))
         })
