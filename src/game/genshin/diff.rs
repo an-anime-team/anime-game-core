@@ -110,7 +110,7 @@ pub enum Status {
     Unpacking,
     FinishingTransition,
     ApplyingHdiffPatches,
-    DeleteObsoleteFiles
+    DeletingObsoleteFiles
 }
 
 pub struct Updater {
