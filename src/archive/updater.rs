@@ -8,11 +8,13 @@ use crate::updater::UpdaterExt;
 
 pub const UPDATER_TIMEOUT: Duration = Duration::from_secs(1);
 
+pub type Error = flume::SendError<usize>;
+
 pub struct BasicUpdater {
     _process: Child,
 
-    status_updater: Option<JoinHandle<Result<(), flume::SendError<usize>>>>,
-    status_updater_result: Option<Result<(), flume::SendError<usize>>>,
+    status_updater: Option<JoinHandle<Result<(), Error>>>,
+    status_updater_result: Option<Result<(), Error>>,
 
     incrementer: flume::Receiver<usize>,
 
@@ -34,7 +36,7 @@ impl BasicUpdater {
 
             status_updater_result: None,
 
-            status_updater: Some(std::thread::spawn(move || -> Result<(), flume::SendError<usize>> {
+            status_updater: Some(std::thread::spawn(move || -> Result<(), Error> {
                 let mut prev_files = files.len();
 
                 while !files.is_empty() {
@@ -58,7 +60,7 @@ impl BasicUpdater {
 }
 
 impl UpdaterExt for BasicUpdater {
-    type Error = flume::SendError<usize>;
+    type Error = Error;
     type Status = bool;
     type Result = ();
 
