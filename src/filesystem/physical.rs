@@ -131,7 +131,7 @@ impl DriverExt for Driver {
 
         move_files(path, self.parent_path.clone())?;
 
-        std::fs::remove_file(self.parent_path.join(uuid))
+        std::fs::remove_file(self.parent_path.join(format!(".{uuid}")))
     }
 
     fn remove_transition(&self, name: &str) -> Result<()> {
