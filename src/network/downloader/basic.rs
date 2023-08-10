@@ -221,6 +221,11 @@ impl UpdaterExt for Updater {
     }
 
     #[inline]
+    fn is_finished(&mut self) -> bool {
+        matches!(self.status(), Ok(true) | Err(_))
+    }
+
+    #[inline]
     fn current(&self) -> usize {
         // self.download_path.exists()
         //     .then(|| self.download_path.metadata()

@@ -98,6 +98,11 @@ impl UpdaterExt for BasicUpdater {
     }
 
     #[inline]
+    fn is_finished(&mut self) -> bool {
+        matches!(self.status(), Ok(true) | Err(_))
+    }
+
+    #[inline]
     fn current(&self) -> usize {
         let mut current = self.current.get();
 

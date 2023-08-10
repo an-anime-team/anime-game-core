@@ -110,7 +110,8 @@ pub enum Status {
     Unpacking,
     FinishingTransition,
     ApplyingHdiffPatches,
-    DeletingObsoleteFiles
+    DeletingObsoleteFiles,
+    Finished
 }
 
 pub struct Updater {
@@ -169,6 +170,11 @@ impl UpdaterExt for Updater {
         }
 
         unreachable!()
+    }
+
+    #[inline]
+    fn is_finished(&mut self) -> bool {
+        matches!(self.status(), Ok(Status::Finished) | Err(_))
     }
 
     #[inline]

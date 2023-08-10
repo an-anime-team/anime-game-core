@@ -9,6 +9,9 @@ pub trait UpdaterExt {
     /// Wait for task to complete
     fn wait(self) -> Result<Self::Result, Self::Error>;
 
+    /// Check if the task is finished or returned an error
+    fn is_finished(&mut self) -> bool;
+
     /// Get current progress
     fn current(&self) -> usize;
 
