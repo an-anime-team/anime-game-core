@@ -80,7 +80,7 @@ impl ArchiveExt for Archive {
         std::fs::create_dir_all(folder.as_ref())?;
 
         let child = Command::new("tar")
-            .arg("-xvf")
+            .arg("-xhvf")
             .arg(&self.path)
             .arg("-C")
             .arg(folder.as_ref())

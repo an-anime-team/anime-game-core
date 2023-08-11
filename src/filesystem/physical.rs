@@ -4,7 +4,7 @@ use std::io::Result;
 
 use super::DriverExt;
 
-use super::get_uuid;
+use super::{get_uuid, move_files};
 
 pub struct Driver {
     parent_path: PathBuf
@@ -45,14 +45,14 @@ impl DriverExt for Driver {
 
         let path = self.parent_path
             .join(".transitions")
-            .join(&uuid);
+            .join(uuid);
 
         if !path.exists() {
-            std::fs::create_dir_all(&path)?;
-            std::fs::write(path.join(format!(".{uuid}")), name)?;
+            std::fs::create_dir_all(path.join("content"))?;
+            std::fs::write(path.join("name"), name)?;
         }
 
-        Ok(path)
+        Ok(path.join("content"))
     }
 
     fn get_transition(&self, name: &str) -> Option<PathBuf> {
@@ -60,8 +60,8 @@ impl DriverExt for Driver {
             .join(".transitions")
             .join(get_uuid(name));
 
-        if path.exists() {
-            Some(path)
+        if path.join("content").is_dir() && path.join("name").is_file() {
+            Some(path.join("content"))
         } else {
             None
         }
@@ -72,16 +72,12 @@ impl DriverExt for Driver {
             .map(|files| {
                 files.flatten()
                     .filter(|file| {
-                        let uuid = format!(".{}", file.file_name().to_string_lossy());
-
-                        file.path().is_dir() &&
-                        file.path().join(uuid).exists()
+                        file.path().join("content").is_dir() &&
+                        file.path().join("name").is_file()
                     })
                     .flat_map(|file| {
-                        let uuid = format!(".{}", file.file_name().to_string_lossy());
-
-                        if let Ok(name) = std::fs::read_to_string(file.path().join(uuid)) {
-                            Some((name, file.path()))
+                        if let Ok(name) = std::fs::read_to_string(file.path().join("name")) {
+                            Some((name, file.path().join("content")))
                         } else {
                             None
                         }
@@ -92,46 +88,13 @@ impl DriverExt for Driver {
     }
 
     fn finish_transition(&self, name: &str) -> Result<()> {
-        fn move_files(from: PathBuf, to: PathBuf) -> Result<()> {
-            if !to.exists() {
-                std::fs::create_dir_all(&to)?;
-            }
-
-            for file in from.read_dir()?.flatten() {
-                let file = file.path();
-
-                if let Some(file_name) = file.file_name() {
-                    if file.is_dir() {
-                        move_files(file.clone(), to.join(file_name))?;
-
-                        std::fs::remove_dir_all(&file)?;
-                    }
-
-                    else {
-                        std::fs::copy(&file, to.join(file_name))?;
-                        std::fs::remove_file(&file)?;
-                    }
-                }
-            }
-
-            std::fs::remove_dir_all(from)?;
-
-            Ok(())
-        }
-
-        let uuid = get_uuid(name);
-
         let path = self.parent_path
             .join(".transitions")
-            .join(&uuid);
+            .join(get_uuid(name));
 
-        if !path.exists() {
-            return Ok(());
-        }
+        move_files(path.join("content"), &self.parent_path)?;
 
-        move_files(path, self.parent_path.clone())?;
-
-        std::fs::remove_file(self.parent_path.join(format!(".{uuid}")))
+        std::fs::remove_dir_all(path)
     }
 
     fn remove_transition(&self, name: &str) -> Result<()> {

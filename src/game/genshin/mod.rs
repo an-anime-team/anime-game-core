@@ -209,7 +209,7 @@ impl GetDiffExt for Game {
         //             return Ok(Diff::Available {
         //                 download_uri: diff.path.to_owned(),
         //                 driver: self.driver.clone(),
-        //                 transition_name: format!("edition:{}-from:v{current}-to:v{diff_version}", self.edition.to_str())
+        //                 transition_name: format!("component:game_{}-from:v{current}-to:v{diff_version}", self.edition.to_str())
         //             });
         //         }
         //     }
@@ -220,7 +220,7 @@ impl GetDiffExt for Game {
         Ok(Diff::Available {
             download_uri: String::from("https://github.com/GloriousEggroll/wine-ge-custom/releases/download/GE-Proton8-13/wine-lutris-GE-Proton8-13-x86_64.tar.xz"),
             driver: self.driver.clone(),
-            transition_name: format!("edition:{}-from:v3.7.0.0-to:v3.8.0.0", self.edition.to_str())
+            transition_name: format!("component:game_{}-from:v3.7.0.0-to:v3.8.0.0", self.edition.to_str())
         })
     }
 }

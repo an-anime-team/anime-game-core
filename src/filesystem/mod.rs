@@ -24,7 +24,7 @@
 /// Наконец, стандартный вариант - обычная папка с игрой, как это всегда и было.
 
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::io::Result;
 
 pub mod physical;
@@ -84,4 +84,16 @@ pub fn get_uuid(text: impl AsRef<[u8]>) -> String {
     uuid::Builder::from_bytes(uuid)
         .into_uuid()
         .to_string()
+}
+
+/// Move files from one folder to another
+pub fn move_files(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
+    let from = from.as_ref();
+    let to = to.as_ref();
+
+    for entry in from.read_dir()?.flatten() {
+        std::fs::rename(entry.path(), to.join(entry.file_name()))?;
+    }
+
+    Ok(())
 }
