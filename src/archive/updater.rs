@@ -2,11 +2,8 @@ use std::io::{BufReader, BufRead};
 use std::process::Child;
 use std::thread::JoinHandle;
 use std::cell::Cell;
-use std::time::Duration;
 
 use crate::updater::UpdaterExt;
-
-pub const UPDATER_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
