@@ -72,7 +72,7 @@ impl ArchiveExt for Archive {
     }
 
     fn extract(&self, folder: impl AsRef<Path>) -> Result<Self::Updater, Self::Error> {
-        let files = self.entries()?
+        let files: Vec<PathBuf> = self.entries()?
             .into_iter()
             .map(|entry| folder.as_ref().join(entry.path))
             .collect();
@@ -80,12 +80,13 @@ impl ArchiveExt for Archive {
         std::fs::create_dir_all(folder.as_ref())?;
 
         let child = Command::new("tar")
+            .stdout(Stdio::piped())
             .arg("-xhvf")
             .arg(&self.path)
             .arg("-C")
             .arg(folder.as_ref())
             .spawn()?;
 
-        Ok(BasicUpdater::new(child, files))
+        Ok(BasicUpdater::new(child, files.len(), |_line| Some(1)))
     }
 }

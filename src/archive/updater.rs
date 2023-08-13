@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::io::{BufReader, BufRead};
 use std::process::Child;
 use std::thread::JoinHandle;
 use std::cell::Cell;
@@ -33,32 +33,26 @@ pub struct BasicUpdater {
 }
 
 impl BasicUpdater {
-    pub fn new(mut process: Child, mut files: Vec<PathBuf>) -> Self {
+    pub fn new<F: Fn(&str) -> Option<usize> + Send + 'static>(mut process: Child, file_count: usize, out_processor: F) -> Self {
         let (send, recv) = flume::unbounded();
 
         Self {
             incrementer: recv,
 
             current: Cell::new(0),
-            total: files.len(),
+            total: file_count,
 
             status_updater_result: None,
 
             status_updater: Some(std::thread::spawn(move || -> Result<(), Error> {
-                let mut prev_files = files.len();
+                if let Some(stdout) = &mut process.stdout {
+                    let reader = BufReader::new(stdout);
 
-                while !files.is_empty() {
-                    files.retain(|file| !file.exists());
-
-                    let new_files = prev_files - files.len();
-
-                    if new_files > 0 {
-                        send.send(new_files)?;
-
-                        prev_files -= new_files;
+                    for line in reader.lines().flatten() {
+                        if let Some(count) = (out_processor)(line.as_str()) {
+                            send.send(count)?;
+                        }
                     }
-
-                    std::thread::sleep(UPDATER_TIMEOUT);
                 }
 
                 if process.wait()?.success() {

@@ -66,19 +66,25 @@ impl ArchiveExt for Archive {
     }
 
     fn extract(&self, folder: impl AsRef<Path>) -> Result<Self::Updater, Self::Error> {
-        let files = self.entries()?
+        let files: Vec<PathBuf> = self.entries()?
             .into_iter()
             .map(|entry| folder.as_ref().join(entry.path))
             .collect();
 
         let child = Command::new("unzip")
-            .arg("-q")
+            .stdout(Stdio::piped())
             .arg("-o")
             .arg(&self.path)
             .arg("-d")
             .arg(folder.as_ref())
             .spawn()?;
 
-        Ok(BasicUpdater::new(child, files))
+        Ok(BasicUpdater::new(child, files.len(), |line| {
+            if !line.starts_with("Archive:") {
+                Some(1)
+            } else {
+                None
+            }
+        }))
     }
 }

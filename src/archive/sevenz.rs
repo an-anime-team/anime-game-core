@@ -103,7 +103,7 @@ impl ArchiveExt for Archive {
             return Err(Error::SevenZNotAvailable);
         };
 
-        let files = self.entries()?
+        let files: Vec<PathBuf> = self.entries()?
             .into_iter()
             .map(|entry| folder.as_ref().join(entry.path))
             .collect();
@@ -117,12 +117,19 @@ impl ArchiveExt for Archive {
             .output()?;
 
         let child = Command::new(sevenz)
+            .stdout(Stdio::piped())
             .arg("x")
             .arg(&self.path)
             .arg(format!("-o{}", folder.as_ref().to_string_lossy()))
             .arg("-aoa")
             .spawn()?;
 
-        Ok(BasicUpdater::new(child, files))
+        Ok(BasicUpdater::new(child, files.len(), |line| {
+            if line.starts_with("- ") {
+                Some(1)
+            } else {
+                None
+            }
+        }))
     }
 }
