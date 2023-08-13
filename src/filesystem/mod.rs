@@ -69,6 +69,12 @@ pub trait DriverExt: Send + Sync {
 
     /// Remove transition
     fn remove_transition(&self, name: &str) -> Result<()>;
+
+    /// Deploy driver content to the filesystem and return path to access it
+    fn deploy(&self) -> Result<PathBuf>;
+
+    /// Dismantle deployed driver content
+    fn dismantle(&self) -> Result<()>;
 }
 
 /// Get UUID from the given string

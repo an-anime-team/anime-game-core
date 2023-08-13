@@ -104,6 +104,16 @@ impl DriverExt for Driver {
 
         std::fs::remove_dir_all(path)
     }
+
+    #[inline]
+    fn deploy(&self) -> Result<PathBuf> {
+        Ok(self.parent_path.clone())
+    }
+
+    #[inline]
+    fn dismantle(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl<T> From<T> for Driver where T: Into<PathBuf> {
