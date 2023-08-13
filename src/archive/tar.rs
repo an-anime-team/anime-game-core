@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -72,10 +73,14 @@ impl ArchiveExt for Archive {
     }
 
     fn extract(&self, folder: impl AsRef<Path>) -> Result<Self::Updater, Self::Error> {
-        let files: Vec<PathBuf> = self.entries()?
+        let files = HashMap::<String, u64>::from_iter(self.entries()?
             .into_iter()
-            .map(|entry| folder.as_ref().join(entry.path))
-            .collect();
+            .map(|entry| (
+                entry.path.to_string_lossy().to_string(),
+                entry.size
+            )));
+
+        let total_size = files.values().sum::<u64>();
 
         std::fs::create_dir_all(folder.as_ref())?;
 
@@ -87,6 +92,6 @@ impl ArchiveExt for Archive {
             .arg(folder.as_ref())
             .spawn()?;
 
-        Ok(BasicUpdater::new(child, files.len(), |_line| Some(1)))
+        Ok(BasicUpdater::new(child, total_size, move |file| files.get(file.as_str()).copied()))
     }
 }

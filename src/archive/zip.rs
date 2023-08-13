@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -66,10 +67,14 @@ impl ArchiveExt for Archive {
     }
 
     fn extract(&self, folder: impl AsRef<Path>) -> Result<Self::Updater, Self::Error> {
-        let files: Vec<PathBuf> = self.entries()?
+        let files = HashMap::<String, u64>::from_iter(self.entries()?
             .into_iter()
-            .map(|entry| folder.as_ref().join(entry.path))
-            .collect();
+            .map(|entry| (
+                entry.path.to_string_lossy().to_string(),
+                entry.size
+            )));
+
+        let total_size = files.values().sum::<u64>();
 
         let child = Command::new("unzip")
             .stdout(Stdio::piped())
@@ -79,12 +84,17 @@ impl ArchiveExt for Archive {
             .arg(folder.as_ref())
             .spawn()?;
 
-        Ok(BasicUpdater::new(child, files.len(), |line| {
-            if !line.starts_with("Archive:") {
-                Some(1)
-            } else {
-                None
+        Ok(BasicUpdater::new(child, total_size, move |line| {
+            // Strip 'Archive: ...' and other top-level info messages
+            if let Some(line) = line.strip_prefix("  ") {
+                // inflating: sus/3x.webp
+                // linking: sus/3x.symlink          -> 3x.webp
+                if let Some((_, file)) = line.split_once(':') {
+                    return files.get(file).copied();
+                }
             }
+
+            None
         }))
     }
 }

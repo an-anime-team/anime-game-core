@@ -226,7 +226,7 @@ impl UpdaterExt for Updater {
     }
 
     #[inline]
-    fn current(&self) -> usize {
+    fn current(&self) -> u64 {
         // self.download_path.exists()
         //     .then(|| self.download_path.metadata()
         //         .map(|metadata| metadata.len())
@@ -235,16 +235,16 @@ impl UpdaterExt for Updater {
 
         self.update();
 
-        self.current_progress.get()
+        self.current_progress.get() as u64
     }
 
     #[inline]
-    fn total(&self) -> usize {
+    fn total(&self) -> u64 {
         self.update();
 
         let size_hint = self.content_size_hint.get();
 
-        self.content_size.unwrap_or(size_hint.1.unwrap_or(size_hint.0))
+        self.content_size.unwrap_or(size_hint.1.unwrap_or(size_hint.0)) as u64
     }
 }
 

@@ -8,12 +8,10 @@ use crate::updater::UpdaterExt;
 
 pub const UPDATER_TIMEOUT: Duration = Duration::from_secs(1);
 
-// pub type Error = flume::SendError<usize>;
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to send message through the flume channel: {0}")]
-    FlumeSendError(#[from] flume::SendError<usize>),
+    FlumeSendError(#[from] flume::SendError<u64>),
 
     #[error("Failed to wait for updater's process end: {0}")]
     ProcessWaitError(#[from] std::io::Error),
@@ -26,32 +24,36 @@ pub struct BasicUpdater {
     status_updater: Option<JoinHandle<Result<(), Error>>>,
     status_updater_result: Option<Result<(), Error>>,
 
-    incrementer: flume::Receiver<usize>,
+    incrementer: flume::Receiver<u64>,
 
-    current: Cell<usize>,
-    total: usize
+    current: Cell<u64>,
+    total: u64
 }
 
+// TODO: display current/total as bytes
+
 impl BasicUpdater {
-    pub fn new<F: Fn(&str) -> Option<usize> + Send + 'static>(mut process: Child, file_count: usize, out_processor: F) -> Self {
+    pub fn new(mut process: Child, total_size: u64, unpacked_processor: impl Fn(String) -> Option<u64> + Send + 'static) -> Self {
         let (send, recv) = flume::unbounded();
 
         Self {
             incrementer: recv,
 
             current: Cell::new(0),
-            total: file_count,
+            total: total_size,
 
             status_updater_result: None,
 
             status_updater: Some(std::thread::spawn(move || -> Result<(), Error> {
                 if let Some(stdout) = &mut process.stdout {
-                    let reader = BufReader::new(stdout);
+                    let count = BufReader::new(stdout)
+                        .lines()
+                        .flatten()
+                        .flat_map(unpacked_processor)
+                        .sum();
 
-                    for line in reader.lines().flatten() {
-                        if let Some(count) = (out_processor)(line.as_str()) {
-                            send.send(count)?;
-                        }
+                    if count > 0 {
+                        send.send(count)?;
                     }
                 }
 
@@ -109,7 +111,7 @@ impl UpdaterExt for BasicUpdater {
     }
 
     #[inline]
-    fn current(&self) -> usize {
+    fn current(&self) -> u64 {
         let mut current = self.current.get();
 
         while let Ok(increment) = self.incrementer.try_recv() {
@@ -122,7 +124,7 @@ impl UpdaterExt for BasicUpdater {
     }
 
     #[inline]
-    fn total(&self) -> usize {
+    fn total(&self) -> u64 {
         self.total
     }
 }

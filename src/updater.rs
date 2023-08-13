@@ -13,10 +13,10 @@ pub trait UpdaterExt {
     fn is_finished(&mut self) -> bool;
 
     /// Get current progress
-    fn current(&self) -> usize;
+    fn current(&self) -> u64;
 
     /// Get total progress
-    fn total(&self) -> usize;
+    fn total(&self) -> u64;
 
     #[inline]
     /// Get progress

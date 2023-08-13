@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -103,10 +104,14 @@ impl ArchiveExt for Archive {
             return Err(Error::SevenZNotAvailable);
         };
 
-        let files: Vec<PathBuf> = self.entries()?
+        let files = HashMap::<String, u64>::from_iter(self.entries()?
             .into_iter()
-            .map(|entry| folder.as_ref().join(entry.path))
-            .collect();
+            .map(|entry| (
+                entry.path.to_string_lossy().to_string(),
+                entry.size
+            )));
+
+        let total_size = files.values().sum::<u64>();
 
         // Workaround to allow 7z to overwrite files
         // Somehow it manages to forbid itself to do this
@@ -122,12 +127,15 @@ impl ArchiveExt for Archive {
             .arg(&self.path)
             .arg(format!("-o{}", folder.as_ref().to_string_lossy()))
             .arg("-aoa")
+            .arg("-bb1")
             .spawn()?;
 
-        Ok(BasicUpdater::new(child, files.len(), |line| {
-            if line.starts_with("- ") {
-                Some(1)
-            } else {
+        Ok(BasicUpdater::new(child, total_size, move |line| {
+            if let Some(file) = line.strip_prefix("- ") {
+                files.get(file).copied()
+            }
+
+            else {
                 None
             }
         }))
