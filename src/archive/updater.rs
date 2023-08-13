@@ -46,14 +46,14 @@ impl BasicUpdater {
 
             status_updater: Some(std::thread::spawn(move || -> Result<(), Error> {
                 if let Some(stdout) = &mut process.stdout {
-                    let count = BufReader::new(stdout)
+                    let unpacked_size = BufReader::new(stdout)
                         .lines()
                         .flatten()
                         .flat_map(unpacked_processor)
                         .sum();
 
-                    if count > 0 {
-                        send.send(count)?;
+                    if unpacked_size > 0 {
+                        send.send(unpacked_size)?;
                     }
                 }
 

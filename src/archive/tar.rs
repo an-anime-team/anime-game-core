@@ -92,6 +92,6 @@ impl ArchiveExt for Archive {
             .arg(folder.as_ref())
             .spawn()?;
 
-        Ok(BasicUpdater::new(child, total_size, move |file| files.get(file.as_str()).copied()))
+        Ok(BasicUpdater::new(child, total_size, move |file| files.get(&file).copied()))
     }
 }
