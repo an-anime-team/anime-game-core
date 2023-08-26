@@ -27,8 +27,6 @@ pub struct BasicUpdater {
     total: u64
 }
 
-// TODO: display current/total as bytes
-
 impl BasicUpdater {
     pub fn new(mut process: Child, total_size: u64, unpacked_processor: impl Fn(String) -> Option<u64> + Send + 'static) -> Self {
         let (send, recv) = flume::unbounded();

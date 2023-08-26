@@ -17,6 +17,7 @@ use super::diff::GetDiffExt;
 pub mod component;
 pub mod api;
 pub mod diff;
+pub mod integrity;
 
 use component::{
     Component,
@@ -220,7 +221,7 @@ impl GetDiffExt for Game {
         Ok(Diff::Available {
             download_uri: String::from("https://github.com/GloriousEggroll/wine-ge-custom/releases/download/GE-Proton8-13/wine-lutris-GE-Proton8-13-x86_64.tar.xz"),
             driver: self.driver.clone(),
-            transition_name: format!("component:game_{}-from:v3.7.0.0-to:v3.8.0.0", self.edition.to_str())
+            transition_name: format!("action:update-component:game_{}-from:v3.7.0.0-to:v3.8.0.0", self.edition.to_str())
         })
     }
 }

@@ -5,6 +5,7 @@ use crate::filesystem::DriverExt;
 pub mod version;
 pub mod component;
 pub mod diff;
+pub mod integrity;
 
 use version::Version;
 use component::ComponentExt;
