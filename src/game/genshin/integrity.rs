@@ -89,3 +89,18 @@ impl VerifyIntegrityExt for Game {
         }))
     }
 }
+
+impl RepairFilesExt for Game {
+    type Error = Error;
+    type Updater = BasicRepairerUpdater;
+
+    fn repair_files(&self, files: impl AsRef<[PathBuf]>) -> Result<Self::Updater, Self::Error> {
+        let api = match Api::fetch(self.edition) {
+            Ok(api) => api.data.game.latest.clone(),
+
+            Err(err) => return Err(Error::MinreqRef(err))
+        };
+
+        Ok(BasicRepairerUpdater::new(self.get_driver(), files.as_ref().to_vec(), api.decompressed_path))
+    }
+}

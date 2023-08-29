@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::thread::JoinHandle;
 use std::sync::Arc;
 
@@ -13,15 +13,6 @@ use crate::network::downloader::basic::{
     Error as DownloaderError
 };
 
-// Verify game files integrity:
-// 
-// <impl VerifyIntegrityExt>::verify_files() -> BasicVerifierUpdater -> Vec<<impl VerifyIntegrityResultExt>>
-// <impl VerifyIntegrityResultExt>::repair() -> Downloader::Updater
-// 
-// Verify specific file integrity:
-// 
-// <impl VerifyIntegrityResultExt>::verify() -> impl VerifyIntegrityResultExt
-
 pub trait VerifyIntegrityExt {
     type Error;
     type Updater: UpdaterExt;
@@ -31,21 +22,21 @@ pub trait VerifyIntegrityExt {
     fn verify_files(&self) -> Result<Self::Updater, Self::Error>;
 }
 
-pub trait VerifyIntegrityResultExt {
+pub trait RepairFilesExt {
     type Error;
     type Updater: UpdaterExt;
 
-    /// Verify game file. Return `None` if file is correct
-    fn verify(driver: Arc<dyn DriverExt>, file: &Path) -> Result<Option<Self>, Self::Error> where Self: Sized;
-
-    /// Repair game file (or files)
-    fn repair(self) -> Result<Self::Updater, Self::Error>;
+    /// Repair game files
+    fn repair_files(&self, files: impl AsRef<[PathBuf]>) -> Result<Self::Updater, Self::Error>;
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to send message through the flume channel: {0}")]
-    FlumeSendError(#[from] flume::SendError<PathBuf>),
+    FlumeVerifierSendError(#[from] flume::SendError<()>),
+
+    #[error("Failed to send message through the flume channel: {0}")]
+    FlumeRepairerSendError(#[from] flume::SendError<BasicRepairerUpdaterStatus>),
 
     #[error("Failed to verify {file} integrity: {error}")]
     FileVerifyingError {
@@ -60,19 +51,11 @@ pub enum Error {
     Io(#[from] std::io::Error)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Status {
-    Starting,
-    Working(PathBuf),
-    Finished
-}
-
 pub struct BasicVerifierUpdater {
     status_updater: Option<JoinHandle<Result<Vec<PathBuf>, Error>>>,
     status_updater_result: Option<Result<Vec<PathBuf>, Error>>,
 
-    updater: flume::Receiver<PathBuf>,
-    current_file: Cell<Option<PathBuf>>,
+    updater: flume::Receiver<()>,
 
     current: Cell<u64>,
     total: u64
@@ -87,7 +70,6 @@ impl BasicVerifierUpdater {
 
         Self {
             updater: recv,
-            current_file: Cell::new(None),
 
             current: Cell::new(0),
             total: files.len() as u64,
@@ -98,9 +80,6 @@ impl BasicVerifierUpdater {
                 let mut broken = Vec::new();
 
                 for file in files {
-                    // TODO: don't like to call clone here all the time
-                    send.send(file.clone())?;
-
                     match verifier(driver.clone(), &file) {
                         Ok(true) => (),
 
@@ -111,6 +90,8 @@ impl BasicVerifierUpdater {
                             error
                         })
                     }
+
+                    send.send(())?;
                 }
 
                 Ok(broken)
@@ -121,10 +102,9 @@ impl BasicVerifierUpdater {
     fn update(&self) {
         let mut current = self.current.get();
 
-        while let Ok(file) = self.updater.try_recv() {
+        while let Ok(()) = self.updater.try_recv() {
             current += 1;
 
-            self.current_file.set(Some(file));
             self.current.set(current);
         }
     }
@@ -132,7 +112,7 @@ impl BasicVerifierUpdater {
 
 impl UpdaterExt for BasicVerifierUpdater {
     type Error = Error;
-    type Status = Status;
+    type Status = bool;
     type Result = Vec<PathBuf>;
 
     #[inline]
@@ -143,23 +123,14 @@ impl UpdaterExt for BasicVerifierUpdater {
             if !status_updater.is_finished() {
                 self.status_updater = Some(status_updater);
 
-                // TODO: don't like to call clone here all the time
-                return Ok(match self.current_file.take() {
-                    Some(file) => {
-                        self.current_file.set(Some(file.clone()));
-
-                        Status::Working(file)
-                    }
-
-                    None => Status::Starting
-                });
+                return Ok(false);
             }
 
             self.status_updater_result = Some(status_updater.join().expect("Failed to join thread"));
         }
 
         match &self.status_updater_result {
-            Some(Ok(_)) => Ok(Status::Finished),
+            Some(Ok(_)) => Ok(true),
             Some(Err(err)) => Err(err),
 
             None => unreachable!()
@@ -181,7 +152,7 @@ impl UpdaterExt for BasicVerifierUpdater {
 
     #[inline]
     fn is_finished(&mut self) -> bool {
-        matches!(self.status(), Ok(Status::Finished) | Err(_))
+        matches!(self.status(), Ok(true) | Err(_))
     }
 
     #[inline]
@@ -197,12 +168,20 @@ impl UpdaterExt for BasicVerifierUpdater {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BasicRepairerUpdaterStatus {
+    PreparingTransition,
+    RepairingFiles,
+    FinishingTransition,
+    Finished
+}
+
 pub struct BasicRepairerUpdater {
     status_updater: Option<JoinHandle<Result<(), Error>>>,
     status_updater_result: Option<Result<(), Error>>,
 
-    updater: flume::Receiver<PathBuf>,
-    current_file: Cell<Option<PathBuf>>,
+    updater: flume::Receiver<BasicRepairerUpdaterStatus>,
+    status: Cell<Option<BasicRepairerUpdaterStatus>>,
 
     current: Cell<u64>,
     total: u64
@@ -214,7 +193,7 @@ impl BasicRepairerUpdater {
 
         Self {
             updater: recv,
-            current_file: Cell::new(None),
+            status: Cell::new(None),
 
             current: Cell::new(0),
             total: files.len() as u64,
@@ -222,21 +201,29 @@ impl BasicRepairerUpdater {
             status_updater_result: None,
 
             status_updater: Some(std::thread::spawn(move || -> Result<(), Error> {
+                // I don't need to send this message but do it just for consistency
+                send.send(BasicRepairerUpdaterStatus::PreparingTransition)?;
+
                 // TODO: list original files hashes or something to make repair transitions unique
                 let transition_folder = driver.create_transition("action:repair")?;
+
+                send.send(BasicRepairerUpdaterStatus::RepairingFiles)?;
 
                 for file in files {
                     let updater = Downloader::new(format!("{base_download_uri}/{}", file.to_string_lossy()))
                         .download(transition_folder.join(&file))?;
-
-                    send.send(file)?;
 
                     // TODO: use updater to show downloading progress better
 
                     updater.wait()?;
                 }
 
+                send.send(BasicRepairerUpdaterStatus::FinishingTransition)?;
+
                 driver.finish_transition("action:repair")?;
+
+                // I don't need to send this message but do it just for consistency
+                send.send(BasicRepairerUpdaterStatus::Finished)?;
 
                 Ok(())
             }))
@@ -246,10 +233,10 @@ impl BasicRepairerUpdater {
     fn update(&self) {
         let mut current = self.current.get();
 
-        while let Ok(file) = self.updater.try_recv() {
+        while let Ok(status) = self.updater.try_recv() {
             current += 1;
 
-            self.current_file.set(Some(file));
+            self.status.set(Some(status));
             self.current.set(current);
         }
     }
@@ -257,7 +244,7 @@ impl BasicRepairerUpdater {
 
 impl UpdaterExt for BasicRepairerUpdater {
     type Error = Error;
-    type Status = Status;
+    type Status = BasicRepairerUpdaterStatus;
     type Result = ();
 
     #[inline]
@@ -269,14 +256,14 @@ impl UpdaterExt for BasicRepairerUpdater {
                 self.status_updater = Some(status_updater);
 
                 // TODO: don't like to call clone here all the time
-                return Ok(match self.current_file.take() {
-                    Some(file) => {
-                        self.current_file.set(Some(file.clone()));
+                return Ok(match self.status.take() {
+                    Some(status) => {
+                        self.status.set(Some(status.clone()));
 
-                        Status::Working(file)
+                        status
                     }
 
-                    None => Status::Starting
+                    None => BasicRepairerUpdaterStatus::PreparingTransition
                 });
             }
 
@@ -284,7 +271,7 @@ impl UpdaterExt for BasicRepairerUpdater {
         }
 
         match &self.status_updater_result {
-            Some(Ok(_)) => Ok(Status::Finished),
+            Some(Ok(_)) => Ok(BasicRepairerUpdaterStatus::Finished),
             Some(Err(err)) => Err(err),
 
             None => unreachable!()
@@ -306,7 +293,7 @@ impl UpdaterExt for BasicRepairerUpdater {
 
     #[inline]
     fn is_finished(&mut self) -> bool {
-        matches!(self.status(), Ok(Status::Finished) | Err(_))
+        matches!(self.status(), Ok(BasicRepairerUpdaterStatus::Finished) | Err(_))
     }
 
     #[inline]
