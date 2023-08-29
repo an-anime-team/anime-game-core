@@ -72,6 +72,10 @@ impl VerifyIntegrityExt for Game {
         Ok(BasicVerifierUpdater::new(self.get_driver(), files.keys().cloned().collect(), move |driver, file| {
             let (file_size, file_hash) = &files[file];
 
+            if !driver.exists(file.as_os_str()) {
+                return Ok(false);
+            }
+
             match driver.metadata(file.as_os_str()) {
                 Ok(metadata) => {
                     if metadata.len() != *file_size {
