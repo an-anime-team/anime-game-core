@@ -35,7 +35,7 @@ pub enum Error {
 
 impl VerifyIntegrityExt for Game {
     type Error = Error;
-    type Updater = BasicUpdater;
+    type Updater = BasicVerifierUpdater;
 
     fn verify_files(&self) -> Result<Self::Updater, Self::Error> {
         let api = match Api::fetch(self.edition) {
@@ -69,7 +69,7 @@ impl VerifyIntegrityExt for Game {
             ))
             .collect::<HashMap<_, _>>();
 
-        Ok(BasicUpdater::new(self.get_driver(), files.keys().cloned().collect(), move |driver, file| {
+        Ok(BasicVerifierUpdater::new(self.get_driver(), files.keys().cloned().collect(), move |driver, file| {
             let (file_size, file_hash) = &files[file];
 
             match driver.metadata(file.as_os_str()) {
