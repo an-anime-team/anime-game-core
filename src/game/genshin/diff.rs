@@ -23,7 +23,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Failed to send message through the flume channel: {0}")]
-    FlumeSendError(String),
+    FlumeSendError(#[from] flume::SendError<(Status, u64, u64)>),
 
     #[error("Unable to extract archive")]
     UnableToExtractArchive
@@ -81,15 +81,11 @@ impl DiffExt for Diff {
                 let mut updater = downloader.download(&archive)?;
 
                 while let Ok(false) = updater.status() {
-                    let update = (
+                    sender.send((
                         Status::Downloading,
                         updater.current(),
                         updater.total()
-                    );
-
-                    if let Err(err) = sender.send(update) {
-                        return Err(Error::FlumeSendError(err.to_string()));
-                    }
+                    ))?;
                 }
 
                 // Extract archive
@@ -99,32 +95,24 @@ impl DiffExt for Diff {
                 };
 
                 while let Ok(false) = updater.status() {
-                    let update = (
+                    sender.send((
                         Status::Unpacking,
                         updater.current(),
                         updater.total()
-                    );
-
-                    if let Err(err) = sender.send(update) {
-                        return Err(Error::FlumeSendError(err.to_string()));
-                    }
+                    ))?;
                 }
 
                 std::fs::remove_file(archive)?;
 
                 // Finish transition
 
-                if let Err(err) = sender.send((Status::FinishingTransition, 0, 1)) {
-                    return Err(Error::FlumeSendError(err.to_string()));
-                }
+                sender.send((Status::FinishingTransition, 0, 1))?;
 
                 driver.finish_transition(&transition_name)?;
 
                 // Finish diff
 
-                if let Err(err) = sender.send((Status::Finished, 0, 1)) {
-                    return Err(Error::FlumeSendError(err.to_string()));
-                }
+                sender.send((Status::Finished, 0, 1))?;
 
                 Ok(())
             }))
