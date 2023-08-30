@@ -28,6 +28,12 @@ impl Version {
             edition
         }
     }
+
+    #[inline]
+    /// Get three-numbers version (major.minor.patch)
+    pub fn major_minor_patch(&self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
+    }
 }
 
 impl std::str::FromStr for Version {
@@ -144,6 +150,8 @@ mod tests {
         assert!("example string".parse::<Version>().is_err());
         assert!("1.2.3.4.5".parse::<Version>().is_err());
         assert!("256.256.256.256".parse::<Version>().is_err());
+
+        assert_eq!(Version::new(0, 1, 2, 3).major_minor_patch(), "0.1.2");
 
         Ok(())
     }

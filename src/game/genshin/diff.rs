@@ -4,6 +4,7 @@ use std::thread::JoinHandle;
 
 use crate::filesystem::DriverExt;
 use crate::game::diff::DiffExt;
+use crate::game::hoyoverse_diffs;
 use crate::updater::UpdaterExt;
 use crate::network::downloader::DownloaderExt;
 
@@ -13,6 +14,8 @@ use crate::network::downloader::basic::{
 };
 
 use crate::archive;
+
+// TODO: unify this diff implementation for all the hoyo games under hoyoverse_diffs module
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -73,10 +76,11 @@ impl DiffExt for Diff {
 
                 // Create transition
 
-                let path = driver.create_transition(&transition_name)?;
-                let archive = path.join(downloader.file_name());
+                let transition_path = driver.create_transition(&transition_name)?;
 
                 // Download update archive
+
+                let archive = transition_path.join(downloader.file_name());
 
                 let mut updater = downloader.download(&archive)?;
 
@@ -90,7 +94,7 @@ impl DiffExt for Diff {
 
                 // Extract archive
 
-                let Some(mut updater) = archive::extract(&archive, &path) else {
+                let Some(mut updater) = archive::extract(&archive, &transition_path) else {
                     return Err(Error::UnableToExtractArchive);
                 };
 
@@ -104,11 +108,60 @@ impl DiffExt for Diff {
 
                 std::fs::remove_file(archive)?;
 
+                // Run transition code
+
+                sender.send((Status::RunTransitionCode, 0, 1))?;
+
+                let updater = sender.clone();
+
+                hoyoverse_diffs::apply_update(driver.clone(), &transition_path, move |status| {
+                    let result = match status {
+                        hoyoverse_diffs::Status::ApplyingHdiffStarted => updater.send((Status::ApplyingHdiffPatches, 0, 1)),
+                        hoyoverse_diffs::Status::ApplyingHdiffFinished => updater.send((Status::ApplyingHdiffPatches, 1, 1)),
+
+                        hoyoverse_diffs::Status::ApplyingHdiffProgress(current, total) =>
+                            updater.send((Status::ApplyingHdiffPatches, current, total)),
+
+                        hoyoverse_diffs::Status::DeletingObsoleteStarted => updater.send((Status::DeletingObsoleteFiles, 0, 1)),
+                        hoyoverse_diffs::Status::DeletingObsoleteFinished => updater.send((Status::RunTransitionCode, 1, 1)),
+
+                        hoyoverse_diffs::Status::DeletingObsoleteProgress(current, total) =>
+                            updater.send((Status::RunTransitionCode, current, total))
+                    };
+
+                    result.expect("Failed to send flume message from the transition code updater");
+                })?;
+
                 // Finish transition
 
                 sender.send((Status::FinishingTransition, 0, 1))?;
 
                 driver.finish_transition(&transition_name)?;
+
+                // Run post-transition code
+
+                sender.send((Status::RunPostTransitionCode, 0, 1))?;
+
+                // TODO: re-use code defined above
+                let updater = sender.clone();
+
+                hoyoverse_diffs::post_transition(driver, move |status| {
+                    let result = match status {
+                        hoyoverse_diffs::Status::ApplyingHdiffStarted => updater.send((Status::ApplyingHdiffPatches, 0, 1)),
+                        hoyoverse_diffs::Status::ApplyingHdiffFinished => updater.send((Status::ApplyingHdiffPatches, 1, 1)),
+
+                        hoyoverse_diffs::Status::ApplyingHdiffProgress(current, total) =>
+                            updater.send((Status::ApplyingHdiffPatches, current, total)),
+
+                        hoyoverse_diffs::Status::DeletingObsoleteStarted => updater.send((Status::DeletingObsoleteFiles, 0, 1)),
+                        hoyoverse_diffs::Status::DeletingObsoleteFinished => updater.send((Status::RunTransitionCode, 1, 1)),
+
+                        hoyoverse_diffs::Status::DeletingObsoleteProgress(current, total) =>
+                            updater.send((Status::RunTransitionCode, current, total))
+                    };
+
+                    result.expect("Failed to send flume message from the transition code updater");
+                })?;
 
                 // Finish diff
 
@@ -125,7 +178,9 @@ pub enum Status {
     PreparingTransition,
     Downloading,
     Unpacking,
+    RunTransitionCode,
     FinishingTransition,
+    RunPostTransitionCode,
     ApplyingHdiffPatches,
     DeletingObsoleteFiles,
     Finished

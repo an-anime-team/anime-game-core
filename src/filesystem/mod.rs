@@ -39,8 +39,17 @@ pub trait DriverExt: Send + Sync {
     /// Read file content
     fn read(&self, name: &OsStr) -> Result<Vec<u8>>;
 
+    /// Read file content as string
+    fn read_to_string(&self, name: &OsStr) -> Result<String>;
+
     /// Read directory content
     fn read_dir(&self, name: &OsStr) -> Result<std::fs::ReadDir>;
+
+    /// Copy file to the given path
+    fn copy(&self, name: &OsStr, path: &Path) -> Result<()>;
+
+    /// Remove file
+    fn remove_file(&self, name: &OsStr) -> Result<()>;
 
     // TODO: create_transition must return an updater
 

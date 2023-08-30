@@ -7,6 +7,8 @@ pub mod component;
 pub mod diff;
 pub mod integrity;
 
+pub mod hoyoverse_diffs;
+
 use version::Version;
 use component::ComponentExt;
 

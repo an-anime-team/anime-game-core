@@ -36,8 +36,25 @@ impl DriverExt for Driver {
     }
 
     #[inline]
+    fn read_to_string(&self, name: &OsStr) -> Result<String> {
+        std::fs::read_to_string(self.parent_path.join(name))
+    }
+
+    #[inline]
     fn read_dir(&self, name: &OsStr) -> Result<std::fs::ReadDir> {
         std::fs::read_dir(self.parent_path.join(name))
+    }
+
+    #[inline]
+    fn copy(&self, name: &OsStr, path: &std::path::Path) -> Result<()> {
+        std::fs::copy(self.parent_path.join(name), path)?;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn remove_file(&self, name: &OsStr) -> Result<()> {
+        std::fs::remove_file(self.parent_path.join(name))
     }
 
     fn create_transition(&self, name: &str) -> Result<PathBuf> {
