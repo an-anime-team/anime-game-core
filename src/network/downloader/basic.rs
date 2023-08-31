@@ -1,14 +1,12 @@
 use std::path::Path;
 use std::fs::File;
-use std::thread::JoinHandle;
 use std::cell::Cell;
 
 use std::io::Write;
 
-use super::{
-    DownloaderExt,
-    UpdaterExt
-};
+use crate::updater::*;
+
+use super::DownloaderExt;
 
 // TODO: multi-thread Downloader implementation
 
@@ -21,7 +19,7 @@ pub const DEFAULT_CONTINUE_DOWNLOADING: bool = false;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to send message through the flume channel: {0}")]
-    FlumeSendError(String),
+    FlumeSendError(#[from] flume::SendError<((), u64, u64)>),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -41,7 +39,7 @@ pub struct Downloader {
 
 impl DownloaderExt for Downloader {
     type Error = Error;
-    type Updater = Updater;
+    type Updater = BasicUpdater<(), Error>;
 
     #[inline]
     fn new(uri: impl AsRef<str>) -> Self {
@@ -117,19 +115,8 @@ impl DownloaderExt for Downloader {
 
         let chunk_size = self.chunk_size;
 
-        let (updates_sender, updates_receiver) = flume::unbounded();
-
-        Ok(Updater {
-            worker_result: None,
-            updates_receiver,
-
-            current_progress: Cell::new(0), // TODO: downloaded content size
-            content_size_hint: Cell::new(response.size_hint()),
-
-            content_size: self.content_size()?,
-            // download_path: download_path.as_ref().to_path_buf(),
-
-            worker: Some(std::thread::spawn(move || -> Result<(), Self::Error> {
+        Ok(BasicUpdater::spawn(|updater| {
+            Box::new(move || -> Result<(), Self::Error> {
                 let mut buffer = vec![0; chunk_size];
                 let mut i = 0;
 
@@ -141,9 +128,9 @@ impl DownloaderExt for Downloader {
                     if i == chunk_size {
                         file.write_all(&buffer)?;
 
-                        if let Err(err) = updates_sender.send((i, response.size_hint())) {
-                            return Err(Error::FlumeSendError(err.to_string()));
-                        }
+                        let total = response.size_hint();
+
+                        updater.send(((), i as u64, total.1.unwrap_or(total.0) as u64))?;
 
                         i = 0;
                     }
@@ -151,100 +138,26 @@ impl DownloaderExt for Downloader {
 
                 file.write_all(&buffer[..i])?;
 
-                if let Err(err) = updates_sender.send((i, response.size_hint())) {
-                    return Err(Error::FlumeSendError(err.to_string()));
-                }
+                let total = response.size_hint();
+
+                updater.send(((), i as u64, total.1.unwrap_or(total.0) as u64))?;
 
                 Ok(())
-            }))
-        })
-    }
-}
+            })
+        }))
 
-pub struct Updater {
-    worker: Option<JoinHandle<Result<(), Error>>>,
-    worker_result: Option<Result<(), Error>>,
-    updates_receiver: flume::Receiver<(usize, (usize, Option<usize>))>,
+        // Ok(Updater {
+        //     worker_result: None,
+        //     updates_receiver,
 
-    current_progress: Cell<usize>,
-    content_size_hint: Cell<(usize, Option<usize>)>,
+        //     current_progress: Cell::new(0), // TODO: downloaded content size
+        //     content_size_hint: Cell::new(response.size_hint()),
 
-    content_size: Option<usize>,
-    // download_path: PathBuf
-}
+        //     content_size: self.content_size()?,
+        //     // download_path: download_path.as_ref().to_path_buf(),
 
-impl Updater {
-    fn update(&self) {
-        while let Ok((downloaded, content_size_hint)) = self.updates_receiver.try_recv() {
-            self.current_progress.set(self.current_progress.take() + downloaded);
-            self.content_size_hint.set(content_size_hint);
-        }
-    }
-}
-
-impl UpdaterExt for Updater {
-    type Error = Error;
-    type Status = bool;
-    type Result = ();
-
-    fn status(&mut self) -> Result<Self::Status, &Self::Error> {
-        self.update();
-
-        if let Some(worker) = self.worker.take() {
-            if !worker.is_finished() {
-                self.worker = Some(worker);
-
-                return Ok(false);
-            }
-
-            self.worker_result = Some(worker.join().expect("Failed to join downloader thread"));
-        }
-
-        match &self.worker_result {
-            Some(Ok(_)) => Ok(true),
-            Some(Err(err)) => Err(err),
-
-            None => unreachable!()
-        }
-    }
-
-    fn wait(mut self) -> Result<Self::Result, Self::Error> {
-        if let Some(worker) = self.worker.take() {
-            return worker.join().expect("Failed to join downloader thread");
-        }
-
-        else if let Some(result) = self.worker_result.take() {
-            return result;
-        }
-
-        unreachable!()
-    }
-
-    #[inline]
-    fn is_finished(&mut self) -> bool {
-        matches!(self.status(), Ok(true) | Err(_))
-    }
-
-    #[inline]
-    fn current(&self) -> u64 {
-        // self.download_path.exists()
-        //     .then(|| self.download_path.metadata()
-        //         .map(|metadata| metadata.len())
-        //         .unwrap_or(0))
-        //     .unwrap_or(0)
-
-        self.update();
-
-        self.current_progress.get() as u64
-    }
-
-    #[inline]
-    fn total(&self) -> u64 {
-        self.update();
-
-        let size_hint = self.content_size_hint.get();
-
-        self.content_size.unwrap_or(size_hint.1.unwrap_or(size_hint.0)) as u64
+        //     worker: Some(std::thread::spawn())
+        // })
     }
 }
 
@@ -288,7 +201,7 @@ mod tests {
         let mut updater = Downloader::new("https://github.com/doitsujin/dxvk/releases/download/v2.2/dxvk-2.2.tar.gz")
             .download("dxvk-2.2.tar.gz")?;
 
-        while let Ok(false) = updater.status() {
+        while updater.is_finished() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
 

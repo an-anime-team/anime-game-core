@@ -10,13 +10,23 @@ use super::Edition;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Variant {
-    Voiceover(String)
+    AudioEnglish,
+    AudioJapanese,
+    AudioKorean,
+    AudioChinese
 }
 
 impl From<VoiceoverSchema> for Variant {
     #[inline]
     fn from(value: VoiceoverSchema) -> Self {
-        Self::Voiceover(value.language)
+        match value.language.as_str() {
+            "en-us" => Self::AudioEnglish,
+            "ja-jp" => Self::AudioJapanese,
+            "ko-kr" => Self::AudioKorean,
+            "zh-cn" => Self::AudioChinese,
+
+            _ => unimplemented!()
+        }
     }
 }
 
@@ -38,14 +48,10 @@ impl ComponentExt for Component {
 
     fn is_installed(&self) -> bool {
         match &self.variant {
-            Variant::Voiceover(language) => match language.as_str() {
-                "en-us" => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/English(US)", self.edition.data_folder()))),
-                "ja-jp" => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/Japanese", self.edition.data_folder()))),
-                "zh-cn" => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/Chinese", self.edition.data_folder()))),
-                "ko-kr" => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/Korean", self.edition.data_folder()))),
-
-                _ => false
-            }
+            Variant::AudioEnglish  => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/English(US)", self.edition.data_folder()))),
+            Variant::AudioJapanese => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/Japanese", self.edition.data_folder()))),
+            Variant::AudioKorean   => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/Korean", self.edition.data_folder()))),
+            Variant::AudioChinese  => self.driver.exists(OsStr::new(&format!("{}/StreamingAssets/AudioAssets/Chinese", self.edition.data_folder())))
         }
     }
 
