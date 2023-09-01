@@ -14,6 +14,7 @@ use crate::game::version::{
 };
 
 use crate::network::api::ApiExt;
+use crate::updater::*;
 
 use super::Game;
 use super::Api;
@@ -26,6 +27,9 @@ pub enum Error {
     #[error("Failed to fetch data: {0}")]
     MinreqRef(#[from] &'static minreq::Error),
 
+    #[error("Failed to send message through the flume channel: {0}")]
+    FlumeSendError(#[from] flume::SendError<((), u64, u64)>),
+
     #[error("Failed to parse version: {0}")]
     VersionParseError(#[from] VersionError),
 
@@ -35,7 +39,7 @@ pub enum Error {
 
 impl VerifyIntegrityExt for Game {
     type Error = Error;
-    type Updater = BasicVerifierUpdater;
+    type Updater = BasicUpdater<(), Vec<PathBuf>, Error>;
 
     fn verify_files(&self) -> Result<Self::Updater, Self::Error> {
         let api = match Api::fetch(self.edition) {
@@ -69,27 +73,27 @@ impl VerifyIntegrityExt for Game {
             ))
             .collect::<HashMap<_, _>>();
 
-        Ok(BasicVerifierUpdater::new(self.get_driver(), files.keys().cloned().collect(), move |driver, file| {
-            let (file_size, file_hash) = &files[file];
+        let driver = self.get_driver();
 
-            if !driver.exists(file.as_os_str()) {
-                return Ok(false);
-            }
+        Ok(BasicUpdater::spawn(|updater| {
+            Box::new(move || {
+                let mut broken = Vec::new();
+                let total = files.len() as u64;
 
-            match driver.metadata(file.as_os_str()) {
-                Ok(metadata) => {
-                    if metadata.len() != *file_size {
-                        return Ok(false);
+                for (i, (file, (file_size, file_hash))) in files.into_iter().enumerate() {
+                    let verified = driver.exists(file.as_os_str()) &&
+                        driver.metadata(file.as_os_str())?.len() == file_size &&
+                        format!("{:x}", Md5::digest(driver.read(file.as_os_str())?)).to_ascii_lowercase() == file_hash;
+
+                    if !verified {
+                        broken.push(file);
                     }
 
-                    match driver.read(file.as_os_str()) {
-                        Ok(hash) => Ok(&format!("{:x}", Md5::digest(hash)).to_ascii_lowercase() == file_hash),
-                        Err(err) => Err(err.to_string())
-                    }
+                    updater.send(((), i as u64 + 1, total))?;
                 }
 
-                Err(err) => Err(err.to_string())
-            }
+                Ok(broken)
+            })
         }))
     }
 }
