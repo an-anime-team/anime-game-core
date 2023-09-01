@@ -1,5 +1,6 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, Arc};
 
 use serde::{Serialize, Deserialize};
 
@@ -24,6 +25,9 @@ use crate::network::downloader::basic::{
 
 use super::Game;
 use super::Api;
+
+/// Number of threads used to verify game files
+pub const VERIFY_THREADS_NUM: usize = 8;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -84,34 +88,64 @@ impl VerifyIntegrityExt for Game {
             pub fileSize: u64
         }
 
-        let files = minreq::get(format!("{decompressed_path}/pkg_version"))
+        let files = Arc::new(Mutex::new(minreq::get(format!("{decompressed_path}/pkg_version"))
             .send()?
             .as_str()?
             .lines()
             .flat_map(serde_json::from_str::<PkgVersionFile>)
-            .map(|file| (
-                PathBuf::from(file.remoteName),
-                (file.fileSize, file.md5.to_ascii_lowercase())
-            ))
-            .collect::<HashMap<_, _>>();
+            .collect::<Vec<_>>()));
 
         let driver = self.get_driver();
 
         Ok(BasicUpdater::spawn(|updater| {
             Box::new(move || {
+                let mut workers = Vec::new();
                 let mut broken = Vec::new();
-                let total = files.len() as u64;
 
-                for (i, (file, (file_size, file_hash))) in files.into_iter().enumerate() {
-                    let verified = driver.exists(file.as_os_str()) &&
-                        driver.metadata(file.as_os_str())?.len() == file_size &&
-                        format!("{:x}", Md5::digest(driver.read(file.as_os_str())?)).to_ascii_lowercase() == file_hash;
+                let current = Arc::new(AtomicU64::new(0));
+                let total = files.lock().unwrap().len() as u64;
 
-                    if !verified {
-                        broken.push(file);
-                    }
+                for i in 1..=VERIFY_THREADS_NUM {
+                    let driver = driver.clone();
+                    let updater = updater.clone();
 
-                    updater.send(((), i as u64 + 1, total))?;
+                    let current = current.clone();
+                    let files = files.clone();
+
+                    workers.push(std::thread::spawn(move || -> Result<Vec<PathBuf>, Error> {
+                        let mut broken = Vec::new();
+
+                        while let Ok(mut files) = files.try_lock() {
+                            let file = files.pop();
+
+                            // Drop mutex lock to allow other workers to access it
+                            drop(files);
+
+                            let Some(file) = file else {
+                                break;
+                            };
+
+                            tracing::trace!("[verifier {i}] Processing {:?}", file.remoteName);
+
+                            let path = PathBuf::from(file.remoteName);
+
+                            let verified = driver.exists(path.as_os_str()) &&
+                                driver.metadata(path.as_os_str())?.len() == file.fileSize &&
+                                format!("{:x}", Md5::digest(driver.read(path.as_os_str())?)).to_ascii_lowercase() == file.md5;
+
+                            if !verified {
+                                broken.push(path);
+                            }
+
+                            updater.send(((), current.fetch_add(1, Ordering::Relaxed), total))?;
+                        }
+
+                        Ok(broken)
+                    }));
+                }
+
+                for worker in workers {
+                    broken.append(&mut worker.join().expect("Failed to join worker thread")?);
                 }
 
                 Ok(broken)
