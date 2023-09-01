@@ -35,23 +35,25 @@ pub enum Status<T: std::fmt::Debug + Clone + Copy> {
     Finished
 }
 
-pub struct BasicUpdater<T: std::fmt::Debug + Clone + Copy, Err> {
+#[derive(Debug)]
+pub struct BasicUpdater<T: std::fmt::Debug + Clone + Copy, Output, Err> {
     status: Cell<Status<T>>,
     current: Cell<u64>,
     total: Cell<u64>,
 
-    worker: Option<JoinHandle<Result<(), Err>>>,
-    worker_result: Option<Result<(), Err>>,
+    worker: Option<JoinHandle<Result<Output, Err>>>,
+    worker_result: Option<Result<Output, Err>>,
 
     updater: flume::Receiver<(T, u64, u64)>
 }
 
-impl<T, Err> BasicUpdater<T, Err>
+impl<T, Output, Err> BasicUpdater<T, Output, Err>
 where
     T: std::fmt::Debug + Clone + Copy + PartialEq + Eq,
+    Output: Send + 'static,
     Err: Send + 'static
 {
-    pub fn spawn(spawn_worker: impl FnOnce(flume::Sender<(T, u64, u64)>) -> Box<dyn FnOnce() -> Result<(), Err> + Send>) -> Self {
+    pub fn spawn(spawn_worker: impl FnOnce(flume::Sender<(T, u64, u64)>) -> Box<dyn FnOnce() -> Result<Output, Err> + Send>) -> Self {
         let (sender, receiver) = flume::unbounded();
 
         Self {
@@ -77,14 +79,15 @@ where
     }
 }
 
-impl<T, Err> UpdaterExt for BasicUpdater<T, Err>
+impl<T, Output, Err> UpdaterExt for BasicUpdater<T, Output, Err>
 where
     T: std::fmt::Debug + Clone + Copy + PartialEq + Eq,
+    Output: Send + 'static,
     Err: Send + 'static
 {
     type Error = Err;
     type Status = Status<T>;
-    type Result = ();
+    type Result = Output;
 
     fn status(&mut self) -> Result<Self::Status, &Self::Error> {
         self.update();
@@ -138,5 +141,12 @@ where
         self.update();
 
         self.total.get()
+    }
+
+    #[inline]
+    fn progress(&self) -> f64 {
+        self.update();
+
+        self.current.get() as f64 / self.total.get() as f64
     }
 }

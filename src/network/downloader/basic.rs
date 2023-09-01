@@ -39,7 +39,7 @@ pub struct Downloader {
 
 impl DownloaderExt for Downloader {
     type Error = Error;
-    type Updater = BasicUpdater<(), Error>;
+    type Updater = BasicUpdater<(), (), Error>;
 
     #[inline]
     fn new(uri: impl AsRef<str>) -> Self {

@@ -61,7 +61,7 @@ pub enum Status {
 }
 
 impl DiffExt for Diff {
-    type Updater = BasicUpdater<Status, Error>;
+    type Updater = BasicUpdater<Status, (), Error>;
 
     #[inline]
     fn is_installable(&self) -> bool {
