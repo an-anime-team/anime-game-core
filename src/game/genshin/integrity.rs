@@ -56,9 +56,12 @@ pub enum RepairerStatus {
     FinishingTransition
 }
 
+pub type VerifyUpdater = BasicUpdater<(), Vec<PathBuf>, Error>;
+pub type RepairUpdater = BasicUpdater<RepairerStatus, (), Error>;
+
 impl VerifyIntegrityExt for Game {
     type Error = Error;
-    type Updater = BasicUpdater<(), Vec<PathBuf>, Error>;
+    type Updater = VerifyUpdater;
 
     fn verify_files(&self) -> Result<Self::Updater, Self::Error> {
         let api = match Api::fetch(self.edition) {
@@ -119,7 +122,7 @@ impl VerifyIntegrityExt for Game {
 
 impl RepairFilesExt for Game {
     type Error = Error;
-    type Updater = BasicUpdater<RepairerStatus, (), Error>;
+    type Updater = RepairUpdater;
 
     fn repair_files(&self, files: impl AsRef<[PathBuf]>) -> Result<Self::Updater, Self::Error> {
         let api = match Api::fetch(self.edition) {

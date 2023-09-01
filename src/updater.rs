@@ -35,6 +35,23 @@ pub enum Status<T: std::fmt::Debug + Clone + Copy> {
     Finished
 }
 
+impl<T: std::fmt::Debug + Clone + Copy + PartialEq + Eq> Status<T> {
+    #[inline]
+    pub fn is_pending(&self) -> bool {
+        self == &Self::Pending
+    }
+
+    #[inline]
+    pub fn is_working(&self) -> bool {
+        matches!(self, Self::Working(_))
+    }
+
+    #[inline]
+    pub fn is_finished(&self) -> bool {
+        self == &Self::Finished
+    }
+}
+
 #[derive(Debug)]
 pub struct BasicUpdater<T: std::fmt::Debug + Clone + Copy, Output, Err> {
     status: Cell<Status<T>>,

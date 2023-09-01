@@ -56,8 +56,7 @@ pub enum Status {
     FinishingTransition,
     RunPostTransitionCode,
     ApplyingHdiffPatches,
-    DeletingObsoleteFiles,
-    Finished
+    DeletingObsoleteFiles
 }
 
 impl DiffExt for Diff {
@@ -165,10 +164,6 @@ impl DiffExt for Diff {
 
                     result.expect("Failed to send flume message from the transition code updater");
                 })?;
-
-                // Finish diff
-
-                sender.send((Status::Finished, 0, 1))?;
 
                 Ok(())
             })
