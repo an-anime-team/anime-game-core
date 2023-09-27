@@ -356,7 +356,7 @@ impl VoicePackage {
                             return Ok(VersionDiff::Predownload {
                                 current,
                                 latest: Version::from_str(predownload.latest.version).unwrap(),
-                                url: diff.path,
+                                uri: diff.path,
 
                                 downloaded_size: diff.size.parse::<u64>().unwrap(),
                                 unpacked_size: diff.package_size.parse::<u64>().unwrap(),
@@ -399,7 +399,7 @@ impl VoicePackage {
                         return Ok(VersionDiff::Diff {
                             current,
                             latest: Version::from_str(response.data.game.latest.version).unwrap(),
-                            url: diff.path,
+                            uri: diff.path,
 
                             downloaded_size: diff.size.parse::<u64>().unwrap(),
                             unpacked_size: diff.package_size.parse::<u64>().unwrap(),
@@ -440,7 +440,7 @@ impl VoicePackage {
 
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(response.data.game.latest.version).unwrap(),
-                url: latest.path,
+                segments_uris: vec![latest.path],
 
                 downloaded_size: latest.size.parse::<u64>().unwrap(),
                 unpacked_size: latest.package_size.parse::<u64>().unwrap(),

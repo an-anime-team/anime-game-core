@@ -65,7 +65,8 @@ pub enum Archive {
     TarXz(PathBuf, TarArchive<XzReader<File>>),
     TarGz(PathBuf, TarArchive<GzReader<File>>),
     TarBz2(PathBuf, TarArchive<Bz2Reader<File>>),
-    SevenZ(PathBuf/*, SevenzArchive<File>*/)
+    SevenZ(PathBuf/*, SevenzArchive<File>*/),
+    ZipMultipart(PathBuf)
 }
 
 impl Archive {
@@ -92,11 +93,15 @@ impl Archive {
         }
 
         else if &path_str[path_str.len() - 3..] == ".7z" {
-            Ok(Archive::SevenZ(path.clone()/*, SevenzArchive::open(path, &[])?*/))
+            Ok(Archive::SevenZ(path/*, SevenzArchive::open(path, &[])?*/))
         }
 
         else if &path_str[path_str.len() - 4..] == ".tar" {
             Ok(Archive::Tar(path, TarArchive::new(file)))
+        }
+
+        else if &path_str[path_str.len() - 8..] == ".zip.001" || &path_str[path_str.len() - 7..] == ".7z.001" || &path_str[path_str.len() - 4..] == ".z01" {
+            Ok(Archive::ZipMultipart(path))
         }
 
         else {
@@ -168,7 +173,8 @@ impl Archive {
             }
 
             #[allow(unused_must_use)]
-            Archive::SevenZ(path) => {
+            Archive::SevenZ(path) |
+            Archive::ZipMultipart(path) => {
                 /*let (send, recv) = std::sync::mpsc::channel();
 
                 sz.for_each_entries(move |entry, _| {
@@ -258,7 +264,8 @@ impl Archive {
                 tar.unpack(folder)?;
             }
 
-            Archive::SevenZ(archive) => {
+            Archive::SevenZ(archive) |
+            Archive::ZipMultipart(archive) => {
                 // sevenz_rust::decompress_file(archive, folder.into())?;
 
                 // Workaround to allow 7z to overwrite files

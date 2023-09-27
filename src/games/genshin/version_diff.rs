@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::os::unix::prelude::PermissionsExt;
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -12,11 +13,9 @@ use crate::traits::version_diff::VersionDiffExt;
 use crate::{
     installer::{
         downloader::{Downloader, DownloadingError},
-        installer::{
-            Installer,
-            Update as InstallerUpdate
-        },
-        free_space
+        installer::Update as InstallerUpdate,
+        free_space,
+        archives::Archive
     },
     external::hpatchz
 };
@@ -54,6 +53,10 @@ pub enum DiffDownloadingError {
     #[error("Components version is too outdated and can't be updated")]
     Outdated,
 
+    /// When there's multiple urls and you can't save them as a single file
+    #[error("Component has multiple downloading urls and can't be saved as a single file")]
+    MultipleSegments,
+
     /// Failed to fetch remove data. Redirected from `Downloader`
     #[error("{0}")]
     DownloadingError(#[from] DownloadingError),
@@ -90,7 +93,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        url: String,
+        uri: String,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -113,7 +116,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        url: String,
+        uri: String,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -141,7 +144,7 @@ pub enum VersionDiff {
     /// Component is not yet installed
     NotInstalled {
         latest: Version,
-        url: String,
+        segments_uris: Vec<String>,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -307,9 +310,11 @@ impl VersionDiffExt for VersionDiff {
             Self::Outdated { .. } => None,
 
             // Can be installed
-            Self::Predownload { url, .. } |
-            Self::Diff { url, .. } |
-            Self::NotInstalled { url, .. } => Some(url.to_owned())
+            Self::Predownload { uri, .. } |
+            Self::Diff { uri, .. } => Some(uri.to_owned()),
+
+            // Can be installed but amogus
+            Self::NotInstalled { .. } => None
         }
     }
 
@@ -322,9 +327,11 @@ impl VersionDiffExt for VersionDiff {
             Self::Outdated { .. } => return Err(Self::Error::Outdated),
 
             // Can be downloaded
-            Self::Predownload { url, .. } |
-            Self::Diff { url, .. } |
-            Self::NotInstalled { url, .. } => url
+            Self::Predownload { uri, .. } |
+            Self::Diff { uri, .. } => uri,
+
+            // Can be installed but amogus
+            Self::NotInstalled { .. } => return Err(Self::Error::MultipleSegments)
         })?;
 
         if let Err(err) = downloader.download(path.as_ref(), progress) {
@@ -339,38 +346,35 @@ impl VersionDiffExt for VersionDiff {
     fn install_to(&self, path: impl AsRef<Path>, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error> {
         tracing::debug!("Installing version difference");
 
-        match self {
-            // Can't be downloaded
+        let uris = match self {
+            // Can't be installed
             Self::Latest { .. } => return Err(Self::Error::AlreadyLatest),
             Self::Outdated { .. } => return Err(Self::Error::Outdated),
 
-            _ => ()
-        }
+            // Can be installed
+            Self::Predownload { uri, .. } |
+            Self::Diff { uri, .. } => vec![uri.to_owned()],
 
-        let path = path.as_ref();
+            Self::NotInstalled { segments_uris, .. } => segments_uris.to_owned()
+        };
 
-        let url = self.downloading_uri().expect("Failed to retreive downloading url");
+        let path = path.as_ref().to_path_buf();
+        let temp_folder = self.temp_folder();
+
         let downloaded_size = self.downloaded_size().expect("Failed to retreive downloaded size");
         let unpacked_size = self.unpacked_size().expect("Failed to retreive unpacked size");
 
-        let mut installer = Installer::new(url)?
-            // Set custom temp folder location
-            .with_temp_folder(self.temp_folder())
-
-            // Don't perform space checks in the Installer because we're doing it here
-            .with_free_space_check(false);
-
-        (updater)(DiffUpdate::CheckingFreeSpace(installer.temp_folder.to_path_buf()));
+        (updater)(DiffUpdate::CheckingFreeSpace(temp_folder.clone()));
 
         // Check available free space for archive itself
-        let Some(space) = free_space::available(&installer.temp_folder) else {
-            tracing::error!("Path is not mounted: {:?}", installer.temp_folder);
+        let Some(space) = free_space::available(&temp_folder) else {
+            tracing::error!("Path is not mounted: {:?}", temp_folder);
 
-            return Err(DownloadingError::PathNotMounted(installer.temp_folder).into());
+            return Err(DownloadingError::PathNotMounted(temp_folder).into());
         };
 
         // We can possibly store downloaded archive + unpacked data on the same disk
-        let required = if free_space::is_same_disk(&installer.temp_folder, path) {
+        let required = if free_space::is_same_disk(&temp_folder, &path) {
             downloaded_size + unpacked_size
         } else {
             downloaded_size
@@ -379,10 +383,10 @@ impl VersionDiffExt for VersionDiff {
         if space < required {
             tracing::error!("No free space available in the temp folder. Required: {required}. Available: {space}");
 
-            return Err(DownloadingError::NoSpaceAvailable(installer.temp_folder, required, space).into());
+            return Err(DownloadingError::NoSpaceAvailable(temp_folder, required, space).into());
         }
 
-        (updater)(DiffUpdate::CheckingFreeSpace(path.to_path_buf()));
+        (updater)(DiffUpdate::CheckingFreeSpace(path.clone()));
 
         // Check available free space for unpacked archvie data
         let Some(space) = free_space::available(&path) else {
@@ -392,7 +396,7 @@ impl VersionDiffExt for VersionDiff {
         };
 
         // We can possibly store downloaded archive + unpacked data on the same disk
-        let required = if free_space::is_same_disk(&path, &installer.temp_folder) {
+        let required = if free_space::is_same_disk(&path, &temp_folder) {
             unpacked_size + downloaded_size
         } else {
             unpacked_size
@@ -404,17 +408,152 @@ impl VersionDiffExt for VersionDiff {
             return Err(DownloadingError::NoSpaceAvailable(path.to_path_buf(), required, space).into());
         }
 
-        // Install data
-        let installer_updater = updater.clone();
+        let mut current_downloaded = 0;
+        let mut segments_names = Vec::new();
 
-        installer.install(path, move |update| (installer_updater)(update.into()));
+        // Imitate Installer update message
+        (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingStarted(temp_folder.to_path_buf())));
+
+        // Download segments
+        for uri in uris {
+            let installer_updater = updater.clone();
+
+            let mut downloader = Downloader::new(uri)?
+                // Don't perform space checks because we've already done it
+                .with_free_space_check(false);
+
+            let local_total = downloader.length().unwrap();
+
+            segments_names.push(downloader.get_filename().to_string());
+
+            // Download segment
+            downloader.download(&temp_folder, move |current, _| {
+                installer_updater(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingProgress(
+                    current_downloaded + current,
+                    downloaded_size
+                )));
+            })?;
+
+            current_downloaded += local_total;
+        }
+
+        let first_segment_name = segments_names[0].clone();
+
+        // Imitate Installer update message
+        (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingFinished));
+        (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingStarted(path.to_path_buf())));
+
+        // Extract downloaded segments
+        // Ctrl+C / Ctrl+V from the Installer. Not a good approach,
+        // but current core library is somehow legacy as I already started work
+        // on a full rewrite so this code won't stay here for always
+        match Archive::open(temp_folder.join(&first_segment_name)) {
+            Ok(mut archive) => {
+                // Temporary workaround as we can't get archive extraction process
+                // directly - we'll spawn it in another thread and check this archive entries appearence in the filesystem
+                let mut total = 0;
+
+                let entries = archive
+                    .get_entries()
+                    .expect("Failed to get archive entries");
+
+                for entry in &entries {
+                    total += entry.size.get_size();
+
+                    let path = path.join(&entry.name);
+
+                    // Failed to change permissions => likely patch-related file and was made by the sudo, so root
+                    #[allow(unused_must_use)]
+                    if let Err(_) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)) {
+                        // For weird reason we can delete files made by root, but can't modify their permissions
+                        // We're not checking its result because if it's error - then it's either couldn't be removed (which is not the case)
+                        // or the file doesn't exist, which we obviously can just ignore
+                        std::fs::remove_file(&path);
+                    }
+                }
+
+                tracing::trace!("Extracting archive");
+
+                let unpacking_path = path.clone();
+                let unpacking_updater = updater.clone();
+
+                let handle_2 = std::thread::spawn(move || {
+                    let mut entries = entries.into_iter()
+                        .map(|entry| (unpacking_path.join(&entry.name), entry.size.get_size(), true))
+                        .collect::<Vec<_>>();
+
+                    let mut unpacked = 0;
+
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_millis(250));
+
+                        let mut empty = true;
+
+                        for (path, size, remained) in &mut entries {
+                            if *remained {
+                                empty = false;
+
+                                if std::path::Path::new(path).exists() {
+                                    *remained = false;
+
+                                    unpacked += *size;
+                                }
+                            }
+                        }
+
+                        (unpacking_updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingProgress(unpacked, total)));
+
+                        if empty {
+                            break;
+                        }
+                    }
+                });
+
+                let unpacking_updater = updater.clone();
+                let extract_to = path.clone();
+
+                // Run archive extraction in another thread to not to freeze the current one
+                let handle_1 = std::thread::spawn(move || {
+                    (unpacking_updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingStarted(extract_to.clone())));
+
+                    // We have to create new instance of Archive here
+                    // because otherwise it may not work after get_entries method call
+                    match Archive::open(temp_folder.join(first_segment_name)) {
+                        Ok(mut archive) => match archive.extract(&extract_to) {
+                            Ok(_) => {
+                                // TODO error handling
+                                #[allow(unused_must_use)] {
+                                    for name in segments_names {
+                                        std::fs::remove_file(temp_folder.join(name));
+                                    }
+                                }
+
+                                (unpacking_updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingFinished));
+                            }
+
+                            Err(err) => (unpacking_updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingError(err.to_string())))
+                        }
+
+                        Err(err) => (unpacking_updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingError(err.to_string())))
+                    }
+                });
+
+                handle_1.join().unwrap();
+                handle_2.join().unwrap();
+            }
+
+            Err(err) => (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingError(err.to_string())))
+        }
+
+        // Imitate Installer update message
+        (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingFinished));
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
         // why he should re-download entire game update because something is failed
         #[allow(unused_must_use)] {
             let version_path = self.version_file_path()
-                .unwrap_or_else(|| path.join(".version"));
+                .unwrap_or(path.join(".version"));
 
             std::fs::write(version_path, self.latest().version);
         }

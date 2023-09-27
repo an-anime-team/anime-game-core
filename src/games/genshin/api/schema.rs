@@ -14,14 +14,7 @@ pub struct Response {
 pub struct Data {
     pub web_url: String,
     pub game: Game,
-    pub pre_download_game: Option<Game>,
-
-    // We're not talking about it here
-
-    // pub deprecated_packages,
-    // pub plugin: Plugin,
-    // pub force_update,
-    // pub sdk
+    pub pre_download_game: Option<Game>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
