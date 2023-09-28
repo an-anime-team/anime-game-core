@@ -53,7 +53,7 @@ impl GameExt for Game {
         tracing::debug!("Trying to get installed game version");
 
         fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
-            bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - '0' as u8))
+            bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
         }
 
         let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
@@ -65,43 +65,41 @@ impl GameExt for Game {
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes().skip(4000).take(10000) {
-            if let Ok(byte) = byte {
-                match byte {
-                    0 => {
-                        version = [vec![], vec![], vec![]];
-                        version_ptr = 0;
-                        correct = true;
-                    }
+        for byte in file.bytes().skip(4000).take(10000).flatten() {
+            match byte {
+                0 => {
+                    version = [vec![], vec![], vec![]];
+                    version_ptr = 0;
+                    correct = true;
+                }
 
-                    46 => {
-                        version_ptr += 1;
+                46 => {
+                    version_ptr += 1;
 
-                        if version_ptr > 2 {
-                            correct = false;
-                        }
-                    }
-
-                    95 => {
-                        if correct && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
-                            return Ok(Version::new(
-                                bytes_to_num(&version[0]),
-                                bytes_to_num(&version[1]),
-                                bytes_to_num(&version[2])
-                            ))
-                        }
-
+                    if version_ptr > 2 {
                         correct = false;
                     }
+                }
 
-                    _ => {
-                        if correct && allowed.contains(&byte) {
-                            version[version_ptr].push(byte);
-                        }
+                95 => {
+                    if correct && !version[0].is_empty() && !version[1].is_empty() && !version[2].is_empty() {
+                        return Ok(Version::new(
+                            bytes_to_num(&version[0]),
+                            bytes_to_num(&version[1]),
+                            bytes_to_num(&version[2])
+                        ))
+                    }
 
-                        else {
-                            correct = false;
-                        }
+                    correct = false;
+                }
+
+                _ => {
+                    if correct && allowed.contains(&byte) {
+                        version[version_ptr].push(byte);
+                    }
+
+                    else {
+                        correct = false;
                     }
                 }
             }
