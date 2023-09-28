@@ -423,16 +423,17 @@ impl VersionDiffExt for VersionDiff {
                 .with_free_space_check(false);
 
             let local_total = downloader.length().unwrap();
-
-            segments_names.push(downloader.get_filename().to_string());
+            let segment_name = downloader.get_filename().to_string();
 
             // Download segment
-            downloader.download(&temp_folder, move |current, _| {
+            downloader.download(temp_folder.join(&segment_name), move |current, _| {
                 installer_updater(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingProgress(
                     current_downloaded + current,
                     downloaded_size
                 )));
             })?;
+
+            segments_names.push(segment_name);
 
             current_downloaded += local_total;
         }
