@@ -129,46 +129,38 @@ impl Archive {
             }
 
             Archive::Tar(_, tar) => {
-                for entry in tar.entries()? {
-                    if let Ok(entry) = entry {
-                        entries.push(Entry {
-                            name: entry.path()?.to_str().unwrap().to_string(),
-                            size: Size::Compressed(entry.size())
-                        });
-                    }
+                for entry in tar.entries()?.flatten() {
+                    entries.push(Entry {
+                        name: entry.path()?.to_str().unwrap().to_string(),
+                        size: Size::Compressed(entry.size())
+                    });
                 }
             }
 
             Archive::TarXz(_, tar) => {
-                for entry in tar.entries()? {
-                    if let Ok(entry) = entry {
-                        entries.push(Entry {
-                            name: entry.path()?.to_str().unwrap().to_string(),
-                            size: Size::Compressed(entry.size())
-                        });
-                    }
+                for entry in tar.entries()?.flatten() {
+                    entries.push(Entry {
+                        name: entry.path()?.to_str().unwrap().to_string(),
+                        size: Size::Compressed(entry.size())
+                    });
                 }
             }
 
             Archive::TarGz(_, tar) => {
-                for entry in tar.entries()? {
-                    if let Ok(entry) = entry {
-                        entries.push(Entry {
-                            name: entry.path()?.to_str().unwrap().to_string(),
-                            size: Size::Compressed(entry.size())
-                        });
-                    }
+                for entry in tar.entries()?.flatten() {
+                    entries.push(Entry {
+                        name: entry.path()?.to_str().unwrap().to_string(),
+                        size: Size::Compressed(entry.size())
+                    });
                 }
             }
 
             Archive::TarBz2(_, tar) => {
-                for entry in tar.entries()? {
-                    if let Ok(entry) = entry {
-                        entries.push(Entry {
-                            name: entry.path()?.to_str().unwrap().to_string(),
-                            size: Size::Compressed(entry.size())
-                        });
-                    }
+                for entry in tar.entries()?.flatten() {
+                    entries.push(Entry {
+                        name: entry.path()?.to_str().unwrap().to_string(),
+                        size: Size::Compressed(entry.size())
+                    });
                 }
             }
 

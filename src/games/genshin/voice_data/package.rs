@@ -20,6 +20,7 @@ use crate::genshin::version_diff::*;
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English(US)   Japanese      Korean        Chinese
+    ("4.1.0",  13889855947,  15500986871,  11635183963,  11885602119),
     ("4.0.0",  13109710863,  14592012075,  10979621411,  11224640167),
     ("3.8.0",  12220820203,  13571842139,  10221829179,  10441921175),
     ("3.7.0",  11778060451,  13044149443,  9857960459,   10075853323),
@@ -31,15 +32,15 @@ pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
 ];
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
-pub fn get_voice_pack_sizes(locale: VoiceLocale) -> Vec<(String, u64)> {
-    VOICE_PACKAGES_SIZES.into_iter().map(|item| {
+pub fn get_voice_pack_sizes<'a>(locale: VoiceLocale) -> Vec<(&'a str, u64)> {
+    VOICE_PACKAGES_SIZES.iter().map(|item| {
         match locale {
-            VoiceLocale::English  => (item.0.to_string(), item.1),
-            VoiceLocale::Japanese => (item.0.to_string(), item.2),
-            VoiceLocale::Korean   => (item.0.to_string(), item.3),
-            VoiceLocale::Chinese  => (item.0.to_string(), item.4)
+            VoiceLocale::English  => (item.0, item.1),
+            VoiceLocale::Japanese => (item.0, item.2),
+            VoiceLocale::Korean   => (item.0, item.3),
+            VoiceLocale::Chinese  => (item.0, item.4)
         }
-    }).collect::<Vec<(String, u64)>>()
+    }).collect()
 }
 
 /// Predict next value of slice using WMA
@@ -250,7 +251,7 @@ impl VoicePackage {
                         if VOICE_PACKAGES_SIZES[0].0 != response.data.game.latest.version {
                             let mut t = voice_packages_sizes;
 
-                            voice_packages_sizes = vec![(response.data.game.latest.version.clone(), predict_new_voice_pack_size(*locale))];
+                            voice_packages_sizes = vec![(&response.data.game.latest.version, predict_new_voice_pack_size(*locale))];
                             voice_packages_sizes.append(&mut t);
                         }
 

@@ -361,8 +361,8 @@ impl VersionDiffExt for VersionDiff {
         let path = path.as_ref().to_path_buf();
         let temp_folder = self.temp_folder();
 
-        let downloaded_size = self.downloaded_size().expect("Failed to retreive downloaded size");
-        let unpacked_size = self.unpacked_size().expect("Failed to retreive unpacked size");
+        let downloaded_size = self.downloaded_size().expect("Failed to retrieve downloaded size");
+        let unpacked_size = self.unpacked_size().expect("Failed to retrieve unpacked size");
 
         (updater)(DiffUpdate::CheckingFreeSpace(temp_folder.clone()));
 
@@ -388,7 +388,7 @@ impl VersionDiffExt for VersionDiff {
 
         (updater)(DiffUpdate::CheckingFreeSpace(path.clone()));
 
-        // Check available free space for unpacked archvie data
+        // Check available free space for unpacked archive data
         let Some(space) = free_space::available(&path) else {
             tracing::error!("Path is not mounted: {:?}", &path);
 
@@ -451,7 +451,7 @@ impl VersionDiffExt for VersionDiff {
         match Archive::open(temp_folder.join(&first_segment_name)) {
             Ok(mut archive) => {
                 // Temporary workaround as we can't get archive extraction process
-                // directly - we'll spawn it in another thread and check this archive entries appearence in the filesystem
+                // directly - we'll spawn it in another thread and check this archive entries appearance in the filesystem
                 let mut total = 0;
 
                 let entries = archive
@@ -465,7 +465,7 @@ impl VersionDiffExt for VersionDiff {
 
                     // Failed to change permissions => likely patch-related file and was made by the sudo, so root
                     #[allow(unused_must_use)]
-                    if let Err(_) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)) {
+                    if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)).is_err() {
                         // For weird reason we can delete files made by root, but can't modify their permissions
                         // We're not checking its result because if it's error - then it's either couldn't be removed (which is not the case)
                         // or the file doesn't exist, which we obviously can just ignore
