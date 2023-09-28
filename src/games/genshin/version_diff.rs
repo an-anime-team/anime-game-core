@@ -427,7 +427,7 @@ impl VersionDiffExt for VersionDiff {
 
             // Download segment
             downloader.download(temp_folder.join(&segment_name), move |current, _| {
-                installer_updater(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingProgress(
+                (installer_updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingProgress(
                     current_downloaded + current,
                     downloaded_size
                 )));
@@ -438,11 +438,13 @@ impl VersionDiffExt for VersionDiff {
             current_downloaded += local_total;
         }
 
+        // Report 100% download progress (just in case)
+        (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingProgress(downloaded_size, downloaded_size)));
+
         let first_segment_name = segments_names[0].clone();
 
         // Imitate Installer update message
         (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::DownloadingFinished));
-        (updater)(DiffUpdate::InstallerUpdate(InstallerUpdate::UnpackingStarted(path.to_path_buf())));
 
         // Extract downloaded segments
         // Ctrl+C / Ctrl+V from the Installer. Not a good approach,

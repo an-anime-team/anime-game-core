@@ -195,10 +195,25 @@ impl Archive {
                 let output = String::from_utf8(output.stdout)?;
 
                 let output = output.split("-------------------").collect::<Vec<&str>>();
-                let output = output[1..output.len() - 1].join("-------------------");
+                let mut output = output[1..output.len() - 1].join("-------------------");
 
-                for line in output.split("\n").collect::<Vec<&str>>() {
-                    if &line[..1] != "-" && &line[..2] != " -" {
+                // In some cases 7z can report two ending sequences instead of one:
+                //
+                // ```
+                // ------------------- ----- ------------ ------------  ------------------------
+                // 2023-09-15 10:20:44        66677218871  65387995385  13810 files, 81 folders
+                //
+                // ------------------- ----- ------------ ------------  ------------------------
+                // 2023-09-15 10:20:44        66677218871  65387995385  13810 files, 81 folders
+                // ```
+                //
+                // This should filter this case
+                if let Some((files_list, _)) = output.split_once("\n-------------------") {
+                    output = files_list.to_string();
+                }
+
+                for line in output.split('\n').collect::<Vec<&str>>() {
+                    if !line.starts_with('-') && !line.starts_with(" -") {
                         let words = line.split("  ").filter_map(|word| {
                             let word = word.trim();
 
