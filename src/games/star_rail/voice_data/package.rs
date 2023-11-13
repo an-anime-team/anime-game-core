@@ -67,14 +67,11 @@ pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
 
 /// Find voice package with specified locale from list of packages
 fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
-    for pack in list.clone() {
+    for pack in list {
         if pack.language == locale.to_code() {
             return pack;
         }
     }
-
-    dbg!(list);
-    dbg!(locale);
 
     // We're sure that all possible voice packages are listed in VoiceLocale... right?
     unreachable!();

@@ -28,7 +28,5 @@ pub fn request(game_edition: GameEdition) -> anyhow::Result<schema::Response> {
         }
     }
 
-    dbg!(&response);
-
     Ok(response)
 }
