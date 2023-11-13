@@ -20,8 +20,12 @@ use crate::star_rail::version_diff::*;
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English      Japanese     Korean       Chinese(PRC)
-    ("1.5.0",  3687361218,  4010902216,  3163234352,  3125345534)
+    ("1.5.0",  3687361218,  4010902216,  3163234352,  3125345534),
+    ("1.4.0",  3223823082,  3520849103,  2743964291,  2720183255)
 ];
+
+/// Acceptable error to select a version for the voiceover folder
+pub const VOICE_PACKAGE_THRESHOLD: u64 = 250 * 1024 * 1024; // 250 MB
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
 pub fn get_voice_pack_sizes<'a>(locale: VoiceLocale) -> Vec<(&'a str, u64)> {
@@ -63,11 +67,14 @@ pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
 
 /// Find voice package with specified locale from list of packages
 fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
-    for pack in list {
+    for pack in list.clone() {
         if pack.language == locale.to_code() {
             return pack;
         }
     }
+
+    dbg!(list);
+    dbg!(locale);
 
     // We're sure that all possible voice packages are listed in VoiceLocale... right?
     unreachable!();
@@ -250,7 +257,7 @@ impl VoicePackage {
                         // To predict voice package version we're going through saved voice packages sizes in the `VOICE_PACKAGES_SIZES` constant
                         // plus predicted voice packages sizes if needed. The version with closest folder size is version we have installed
                         for (version, size) in voice_packages_sizes {
-                            if package_size > size - 512 * 1024 * 1024 {
+                            if package_size > size - VOICE_PACKAGE_THRESHOLD {
                                 tracing::debug!("Predicted version: {version}");
 
                                 return Ok(Version::from_str(version).unwrap());
@@ -315,9 +322,7 @@ impl VoicePackage {
 
         tracing::debug!("Deleting {} voice package", locale.to_code());
 
-        // Audio_<locale folder>_pkg_version
         std::fs::remove_dir_all(get_voice_package_path(&game_path, self.game_edition(), locale))?;
-        std::fs::remove_file(game_path.join(format!("Audio_{}_pkg_version", locale.to_folder())))?;
 
         Ok(())
     }

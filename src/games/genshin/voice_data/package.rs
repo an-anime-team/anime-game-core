@@ -32,6 +32,9 @@ pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     ("3.2.0",  8636001252,   9600770928,   7416414724,   7563358032)
 ];
 
+/// Acceptable error to select a version for the voiceover folder
+pub const VOICE_PACKAGE_THRESHOLD: u64 = 250 * 1024 * 1024; // 250 MB
+
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
 pub fn get_voice_pack_sizes<'a>(locale: VoiceLocale) -> Vec<(&'a str, u64)> {
     VOICE_PACKAGES_SIZES.iter().map(|item| {
@@ -259,7 +262,7 @@ impl VoicePackage {
                         // To predict voice package version we're going through saved voice packages sizes in the `VOICE_PACKAGES_SIZES` constant
                         // plus predicted voice packages sizes if needed. The version with closest folder size is version we have installed
                         for (version, size) in voice_packages_sizes {
-                            if package_size > size - 512 * 1024 * 1024 {
+                            if package_size > size - VOICE_PACKAGE_THRESHOLD {
                                 tracing::debug!("Predicted version: {version}");
 
                                 return Ok(Version::from_str(version).unwrap());
@@ -286,7 +289,7 @@ impl VoicePackage {
             VoicePackage::Installed { path, .. } => {
                 let mut game_path = path.clone();
 
-                for _ in 0..6 {
+                for _ in 0..4 {
                     game_path = match game_path.parent() {
                         Some(game_path) => game_path.into(),
                         None => {
