@@ -90,7 +90,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        url: String,
+        uri: String,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -113,7 +113,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        url: String,
+        uri: String,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -141,7 +141,7 @@ pub enum VersionDiff {
     /// Component is not yet installed
     NotInstalled {
         latest: Version,
-        url: String,
+        uri: String,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -307,9 +307,9 @@ impl VersionDiffExt for VersionDiff {
             Self::Outdated { .. } => None,
 
             // Can be installed
-            Self::Predownload { url, .. } |
-            Self::Diff { url, .. } |
-            Self::NotInstalled { url, .. } => Some(url.to_owned())
+            Self::Predownload { uri, .. } |
+            Self::Diff { uri, .. } |
+            Self::NotInstalled { uri, .. } => Some(uri.to_owned())
         }
     }
 
@@ -322,9 +322,9 @@ impl VersionDiffExt for VersionDiff {
             Self::Outdated { .. } => return Err(Self::Error::Outdated),
 
             // Can be downloaded
-            Self::Predownload { url, .. } |
-            Self::Diff { url, .. } |
-            Self::NotInstalled { url, .. } => url
+            Self::Predownload { uri, .. } |
+            Self::Diff { uri, .. } |
+            Self::NotInstalled { uri, .. } => uri
         })?;
 
         if let Err(err) = downloader.download(path.as_ref(), progress) {

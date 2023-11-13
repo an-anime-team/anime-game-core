@@ -1,4 +1,8 @@
+use std::path::{Path, PathBuf};
+
 use serde::{Serialize, Deserialize};
+
+use super::voice_data::locale::VoiceLocale;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameEdition {
@@ -60,4 +64,16 @@ impl GameEdition {
             Self::Global
         }
     }
+}
+
+#[inline]
+pub fn get_voice_packages_path<T: AsRef<Path>>(game_path: T, game_edition: GameEdition) -> PathBuf {
+    game_path.as_ref()
+        .join(game_edition.data_folder())
+        .join("Persistent/Audio/AudioPackage/Windows")
+}
+
+#[inline]
+pub fn get_voice_package_path<T: AsRef<Path>>(game_path: T, game_edition: GameEdition, locale: VoiceLocale) -> PathBuf {
+    get_voice_packages_path(game_path, game_edition).join(locale.to_folder())
 }

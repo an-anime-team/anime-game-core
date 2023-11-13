@@ -126,7 +126,7 @@ impl Game {
 
                         return Ok(VersionDiff::NotInstalled {
                             latest: Version::from_str(&latest.version).unwrap(),
-                            url: latest.path,
+                            uri: latest.path,
                             edition: self.edition,
 
                             downloaded_size: latest.package_size.parse::<u64>().unwrap(),
@@ -157,7 +157,7 @@ impl Game {
                                 current,
                                 latest: Version::from_str(predownload.latest.version).unwrap(),
 
-                                url: diff.path,
+                                uri: diff.path,
                                 edition: self.edition,
 
                                 downloaded_size: diff.package_size.parse::<u64>().unwrap(),
@@ -186,7 +186,7 @@ impl Game {
                             current,
                             latest: Version::from_str(response.data.game.latest.version).unwrap(),
 
-                            url: diff.path,
+                            uri: diff.path,
                             edition: self.edition,
 
                             downloaded_size: diff.package_size.parse::<u64>().unwrap(),
@@ -214,7 +214,7 @@ impl Game {
 
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
-                url: latest.path,
+                uri: latest.path,
                 edition: self.edition,
 
                 downloaded_size: latest.package_size.parse::<u64>().unwrap(),
