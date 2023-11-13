@@ -195,7 +195,10 @@ impl JadeitePatchStatus {
                 JadeitePatchStatusVariant::Broken => JadeitePatchStatusVariant::Broken,
 
                 // If the patch was marked as unsafe - keep it unsafe
-                JadeitePatchStatusVariant::Unsafe => JadeitePatchStatusVariant::Unsafe
+                JadeitePatchStatusVariant::Unsafe => JadeitePatchStatusVariant::Unsafe,
+
+                // If the patch was concerning - then it's still concerning
+                JadeitePatchStatusVariant::Concerning => JadeitePatchStatusVariant::Concerning
             },
 
             // Both metadata and given game versions are equal
