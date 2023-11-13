@@ -20,10 +20,10 @@ impl VoiceLocale {
     #[inline]
     pub fn to_name(&self) -> &str {
         match self {
-            VoiceLocale::English  => "English",
-            VoiceLocale::Japanese => "Japanese",
-            VoiceLocale::Korean   => "Korean",
-            VoiceLocale::Chinese  => "Chinese"
+            Self::English  => "English",
+            Self::Japanese => "Japanese",
+            Self::Korean   => "Korean",
+            Self::Chinese  => "Chinese"
         }
     }
 
@@ -33,10 +33,10 @@ impl VoiceLocale {
     #[inline]
     pub fn to_code(&self) -> &str {
         match self {
-            VoiceLocale::English  => "en-us",
-            VoiceLocale::Japanese => "ja-jp",
-            VoiceLocale::Korean   => "ko-kr",
-            VoiceLocale::Chinese  => "zh-cn"
+            Self::English  => "en-us",
+            Self::Japanese => "ja-jp",
+            Self::Korean   => "ko-kr",
+            Self::Chinese  => "zh-cn"
         }
     }
 
@@ -46,10 +46,10 @@ impl VoiceLocale {
     #[inline]
     pub fn to_folder(&self) -> &str {
         match self {
-            VoiceLocale::English  => "English(US)",
-            VoiceLocale::Japanese => "Japanese",
-            VoiceLocale::Korean   => "Korean",
-            VoiceLocale::Chinese  => "Chinese"
+            Self::English  => "English(US)",
+            Self::Japanese => "Japanese",
+            Self::Korean   => "Korean",
+            Self::Chinese  => "Chinese"
         }
     }
 
@@ -62,25 +62,25 @@ impl VoiceLocale {
     pub fn from_str<T: AsRef<str>>(str: T) -> Option<Self> {
         match str.as_ref() {
             // Locales names
-            "English"  => Some(VoiceLocale::English),
-            "Japanese" => Some(VoiceLocale::Japanese),
-            "Korean"   => Some(VoiceLocale::Korean),
-            "Chinese"  => Some(VoiceLocale::Chinese),
+            "English"  => Some(Self::English),
+            "Japanese" => Some(Self::Japanese),
+            "Korean"   => Some(Self::Korean),
+            "Chinese"  => Some(Self::Chinese),
 
             // Lowercased variants
-            "english"  => Some(VoiceLocale::English),
-            "japanese" => Some(VoiceLocale::Japanese),
-            "korean"   => Some(VoiceLocale::Korean),
-            "chinese"  => Some(VoiceLocale::Chinese),
+            "english"  => Some(Self::English),
+            "japanese" => Some(Self::Japanese),
+            "korean"   => Some(Self::Korean),
+            "chinese"  => Some(Self::Chinese),
 
             // Folders
-            "English(US)" => Some(VoiceLocale::English),
+            "English(US)" => Some(Self::English),
 
             // Codes
-            "en-us" => Some(VoiceLocale::English),
-            "ja-jp" => Some(VoiceLocale::Japanese),
-            "ko-kr" => Some(VoiceLocale::Korean),
-            "zh-cn" => Some(VoiceLocale::Chinese),
+            "en-us" => Some(Self::English),
+            "ja-jp" => Some(Self::Japanese),
+            "ko-kr" => Some(Self::Korean),
+            "zh-cn" => Some(Self::Chinese),
 
             _ => None
         }
