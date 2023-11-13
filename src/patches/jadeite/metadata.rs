@@ -228,8 +228,17 @@ pub enum JadeitePatchStatusVariant {
 
     /// Patch is working but unsafe for use
     /// 
+    /// You can't run the game with this status
+    /// 
     /// Value: `unsafe`
-    Unsafe
+    Unsafe,
+
+    /// Patch is working but we have some concerns about it
+    /// 
+    /// You still can run the game with this status
+    /// 
+    /// Value: `concerning`
+    Concerning
 }
 
 impl Default for JadeitePatchStatusVariant {
@@ -246,6 +255,7 @@ impl From<&str> for JadeitePatchStatusVariant {
             "unverified" => Self::Unverified,
             "broken"     => Self::Broken,
             "unsafe"     => Self::Unsafe,
+            "concerning" => Self::Concerning,
 
             // Not really a good practice but it's unlikely to happen anyway
             _ => Self::default()
