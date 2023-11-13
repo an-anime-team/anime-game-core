@@ -134,23 +134,6 @@ impl Downloader {
     pub fn download(&mut self, path: impl Into<PathBuf>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), DownloadingError> {
         let path = path.into();
 
-        // Check available free space
-        if self.check_free_space {
-            tracing::debug!("Checking free space availability");
-
-            match free_space::available(&path) {
-                Some(space) => {
-                    if let Some(required) = self.length() {
-                        if space < required {
-                            return Err(DownloadingError::NoSpaceAvailable(path, required, space));
-                        }
-                    }
-                }
-    
-                None => return Err(DownloadingError::PathNotMounted(path))
-            }
-        }
-
         let mut downloaded = 0;
 
         // Open or create output file
@@ -188,6 +171,25 @@ impl Downloader {
 
             File::create(&path)
         };
+
+        // Check available free space
+        if self.check_free_space {
+            tracing::debug!("Checking free space availability");
+
+            match free_space::available(&path) {
+                Some(space) => {
+                    if let Some(mut required) = self.length() {
+                        required -= downloaded as u64;
+
+                        if space < required {
+                            return Err(DownloadingError::NoSpaceAvailable(path, required, space));
+                        }
+                    }
+                }
+    
+                None => return Err(DownloadingError::PathNotMounted(path))
+            }
+        }
 
         // Download data
         match file {
