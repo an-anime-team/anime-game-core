@@ -4,6 +4,7 @@ use cached::proc_macro::cached;
 
 use super::api;
 use super::consts::GameEdition;
+use super::voice_data::locale::VoiceLocale;
 
 use crate::repairer::IntegrityFile;
 
@@ -34,6 +35,12 @@ fn try_get_some_integrity_files<T: AsRef<str>>(game_edition: GameEdition, file_n
 #[cached(result)]
 pub fn try_get_integrity_files(game_edition: GameEdition, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
     try_get_some_integrity_files(game_edition, "pkg_version", timeout)
+}
+
+/// Try to list latest voice package files
+#[cached(result)]
+pub fn try_get_voice_integrity_files(game_edition: GameEdition, locale: VoiceLocale, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
+    try_get_some_integrity_files(game_edition, format!("Audio_{}_pkg_version", locale.to_folder()), timeout)
 }
 
 /// Try to get specific integrity file

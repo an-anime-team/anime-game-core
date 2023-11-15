@@ -9,6 +9,9 @@ use super::api;
 use super::consts::*;
 use super::version_diff::*;
 
+use super::voice_data::locale::VoiceLocale;
+use super::voice_data::package::VoicePackage;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
     path: PathBuf,
@@ -111,6 +114,23 @@ impl GameExt for Game {
 }
 
 impl Game {
+    /// Get list of installed voice packages
+    pub fn get_voice_packages(&self) -> anyhow::Result<Vec<VoicePackage>> {
+        let content = std::fs::read_dir(get_voice_packages_path(&self.path, self.edition))?;
+
+        let packages = content.into_iter()
+            .flatten()
+            .flat_map(|entry| {
+                VoiceLocale::from_str(entry.file_name().to_string_lossy())
+                    .map(|locale| get_voice_package_path(&self.path, self.edition, locale))
+                    .map(|path| VoicePackage::new(path, self.edition))
+            })
+            .flatten()
+            .collect();
+
+        Ok(packages)
+    }
+
     #[tracing::instrument(level = "debug", ret)]
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
