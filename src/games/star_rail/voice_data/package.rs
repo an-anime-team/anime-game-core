@@ -25,7 +25,7 @@ pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
 ];
 
 /// Acceptable error to select a version for the voiceover folder
-pub const VOICE_PACKAGE_THRESHOLD: u64 = 250 * 1024 * 1024; // 250 MB
+pub const VOICE_PACKAGE_THRESHOLD: u64 = 400 * 1024 * 1024; // 400 MB, ~4 files
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
 pub fn get_voice_pack_sizes<'a>(locale: VoiceLocale) -> Vec<(&'a str, u64)> {
