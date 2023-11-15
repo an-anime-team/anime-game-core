@@ -21,6 +21,14 @@ pub enum Update {
     DownloadingError(DownloadingError),
 
     /// `(unpacking path)`
+    UpdatingPermissionsStarted(PathBuf),
+
+    /// `(done files, total files)`
+    UpdatingPermissions(u64, u64),
+
+    UpdatingPermissionsFinished,
+
+    /// `(unpacking path)`
     UnpackingStarted(PathBuf),
 
     /// `(current bytes, total bytes)`
@@ -195,7 +203,11 @@ impl Installer {
                     .get_entries()
                     .expect("Failed to get archive entries");
 
-                for entry in &entries {
+                let entries_number = entries.len() as u64;
+
+                (updater)(Update::UpdatingPermissionsStarted(unpack_to.clone()));
+
+                for (i, entry) in entries.iter().enumerate() {
                     total += entry.size.get_size();
 
                     let path = unpack_to.join(&entry.name);
@@ -208,7 +220,11 @@ impl Installer {
                         // or the file doesn't exist, which we obviously can just ignore
                         std::fs::remove_file(&path);
                     }
+
+                    (updater)(Update::UpdatingPermissions(i as u64 + 1, entries_number));
                 }
+
+                (updater)(Update::UpdatingPermissionsFinished);
 
                 tracing::trace!("Extracting archive");
 
