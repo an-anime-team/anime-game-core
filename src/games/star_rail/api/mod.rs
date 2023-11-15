@@ -16,16 +16,11 @@ pub fn request(game_edition: GameEdition) -> anyhow::Result<schema::Response> {
         .send()?.json::<schema::Response>()?;
 
     // FIXME: temporary workaround for 1.5.0 version
-    if let Some(predownload) = &mut response.data.pre_download_game {
-        response.data.game.latest.voice_packs = predownload.latest.voice_packs.clone();
-
+    if response.data.game.latest.version == "1.5.0" {
         for diff in &mut response.data.game.diffs {
-            diff.voice_packs = predownload.latest.voice_packs.clone();
+            diff.voice_packs = response.data.game.latest.voice_packs.clone();
         }
-
-        for diff in &mut predownload.diffs {
-            diff.voice_packs = predownload.latest.voice_packs.clone();
-        }
+    
     }
 
     Ok(response)
