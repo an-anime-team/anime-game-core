@@ -146,6 +146,24 @@ impl Downloader {
             if let Ok(file) = &mut file {
                 match file.metadata() {
                     Ok(metadata) => {
+                        // Stop the process if the file is already downloaded
+                        if let Some(length) = self.length() {
+                            match metadata.len().cmp(&length) {
+                                std::cmp::Ordering::Less => (),
+
+                                std::cmp::Ordering::Equal => return Ok(()),
+
+                                // Trim downloaded file to prevent future issues (e.g. with extracting the archive)
+                                std::cmp::Ordering::Greater => {
+                                    if let Err(err) = file.set_len(length) {
+                                        return Err(DownloadingError::OutputFileError(path, err.to_string()));
+                                    }
+
+                                    return Ok(());
+                                }
+                            }
+                        }
+
                         if let Err(err) = file.seek(std::io::SeekFrom::Start(metadata.len())) {
                             return Err(DownloadingError::OutputFileError(path, err.to_string()));
                         }
