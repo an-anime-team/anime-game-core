@@ -68,10 +68,25 @@ impl ArchiveExt for Archive {
         let output = String::from_utf8_lossy(&output.stdout);
 
         let output = output.split("-------------------").skip(1).collect::<Vec<_>>();
-        let output = output[..output.len() - 1].join("-------------------");
+        let mut output = output[..output.len() - 1].join("-------------------");
+
+        // In some cases 7z can report two ending sequences instead of one:
+        //
+        // ```
+        // ------------------- ----- ------------ ------------  ------------------------
+        // 2023-09-15 10:20:44        66677218871  65387995385  13810 files, 81 folders
+        //
+        // ------------------- ----- ------------ ------------  ------------------------
+        // 2023-09-15 10:20:44        66677218871  65387995385  13810 files, 81 folders
+        // ```
+        //
+        // This should filter this case
+        if let Some((files_list, _)) = output.split_once("\n-------------------") {
+            output = files_list.to_string();
+        }
 
         Ok(output.split('\n')
-            .filter(|line| &line[..1] != "-" && &line[..2] != " -")
+            .filter(|line| !line.starts_with("-") && !line.starts_with(" -"))
             .map(|line| {
                 line.split("  ").filter_map(|word| {
                     let word = word.trim();
