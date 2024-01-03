@@ -114,23 +114,31 @@ impl DownloaderExt for Downloader {
         let mut file = File::create(download_path.as_ref())?;
 
         let chunk_size = self.chunk_size;
+        let content_size = self.content_size()?;
 
         Ok(BasicUpdater::spawn(|updater| {
             Box::new(move || -> Result<(), Self::Error> {
                 let mut buffer = vec![0; chunk_size];
                 let mut i = 0;
+                let mut j = 0u64;
 
                 while let Some(Ok((byte, _))) = response.next() {
                     buffer[i] = byte;
 
                     i += 1;
+                    j += 1;
 
                     if i == chunk_size {
                         file.write_all(&buffer)?;
 
                         let total = response.size_hint();
+                        let total = content_size.unwrap_or(total.1.unwrap_or(total.0)) as u64;
 
-                        updater.send(((), i as u64, total.1.unwrap_or(total.0) as u64))?;
+                        updater.send((
+                            (),
+                            j,
+                            total
+                        ))?;
 
                         i = 0;
                     }
@@ -139,8 +147,13 @@ impl DownloaderExt for Downloader {
                 file.write_all(&buffer[..i])?;
 
                 let total = response.size_hint();
+                let total = content_size.unwrap_or(total.1.unwrap_or(total.0)) as u64;
 
-                updater.send(((), i as u64, total.1.unwrap_or(total.0) as u64))?;
+                updater.send((
+                    (),
+                    j,
+                    total
+                ))?;
 
                 Ok(())
             })
