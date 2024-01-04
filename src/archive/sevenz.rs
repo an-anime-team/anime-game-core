@@ -86,7 +86,7 @@ impl ArchiveExt for Archive {
         }
 
         Ok(output.split('\n')
-            .filter(|line| !line.starts_with("-") && !line.starts_with(" -"))
+            .filter(|line| !line.starts_with('-') && !line.starts_with(" -"))
             .map(|line| {
                 line.split("  ").filter_map(|word| {
                     let word = word.trim();
