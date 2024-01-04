@@ -15,7 +15,7 @@ pub trait DownloaderExt {
     /// 
     /// Return `None` if content size is unknown.
     /// `Err` if failed to request URI's HEAD
-    fn content_size(&self) -> Result<Option<usize>, Self::Error>;
+    fn content_size(&self) -> Result<Option<u64>, Self::Error>;
 
     /// Get file name from the URI
     fn file_name(&self) -> String;

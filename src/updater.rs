@@ -85,6 +85,21 @@ where
         }
     }
 
+    #[inline]
+    /// This method returns updater without real task. It will immediately respond with "finished" status
+    pub fn finished(total: u64) -> Self {
+        Self {
+            status: Cell::new(Status::Finished),
+            current: Cell::new(total),
+            total: Cell::new(total),
+
+            worker: None,
+            worker_result: None,
+
+            updater: flume::unbounded().1
+        }
+    }
+
     fn update(&self) {
         if self.status.get() != Status::Finished {
             while let Ok((status, current, total)) = self.updater.try_recv() {

@@ -101,7 +101,7 @@ impl DriverExt for Driver {
                     })
                     .collect()
             })
-            .unwrap_or(vec![])
+            .unwrap_or_default()
     }
 
     fn finish_transition(&self, name: &str) -> Result<()> {

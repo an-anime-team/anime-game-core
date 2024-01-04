@@ -1,8 +1,7 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::cell::Cell;
-
-use std::io::Write;
+use std::io::{Seek, Write};
 
 use crate::updater::*;
 
@@ -11,7 +10,7 @@ use super::DownloaderExt;
 // TODO: multi-thread Downloader implementation
 
 /// Default downloading chunk size, in bytes
-pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 16;
+pub const DEFAULT_CHUNK_SIZE: u64 = 1024 * 16;
 
 /// Default value for continue downloading option
 pub const DEFAULT_CONTINUE_DOWNLOADING: bool = false;
@@ -25,15 +24,29 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Failed to fetch data: {0}")]
-    Minreq(#[from] minreq::Error)
+    Minreq(#[from] minreq::Error),
+
+    #[error("Failed to create output file {0:?}: {1}")]
+    /// Failed to create or open output file
+    /// 
+    /// `(path, error message)`
+    OutputFileError(PathBuf, String),
+
+    #[error("Failed to read metadata of the output file {0:?}: {1}")]
+    /// Couldn't get metadata of existing output file
+    /// 
+    /// This metadata supposed to be used to continue downloading of the file
+    /// 
+    /// `(path, error message)`
+    OutputFileMetadataError(PathBuf, String)
 }
 
 pub struct Downloader {
     uri: String,
     file_name: Cell<Option<String>>,
-    content_size: Cell<Option<Option<usize>>>,
+    content_size: Cell<Option<Option<u64>>>,
 
-    chunk_size: usize,
+    chunk_size: u64,
     continue_downloading: bool
 }
 
@@ -53,7 +66,7 @@ impl DownloaderExt for Downloader {
         }
     }
 
-    fn content_size(&self) -> Result<Option<usize>, Self::Error> {
+    fn content_size(&self) -> Result<Option<u64>, Self::Error> {
         if let Some(content_size) = self.content_size.take() {
             self.content_size.set(Some(content_size));
 
@@ -108,31 +121,135 @@ impl DownloaderExt for Downloader {
     }
 
     fn download(&self, download_path: impl AsRef<Path>) -> Result<Self::Updater, Self::Error> {
-        let mut response = minreq::get(&self.uri).send_lazy()?;
+        let download_path = download_path.as_ref();
 
-        // TODO: respect continue downloading option
-        let mut file = File::create(download_path.as_ref())?;
-
-        let chunk_size = self.chunk_size;
+        let chunk_size = self.chunk_size as usize;
         let content_size = self.content_size()?;
 
-        Ok(BasicUpdater::spawn(|updater| {
-            Box::new(move || -> Result<(), Self::Error> {
-                let mut buffer = vec![0; chunk_size];
-                let mut i = 0;
-                let mut j = 0u64;
+        let mut downloaded = 0;
 
-                while let Some(Ok((byte, _))) = response.next() {
-                    buffer[i] = byte;
+        // Open or create output file
+        let file = if download_path.exists() && self.continue_downloading {
+            tracing::debug!("Opening output file");
 
-                    i += 1;
-                    j += 1;
+            let mut file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(download_path);
 
-                    if i == chunk_size {
-                        file.write_all(&buffer)?;
+            // Continue downloading if the file exists and can be opened
+            if let Ok(file) = &mut file {
+                match file.metadata() {
+                    Ok(metadata) => {
+                        // Stop the process if the file is already downloaded
+                        if let Some(length) = self.content_size()? {
+                            match metadata.len().cmp(&length) {
+                                std::cmp::Ordering::Less => (),
+
+                                // Return finished updater
+                                std::cmp::Ordering::Equal => return Ok(BasicUpdater::finished(content_size.unwrap_or(1))),
+
+                                // Trim downloaded file to prevent future issues (e.g. with extracting the archive)
+                                std::cmp::Ordering::Greater => {
+                                    if let Err(err) = file.set_len(length) {
+                                        return Err(Self::Error::OutputFileError(download_path.to_path_buf(), err.to_string()));
+                                    }
+
+                                    // Return finished updater
+                                    return Ok(BasicUpdater::finished(content_size.unwrap_or(1)));
+                                }
+                            }
+                        }
+
+                        if let Err(err) = file.seek(std::io::SeekFrom::Start(metadata.len())) {
+                            return Err(Self::Error::OutputFileError(download_path.to_path_buf(), err.to_string()));
+                        }
+
+                        downloaded = metadata.len() as usize;
+                    }
+
+                    Err(err) => return Err(Self::Error::OutputFileMetadataError(download_path.to_path_buf(), err.to_string()))
+                }
+            }
+
+            file
+        } else {
+            tracing::debug!("Creating output file");
+
+            let base_folder = download_path.parent().unwrap();
+
+            if !base_folder.exists() {
+                if let Err(err) = std::fs::create_dir_all(base_folder) {
+                    return Err(Self::Error::OutputFileError(download_path.to_path_buf(), err.to_string()));
+                }
+            }
+
+            File::create(download_path)
+        };
+
+        match file {
+            Ok(mut file) => {
+                let response = minreq::head(&self.uri)
+                    .with_header("range", format!("bytes={downloaded}-"))
+                    .send()?;
+
+                // Request content range (downloaded + remained content size)
+                // 
+                // If finished or overcame: bytes */10611646760
+                // If not finished: bytes 10611646759-10611646759/10611646760
+                // 
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
+                if let Some(range) = response.headers.get("content-range") {
+                    // Finish downloading if header says that we've already downloaded all the data
+                    if range.contains("*/") {
+                        return Ok(BasicUpdater::finished(content_size.unwrap_or(downloaded as u64)));
+                    }
+                }
+
+                let mut response = minreq::get(&self.uri)
+                    .with_header("range", format!("bytes={downloaded}-"))
+                    .send_lazy()?;
+
+                // HTTP 416 = provided range is overcame actual content length (means file is downloaded)
+                // I check this here because HEAD request can return 200 OK while GET - 416
+                // 
+                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
+                if response.status_code == 416 {
+                    return Ok(BasicUpdater::finished(content_size.unwrap_or(downloaded as u64)));
+                }
+
+                Ok(BasicUpdater::spawn(|updater| {
+                    Box::new(move || -> Result<(), Self::Error> {
+                        let mut buffer = vec![0; chunk_size];
+                        let mut i = 0;
+                        let mut j = 0u64;
+
+                        while let Some(Ok((byte, _))) = response.next() {
+                            buffer[i] = byte;
+
+                            i += 1;
+                            j += 1;
+
+                            if i == chunk_size {
+                                file.write_all(&buffer)?;
+
+                                let total = response.size_hint();
+                                let total = content_size.unwrap_or(total.1.unwrap_or(total.0) as u64);
+
+                                updater.send((
+                                    (),
+                                    j,
+                                    total
+                                ))?;
+
+                                i = 0;
+                            }
+                        }
+
+                        file.write_all(&buffer[..i])?;
 
                         let total = response.size_hint();
-                        let total = content_size.unwrap_or(total.1.unwrap_or(total.0)) as u64;
+                        let total = content_size.unwrap_or(total.1.unwrap_or(total.0) as u64);
 
                         updater.send((
                             (),
@@ -140,37 +257,13 @@ impl DownloaderExt for Downloader {
                             total
                         ))?;
 
-                        i = 0;
-                    }
-                }
+                        Ok(())
+                    })
+                }))
+            }
 
-                file.write_all(&buffer[..i])?;
-
-                let total = response.size_hint();
-                let total = content_size.unwrap_or(total.1.unwrap_or(total.0)) as u64;
-
-                updater.send((
-                    (),
-                    j,
-                    total
-                ))?;
-
-                Ok(())
-            })
-        }))
-
-        // Ok(Updater {
-        //     worker_result: None,
-        //     updates_receiver,
-
-        //     current_progress: Cell::new(0), // TODO: downloaded content size
-        //     content_size_hint: Cell::new(response.size_hint()),
-
-        //     content_size: self.content_size()?,
-        //     // download_path: download_path.as_ref().to_path_buf(),
-
-        //     worker: Some(std::thread::spawn())
-        // })
+            Err(err) => Err(Self::Error::OutputFileError(download_path.to_path_buf(), err.to_string()))
+        }
     }
 }
 
@@ -211,18 +304,51 @@ mod tests {
 
     #[test]
     fn download_file() -> Result<(), Error> {
-        let mut updater = Downloader::new("https://github.com/doitsujin/dxvk/releases/download/v2.2/dxvk-2.2.tar.gz")
+        let updater = Downloader::new("https://github.com/doitsujin/dxvk/releases/download/v2.2/dxvk-2.2.tar.gz")
             .download("dxvk-2.2.tar.gz")?;
-
-        while updater.is_finished() {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
 
         updater.wait()?;
 
         assert_eq!(format!("{}", blake3::hash(&std::fs::read("dxvk-2.2.tar.gz")?)), "42e236e952d6ed3e8537ea359ae98a0fefb7ffd502d06865dd32f2c0976d4da2");
 
         std::fs::remove_file("dxvk-2.2.tar.gz")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn continue_file_downloading() -> Result<(), Error> {
+        let mut updater = Downloader::new("https://github.com/doitsujin/dxvk/releases/download/v2.2/dxvk-2.2.tar.gz")
+            .continue_downloading(true)
+            .download("dxvk-2.2.tar.gz")?;
+
+        while !updater.is_finished() {
+            if updater.progress() >= 0.5 {
+                break;
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        std::fs::copy("dxvk-2.2.tar.gz", "dxvk-2.2.tar.gz.part")?;
+
+        assert!(format!("{}", blake3::hash(&std::fs::read("dxvk-2.2.tar.gz.part")?)) != "42e236e952d6ed3e8537ea359ae98a0fefb7ffd502d06865dd32f2c0976d4da2");
+
+        updater.wait()?;
+
+        assert_eq!(format!("{}", blake3::hash(&std::fs::read("dxvk-2.2.tar.gz")?)), "42e236e952d6ed3e8537ea359ae98a0fefb7ffd502d06865dd32f2c0976d4da2");
+
+        std::fs::remove_file("dxvk-2.2.tar.gz")?;
+
+        let updater = Downloader::new("https://github.com/doitsujin/dxvk/releases/download/v2.2/dxvk-2.2.tar.gz")
+            .continue_downloading(true)
+            .download("dxvk-2.2.tar.gz.part")?;
+
+        updater.wait()?;
+
+        assert_eq!(format!("{}", blake3::hash(&std::fs::read("dxvk-2.2.tar.gz.part")?)), "42e236e952d6ed3e8537ea359ae98a0fefb7ffd502d06865dd32f2c0976d4da2");
+
+        std::fs::remove_file("dxvk-2.2.tar.gz.part")?;
 
         Ok(())
     }
