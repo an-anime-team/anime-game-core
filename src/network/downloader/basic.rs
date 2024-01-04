@@ -13,7 +13,7 @@ use super::DownloaderExt;
 pub const DEFAULT_CHUNK_SIZE: u64 = 1024 * 16;
 
 /// Default value for continue downloading option
-pub const DEFAULT_CONTINUE_DOWNLOADING: bool = false;
+pub const DEFAULT_CONTINUE_DOWNLOADING: bool = true;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
