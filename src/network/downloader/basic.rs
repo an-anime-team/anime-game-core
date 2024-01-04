@@ -147,7 +147,7 @@ impl DownloaderExt for Downloader {
                                 std::cmp::Ordering::Less => (),
 
                                 // Return finished updater
-                                std::cmp::Ordering::Equal => return Ok(BasicUpdater::finished(content_size.unwrap_or(1))),
+                                std::cmp::Ordering::Equal => return Ok(BasicUpdater::finished((), content_size.unwrap_or(1))),
 
                                 // Trim downloaded file to prevent future issues (e.g. with extracting the archive)
                                 std::cmp::Ordering::Greater => {
@@ -156,7 +156,7 @@ impl DownloaderExt for Downloader {
                                     }
 
                                     // Return finished updater
-                                    return Ok(BasicUpdater::finished(content_size.unwrap_or(1)));
+                                    return Ok(BasicUpdater::finished((), content_size.unwrap_or(1)));
                                 }
                             }
                         }
@@ -202,7 +202,7 @@ impl DownloaderExt for Downloader {
                 if let Some(range) = response.headers.get("content-range") {
                     // Finish downloading if header says that we've already downloaded all the data
                     if range.contains("*/") {
-                        return Ok(BasicUpdater::finished(content_size.unwrap_or(downloaded as u64)));
+                        return Ok(BasicUpdater::finished((), content_size.unwrap_or(downloaded as u64)));
                     }
                 }
 
@@ -215,7 +215,7 @@ impl DownloaderExt for Downloader {
                 // 
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
                 if response.status_code == 416 {
-                    return Ok(BasicUpdater::finished(content_size.unwrap_or(downloaded as u64)));
+                    return Ok(BasicUpdater::finished((), content_size.unwrap_or(downloaded as u64)));
                 }
 
                 Ok(BasicUpdater::spawn(|updater| {

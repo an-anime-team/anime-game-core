@@ -87,14 +87,14 @@ where
 
     #[inline]
     /// This method returns updater without real task. It will immediately respond with "finished" status
-    pub fn finished(total: u64) -> Self {
+    pub fn finished(result: Output, total: u64) -> Self {
         Self {
             status: Cell::new(Status::Finished),
             current: Cell::new(total),
             total: Cell::new(total),
 
             worker: None,
-            worker_result: None,
+            worker_result: Some(Ok(result)),
 
             updater: flume::unbounded().1
         }
