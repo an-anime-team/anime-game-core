@@ -84,13 +84,19 @@ impl ArchiveExt for Archive {
             .arg(folder.as_ref())
             .spawn()?;
 
+        let prefix = format!("{}/", folder.as_ref().to_string_lossy());
+
         Ok(BasicUpdater::new(child, total_size, move |line| {
             // Strip 'Archive: ...' and other top-level info messages
             if let Some(line) = line.strip_prefix("  ") {
                 // inflating: sus/3x.webp
                 // linking: sus/3x.symlink          -> 3x.webp
-                if let Some((_, file)) = line.split_once(':') {
-                    return files.get(file).copied();
+                if let Some((_, file)) = line.split_once(": ") {
+                    // Remove output directory prefix
+                    let file = file.strip_prefix(&prefix)
+                        .unwrap_or(file);
+
+                    return files.get(file.trim_end()).copied();
                 }
             }
 
