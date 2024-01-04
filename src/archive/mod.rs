@@ -30,24 +30,25 @@ pub trait ArchiveExt {
 /// and return its entries if this format is supported
 pub fn entries(archive: impl AsRef<Path>) -> Option<Vec<BasicEntry>> {
     let archive = archive.as_ref();
+    let path = archive.to_string_lossy();
 
     if !archive.is_file() {
         None
     }
 
-    else if archive.ends_with(".tar.xz") || archive.ends_with(".tar.gz") || archive.ends_with(".tar.bz2") || archive.ends_with(".tar") {
+    else if path.ends_with(".tar.xz") || path.ends_with(".tar.gz") || path.ends_with(".tar.bz2") || path.ends_with(".tar") {
         Tar::open(archive)
             .and_then(|archive| archive.entries())
             .ok()
     }
 
-    else if archive.ends_with(".zip") {
+    else if path.ends_with(".zip") {
         Zip::open(archive)
             .and_then(|archive| archive.entries())
             .ok()
     }
 
-    else if archive.ends_with(".7z") {
+    else if path.ends_with(".7z") | path.ends_with(".zip.001") || path.ends_with(".7z.001") {
         SevenZip::open(archive)
             .and_then(|archive| archive.entries())
             .ok()
@@ -80,7 +81,7 @@ pub fn extract(archive: impl AsRef<Path>, extract_to: impl AsRef<Path>) -> Optio
             .ok()
     }
 
-    else if path.ends_with(".7z") {
+    else if path.ends_with(".7z") | path.ends_with(".zip.001") || path.ends_with(".7z.001") {
         SevenZip::open(archive)
             .and_then(|archive| archive.extract(extract_to))
             .ok()
