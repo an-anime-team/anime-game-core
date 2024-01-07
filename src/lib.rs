@@ -1,6 +1,5 @@
 pub mod network;
 pub mod filesystem;
-pub mod game;
 pub mod archive;
 pub mod builtin;
 pub mod updater;
