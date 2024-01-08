@@ -165,7 +165,7 @@ impl DownloaderExt for Downloader {
                             return Err(Self::Error::OutputFileError(download_path.to_path_buf(), err.to_string()));
                         }
 
-                        downloaded = metadata.len() as usize;
+                        downloaded = metadata.len();
                     }
 
                     Err(err) => return Err(Self::Error::OutputFileMetadataError(download_path.to_path_buf(), err.to_string()))
@@ -202,7 +202,7 @@ impl DownloaderExt for Downloader {
                 if let Some(range) = response.headers.get("content-range") {
                     // Finish downloading if header says that we've already downloaded all the data
                     if range.contains("*/") {
-                        return Ok(BasicUpdater::finished((), content_size.unwrap_or(downloaded as u64)));
+                        return Ok(BasicUpdater::finished((), content_size.unwrap_or(downloaded)));
                     }
                 }
 
@@ -215,20 +215,19 @@ impl DownloaderExt for Downloader {
                 // 
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
                 if response.status_code == 416 {
-                    return Ok(BasicUpdater::finished((), content_size.unwrap_or(downloaded as u64)));
+                    return Ok(BasicUpdater::finished((), content_size.unwrap_or(downloaded)));
                 }
 
                 Ok(BasicUpdater::spawn(|updater| {
                     Box::new(move || -> Result<(), Self::Error> {
                         let mut buffer = vec![0; chunk_size];
                         let mut i = 0;
-                        let mut j = 0u64;
 
                         while let Some(Ok((byte, _))) = response.next() {
                             buffer[i] = byte;
 
                             i += 1;
-                            j += 1;
+                            downloaded += 1;
 
                             if i == chunk_size {
                                 file.write_all(&buffer)?;
@@ -238,7 +237,7 @@ impl DownloaderExt for Downloader {
 
                                 updater.send((
                                     (),
-                                    j,
+                                    downloaded,
                                     total
                                 ))?;
 
@@ -253,7 +252,7 @@ impl DownloaderExt for Downloader {
 
                         updater.send((
                             (),
-                            j,
+                            downloaded,
                             total
                         ))?;
 
