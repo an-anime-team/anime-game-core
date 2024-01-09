@@ -88,15 +88,17 @@ impl ArchiveExt for Archive {
 
         Ok(BasicUpdater::new(child, total_size, move |line| {
             // Strip 'Archive: ...' and other top-level info messages
-            if let Some(line) = line.strip_prefix("  ") {
+            if let Some(line) = line.strip_prefix(' ') {
+                // extracting: sus/1001.pck
                 // inflating: sus/3x.webp
                 // linking: sus/3x.symlink          -> 3x.webp
                 if let Some((_, file)) = line.split_once(": ") {
                     // Remove output directory prefix
                     let file = file.strip_prefix(&prefix)
-                        .unwrap_or(file);
+                        .unwrap_or(file)
+                        .trim_end();
 
-                    return files.get(file.trim_end()).copied();
+                    return files.get(file).copied();
                 }
             }
 
