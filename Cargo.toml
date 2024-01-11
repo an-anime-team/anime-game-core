@@ -33,7 +33,3 @@ minreq = { version = "2.11.0", features = ["json-using-serde", "proxy", "https"]
 uuid = { version = "1.6.1", features = ["fast-rng"] }
 
 md-5 = { version = "0.10.6", features = ["asm"] }
-
-# buildint
-
-kinda-virtual-fs = "0.1.1"
