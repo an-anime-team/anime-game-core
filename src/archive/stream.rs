@@ -1,12 +1,13 @@
 use std::cell::{Cell, RefCell};
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 
 use stream_unpack::zip::structures::CompressionMethod;
 use stream_unpack::zip::structures::central_directory::CentralDirectory;
-use stream_unpack::zip::{read_cd, ZipUnpacker, DecoderError, ZipDecodedData};
+use stream_unpack::zip::{read_cd, ZipUnpacker, DecoderError, ZipDecodedData, ZipPosition};
 
 use crate::updater::UpdaterExt;
 
@@ -14,6 +15,9 @@ use crate::updater::UpdaterExt;
 pub enum Error {
     #[error("Failed to send message through the flume channel: {0}")]
     FlumeSendError(#[from] flume::SendError<usize>),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 
     #[error("Failed to fetch data: {0}")]
     Minreq(#[from] minreq::Error),
@@ -29,6 +33,9 @@ pub enum Error {
 
     #[error("This archive contains elements which currently cannot be stream unpacked")]
     UnsupportedArchive,
+
+    #[error("Could not map position to archive volumes")]
+    InvalidPosition,
 
     #[error("Decoder error: {0}")]
     Decoder(#[from] DecoderError)
@@ -57,7 +64,8 @@ impl StreamArchiveDisk {
 
 pub struct StreamArchive {
     archives: Vec<StreamArchiveDisk>,
-    central_directory: CentralDirectory
+    central_directory: CentralDirectory,
+    is_cut: bool
 }
 
 impl StreamArchive {
@@ -92,7 +100,8 @@ impl StreamArchive {
 
         Ok(Self {
             archives,
-            central_directory
+            central_directory,
+            is_cut
         })
     }
 
@@ -112,8 +121,9 @@ impl StreamArchive {
             .sum()
     }
 
-    pub fn stream_unpack(self, folder: impl AsRef<Path>) -> Result<StreamArchiveUpdater, Error> {
+    pub fn stream_unpack(self, folder: impl AsRef<Path>, status_file: impl AsRef<str>) -> Result<StreamArchiveUpdater, Error> {
         let folder = folder.as_ref().to_owned();
+        let status_file = status_file.as_ref().to_owned();
 
         let (send, recv) = flume::unbounded();
 
@@ -126,12 +136,29 @@ impl StreamArchive {
             status_updater_result: None,
 
             status_updater: Some(std::thread::spawn(move || -> Result<(), Error> {
+                let sorted_cd = self.central_directory.sort();
+                let disk_sizes = self.archives.iter().map(|a| a.size).collect::<Vec<_>>();
                 let file = RefCell::new(None);
 
-                let mut unpacker = ZipUnpacker::new(
-                    self.central_directory.sort(), 
-                    self.archives.iter().map(|a| a.size).collect(), 
-                );
+                let status_file_path = folder.join(status_file);
+                let status_file_exists = status_file_path.exists();
+                let status_file = OpenOptions::new()
+                    .create(true)
+                    .read(true)
+                    .write(true)
+                    .open(&status_file_path)?;
+
+                let (pos, mut unpacker) = if !status_file_exists {
+                    let pos = sorted_cd.headers_ref()[0].header_position();
+                    StreamArchiveUpdater::write_status_file(&status_file, pos)?;
+
+                    (pos, ZipUnpacker::new(sorted_cd, disk_sizes.clone()))
+                } else {
+                    let pos = StreamArchiveUpdater::read_status_file(&status_file)?;
+
+                    (pos, ZipUnpacker::resume(sorted_cd, disk_sizes.clone(), pos)?)
+                };
+
                 unpacker.set_callback(|data| {
                     match data {
                         ZipDecodedData::FileHeader(h, _) => {
@@ -145,11 +172,14 @@ impl StreamArchive {
                                     OpenOptions::new()
                                     .create(true)
                                     .write(true)
+                                    .truncate(true)
                                     .open(path)?
                                 );
                             } else {
                                 std::fs::create_dir_all(path)?;
                             }
+
+                            StreamArchiveUpdater::write_status_file(&status_file, h.header_position())?;
                         },
 
                         ZipDecodedData::FileData(data) => {
@@ -160,9 +190,24 @@ impl StreamArchive {
                     Ok(())
                 });
 
+                let start_pos = if !self.is_cut {
+                    pos
+                } else {
+                    Self::offset_to_position(&disk_sizes, pos.offset)?
+                };
+
+                if start_pos != ZipPosition::default() {
+                    let completed = disk_sizes.iter().take(start_pos.disk).sum::<usize>() + start_pos.offset;
+                    send.send(completed)?;
+                }
+
                 let mut buf = Vec::with_capacity((1 << 16) + 4096);
-                for archive in self.archives {
-                    let response = minreq::get(archive.uri).send_lazy()?;
+                for (i, archive) in self.archives.iter().enumerate().skip(start_pos.disk) {
+                    let mut request = minreq::get(&archive.uri);
+                    if pos.disk == i && pos.offset != 0 {
+                        request = request.with_header("range", format!("bytes={}-", pos.offset));
+                    }
+                    let response = request.send_lazy()?;
 
                     for byte in response {
                         let (byte, _) = byte?;
@@ -189,9 +234,29 @@ impl StreamArchive {
                     send.send(buf.len())?;
                 }
 
-                todo!()
+                drop(unpacker);
+
+                drop(status_file);
+                std::fs::remove_file(status_file_path)?;
+
+                Ok(())
             }))
         })
+    }
+
+    pub fn offset_to_position(disk_sizes: impl AsRef<[usize]>, offset: usize) -> Result<ZipPosition, Error> {
+        let disk_sizes = disk_sizes.as_ref();
+
+        let mut left = offset;
+        for (i, size) in disk_sizes.iter().enumerate() {
+            if left < *size {
+                return Ok(ZipPosition::new(i, left));
+            } else {
+                left -= *size;
+            }
+        }
+
+        Err(Error::InvalidPosition)
     }
 }
 
@@ -205,6 +270,24 @@ pub struct StreamArchiveUpdater {
     total: usize
 }
 
+impl StreamArchiveUpdater {
+    fn read_status_file(file: &std::fs::File) -> Result<ZipPosition, std::io::Error> {
+        let mut bytes = [0u8; 12];
+        file.read_exact_at(&mut bytes, 0)?;
+
+        Ok(ZipPosition::new(
+            u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize,
+            u64::from_le_bytes(bytes[4..12].try_into().unwrap()) as usize
+        ))
+    }
+
+    fn write_status_file(file: &std::fs::File, pos: ZipPosition) -> Result<(), std::io::Error> {
+        file.write_all_at(&((pos.disk as u32).to_le_bytes()), 0)?;
+        file.write_all_at(&((pos.offset as u64).to_le_bytes()), 4)?;
+
+        Ok(())
+    }
+}
 
 impl UpdaterExt for StreamArchiveUpdater {
     type Error = Error;
