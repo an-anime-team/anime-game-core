@@ -12,6 +12,9 @@ use crate::updater::UpdaterExt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Failed to send message through the flume channel: {0}")]
+    FlumeSendError(#[from] flume::SendError<usize>),
+
     #[error("Failed to fetch data: {0}")]
     Minreq(#[from] minreq::Error),
 
@@ -118,7 +121,7 @@ impl StreamArchive {
             incrementer: recv,
 
             current: Cell::new(0),
-            total: self.uncompressed_size(),
+            total: self.total_size(),
 
             status_updater_result: None,
 
@@ -151,8 +154,6 @@ impl StreamArchive {
 
                         ZipDecodedData::FileData(data) => {
                             file.borrow().as_ref().unwrap().write_all(data)?;
-
-                            send.send(data.len())?;
                         }
                     }
 
@@ -170,7 +171,11 @@ impl StreamArchive {
 
                         if buf.len() >= (1 << 16) {
                             let (advanced, reached_end) = unpacker.update(&buf)?;
-                            buf.drain(..advanced);
+
+                            if advanced != 0 {
+                                buf.drain(..advanced);
+                                send.send(advanced)?;
+                            }
 
                             if reached_end {
                                 break;
@@ -180,7 +185,8 @@ impl StreamArchive {
                 }
 
                 if !buf.is_empty() {
-                    unpacker.update(buf)?;
+                    unpacker.update(&buf)?;
+                    send.send(buf.len())?;
                 }
 
                 todo!()
