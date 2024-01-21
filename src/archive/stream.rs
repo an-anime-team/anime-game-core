@@ -24,6 +24,9 @@ pub enum Error {
     #[error("Failed to process central directory: {0}")]
     CentralDirectory(#[from] read_cd::CentralDirectoryReadError),
 
+    #[error("This archive contains elements which currently cannot be stream unpacked")]
+    UnsupportedArchive,
+
     #[error("Decoder error: {0}")]
     Decoder(#[from] DecoderError)
 }
@@ -75,6 +78,15 @@ impl StreamArchive {
             }
         )?;
 
+        // None - no compression - is supported
+        let is_supported = central_directory.headers_ref().iter()
+            .flat_map(|h| &h.compression_method)
+            .all(CompressionMethod::is_supported);
+
+        if !is_supported {
+            return Err(Error::UnsupportedArchive);
+        }
+
         Ok(Self {
             archives,
             central_directory
@@ -95,13 +107,6 @@ impl StreamArchive {
         self.central_directory.headers_ref().iter()
             .map(|h| h.uncompressed_size as usize)
             .sum()
-    }
-
-    pub fn can_stream_unpack(&self) -> bool {
-        // None - no compression - is supported
-        self.central_directory.headers_ref().iter()
-            .flat_map(|h| &h.compression_method)
-            .all(CompressionMethod::is_supported)
     }
 
     pub fn stream_unpack(self, folder: impl AsRef<Path>) -> Result<StreamArchiveUpdater, Error> {
