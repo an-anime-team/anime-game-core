@@ -128,36 +128,36 @@ impl StreamArchive {
                 let mut unpacker = ZipUnpacker::new(
                     self.central_directory.sort(), 
                     self.archives.iter().map(|a| a.size).collect(), 
-                    |data| {
-                        match data {
-                            ZipDecodedData::FileHeader(h, _) => {
-                                let mut path = PathBuf::from(&folder);
-                                path.push(&h.filename);
-
-                                if !h.is_directory() {
-                                    std::fs::create_dir_all(path.parent().unwrap())?;
-
-                                    *file.borrow_mut() = Some(
-                                        OpenOptions::new()
-                                        .create(true)
-                                        .write(true)
-                                        .open(path)?
-                                    );
-                                } else {
-                                    std::fs::create_dir_all(path)?;
-                                }
-                            },
-
-                            ZipDecodedData::FileData(data) => {
-                                file.borrow().as_ref().unwrap().write_all(data)?;
-
-                                send.send(data.len())?;
-                            }
-                        }
-
-                        Ok(())
-                    }
                 );
+                unpacker.set_callback(|data| {
+                    match data {
+                        ZipDecodedData::FileHeader(h, _) => {
+                            let mut path = PathBuf::from(&folder);
+                            path.push(&h.filename);
+
+                            if !h.is_directory() {
+                                std::fs::create_dir_all(path.parent().unwrap())?;
+
+                                *file.borrow_mut() = Some(
+                                    OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .open(path)?
+                                );
+                            } else {
+                                std::fs::create_dir_all(path)?;
+                            }
+                        },
+
+                        ZipDecodedData::FileData(data) => {
+                            file.borrow().as_ref().unwrap().write_all(data)?;
+
+                            send.send(data.len())?;
+                        }
+                    }
+
+                    Ok(())
+                });
 
                 let mut buf = Vec::with_capacity((1 << 16) + 4096);
                 for archive in self.archives {
