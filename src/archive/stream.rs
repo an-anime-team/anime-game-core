@@ -148,15 +148,21 @@ impl StreamArchive {
                     .write(true)
                     .open(&status_file_path)?;
 
+                let virtual_disk_sizes = if !self.is_cut {
+                    disk_sizes.clone()
+                } else {
+                    vec![disk_sizes.iter().sum()]
+                };
+
                 let (pos, mut unpacker) = if !status_file_exists {
                     let pos = sorted_cd.headers_ref()[0].header_position();
                     StreamArchiveUpdater::write_status_file(&status_file, pos)?;
 
-                    (pos, ZipUnpacker::new(sorted_cd, disk_sizes.clone()))
+                    (pos, ZipUnpacker::new(sorted_cd, virtual_disk_sizes))
                 } else {
                     let pos = StreamArchiveUpdater::read_status_file(&status_file)?;
 
-                    (pos, ZipUnpacker::resume(sorted_cd, disk_sizes.clone(), pos)?)
+                    (pos, ZipUnpacker::resume(sorted_cd, virtual_disk_sizes, pos)?)
                 };
 
                 unpacker.set_callback(|data| {
