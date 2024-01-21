@@ -210,8 +210,8 @@ impl StreamArchive {
                 let mut buf = Vec::with_capacity((1 << 16) + 4096);
                 for (i, archive) in self.archives.iter().enumerate().skip(start_pos.disk) {
                     let mut request = minreq::get(&archive.uri);
-                    if pos.disk == i && pos.offset != 0 {
-                        request = request.with_header("range", format!("bytes={}-", pos.offset));
+                    if start_pos.disk == i && start_pos.offset != 0 {
+                        request = request.with_header("range", format!("bytes={}-", start_pos.offset));
                     }
                     let response = request.send_lazy()?;
 
