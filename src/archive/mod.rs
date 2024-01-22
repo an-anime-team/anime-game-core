@@ -7,6 +7,8 @@ pub mod sevenz;
 pub mod zip;
 pub mod tar;
 
+pub mod stream;
+
 use crate::updater::UpdaterExt;
 
 use updater::BasicUpdater;
