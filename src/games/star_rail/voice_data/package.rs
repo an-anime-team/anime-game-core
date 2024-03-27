@@ -20,8 +20,7 @@ use crate::star_rail::version_diff::*;
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English      Japanese     Korean       Chinese(PRC)
-    ("1.5.0",  3687361218,  4010902216,  3163234352,  3125345534),
-    ("1.4.0",  3223823082,  3520849103,  2743964291,  2720183255)
+    ("2.1.0",  4854287546,  5198137045,  4119835425,  4066642382)
 ];
 
 /// Acceptable error to select a version for the voiceover folder
@@ -51,8 +50,8 @@ pub fn wma_predict(values: &[u64]) -> u64 {
             let mut weighted_delim = 0.0;
 
             for i in 0..n - 1 {
-                weighted_sum += values[i + 1] as f64 / values[i] as f64 * (n - i - 1) as f64;
-                weighted_delim += (n - i - 1) as f64;
+                weighted_sum += values[i + 1] as f64 / values[i] as f64 * (i + 1) as f64;
+                weighted_delim += (i + 1) as f64;
             }
 
             (values[n - 1] as f64 * weighted_sum / weighted_delim).round() as u64
