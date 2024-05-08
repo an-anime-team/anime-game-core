@@ -33,12 +33,12 @@ impl GameEdition {
     #[inline]
     pub fn api_uri(&self) -> &str {
         match self {
-            GameEdition::Global => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/bh3_global/mdk/launcher/api/resource?key=gcStgarh&launcher_id=10"),
-            GameEdition::Sea    => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/bh3_global/mdk/launcher/api/resource?launcher_id=9"),
-            GameEdition::China  => concat!("https://bh3-launcher-static.", "mi", "ho", "yo", ".com/bh3_cn/mdk/launcher/api/resource?launcher_id=4"),
-            GameEdition::Taiwan => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/bh3_global/mdk/launcher/api/resource?launcher_id=8"),
-            GameEdition::Korea  => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/bh3_global/mdk/launcher/api/resource?launcher_id=11"),
-            GameEdition::Japan  => concat!("https://sdk-os-static.", "ho", "yo", "verse", ".com/bh3_global/mdk/launcher/api/resource?key=ojevZ0EyIyZNCy4n&launcher_id=19")
+            GameEdition::Global => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=10&key=dpz65xJ3"),
+            GameEdition::Sea    => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=9&key=tEGNtVhN"),
+            GameEdition::China  => concat!("https://bh3-launcher.mih", "oyo.com/bh3_global/mdk/launcher/api/resource?launcher_id=4&key=SyvuPnqL"),
+            GameEdition::Taiwan => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=8&key=demhUTcW"),
+            GameEdition::Korea  => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=11&key=PRg571Xh"),
+            GameEdition::Japan  => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?key=ojevZ0EyIyZNCy4n&launcher_id=19")
         }
     }
 
