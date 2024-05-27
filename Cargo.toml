@@ -44,6 +44,7 @@ genshin = []
 star-rail = []
 honkai = []
 pgr = []
+wuwa = []
 
 install = [
     # Only genshin need it so perhaps I should

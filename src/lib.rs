@@ -6,7 +6,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 lazy_static::lazy_static! {
     /// Default requests timeout in seconds
     pub static ref REQUESTS_TIMEOUT: u64 = match option_env!("LAUNCHER_REQUESTS_TIMEOUT") {
-        Some(timeout) => timeout.parse().unwrap_or(4),
+        Some(timeout) => timeout.parse().unwrap_or(8),
         None => 8
     };
 }
@@ -34,6 +34,9 @@ pub use games::honkai;
 
 #[cfg(feature = "pgr")]
 pub use games::pgr;
+
+#[cfg(feature = "wuwa")]
+pub use games::wuwa;
 
 // Core functionality
 

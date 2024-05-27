@@ -5,7 +5,7 @@ use super::consts::TELEMETRY_SERVERS;
 /// If some of them is not disabled, then this function will return its address
 /// 
 /// ```
-/// use anime_game_core::pgr::telemetry;
+/// use anime_game_core::wuwa::telemetry;
 /// 
 /// if let Ok(None) = telemetry::is_disabled() {
 ///     println!("Telemetry is disabled");
