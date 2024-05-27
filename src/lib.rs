@@ -61,8 +61,17 @@ pub mod prelude {
     #[cfg(feature = "genshin")]
     pub use super::genshin::prelude as genshin;
 
+    #[cfg(feature = "star-rail")]
+    pub use super::star_rail::prelude as star_rail;
+
     #[cfg(feature = "honkai")]
     pub use super::honkai::prelude as honkai;
+
+    #[cfg(feature = "pgr")]
+    pub use super::pgr::prelude as pgr;
+
+    #[cfg(feature = "wuwa")]
+    pub use super::wuwa::prelude as wuwa;
 
     #[cfg(feature = "install")]
     pub use super::installer::prelude::*;
