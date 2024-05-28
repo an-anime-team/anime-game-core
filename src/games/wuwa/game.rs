@@ -188,7 +188,7 @@ impl Game {
                     current,
                     latest: Version::from_str(latest.version).unwrap(),
 
-                    unpacked_url: format!("{}/{}", self.edition.cdn_uri(), latest.resourcesBasePath),
+                    unpacked_url: format!("{}/{}", api::find_cdn_uri(self.edition)?, latest.resourcesBasePath),
                     files,
                     total_size,
 
@@ -208,7 +208,7 @@ impl Game {
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&latest.version).unwrap(),
 
-                unpacked_url: format!("{}/{}", self.edition.cdn_uri(), latest.resourcesBasePath),
+                unpacked_url: format!("{}/{}", api::find_cdn_uri(self.edition)?, latest.resourcesBasePath),
                 files,
                 total_size,
 

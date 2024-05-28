@@ -10,7 +10,7 @@ use super::api;
 /// Try to list latest game files
 #[cached(result)]
 pub fn try_get_integrity_files(edition: GameEdition) -> anyhow::Result<Vec<IntegrityFile>> {
-    let decompressed_path = format!("{}/{}", edition.cdn_uri(), api::game::request(edition)?.default.resourcesBasePath);
+    let decompressed_path = format!("{}/{}", api::find_cdn_uri(edition)?, api::game::request(edition)?.default.resourcesBasePath);
 
     Ok(api::resource::request(edition)?.resource.into_iter().map(|resource| IntegrityFile {
         path: resource.dest
