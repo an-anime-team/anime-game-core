@@ -1,13 +1,13 @@
-pub mod schema;
+use crate::wuwa::consts::GameEdition;
 
-use crate::wuwa::consts::API_BASE_URI;
+pub mod schema;
 
 #[cached::proc_macro::cached(result)]
 #[tracing::instrument(level = "trace")]
-pub fn request() -> anyhow::Result<schema::Response> {
+pub fn request(edition: GameEdition) -> anyhow::Result<schema::Response> {
     tracing::trace!("Fetching resource API");
 
-    Ok(minreq::get(format!("{API_BASE_URI}/{}", super::game::request()?.default.resources))
+    Ok(minreq::get(format!("{}/{}", edition.cdn_uri(), super::game::request(edition)?.default.resources))
         .with_timeout(*crate::REQUESTS_TIMEOUT)
         .send()?.json()?)
 }
