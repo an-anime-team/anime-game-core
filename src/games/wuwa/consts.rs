@@ -25,7 +25,7 @@ impl GameEdition {
     #[inline]
     pub fn api_uri(&self) -> &str {
         match self {
-            GameEdition::Global => concat!("https://prod-awscdn-gamestarter.ku", "rogame.net/pcstarter/prod/game/G143/4/index.json"),
+            GameEdition::Global => concat!("https://prod-alicdn-gamestarter.ku", "rogame.com/pcstarter/prod/game/G153/50004_obOHXFrFanqsaIEOmuKroCcbZkQRBC7c/index.json"),
             GameEdition::China  => concat!("https://prod-cn-alicdn-gamestarter.ku", "rogame.com/pcstarter/prod/game/G152/10003_Y8xXrXk65DqFHEDgApn3cpK5lfczpFx5/index.json")
         }
     }
