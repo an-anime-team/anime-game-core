@@ -7,7 +7,16 @@ pub mod schema;
 pub fn request(edition: GameEdition) -> anyhow::Result<schema::Response> {
     tracing::trace!("Fetching resource API");
 
-    Ok(minreq::get(format!("{}/{}", edition.cdn_uri(), super::game::request(edition)?.default.resources))
+    let api = super::game::request(edition)?.default;
+
+    let cdn = api.cdnList.iter()
+        .min_by(|a, b| a.P.cmp(&b.P));
+
+    let Some(cdn) = cdn else {
+        anyhow::bail!("Failed to find game CDN link");
+    };
+
+    Ok(minreq::get(format!("{}/{}", cdn.url, api.resources))
         .with_timeout(*crate::REQUESTS_TIMEOUT)
         .send()?.json()?)
 }

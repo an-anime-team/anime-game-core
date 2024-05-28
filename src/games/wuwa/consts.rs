@@ -31,14 +31,6 @@ impl GameEdition {
     }
 
     #[inline]
-    pub fn cdn_uri(&self) -> &str {
-        match self {
-            GameEdition::Global => concat!("https://prod-awscdn-gamestarter.ku", "rogame.net"),
-            GameEdition::China  => concat!("https://pcdownload-huoshan.aki-game.com")
-        }
-    }
-
-    #[inline]
     pub fn telemetry_servers(&self) -> &[&str] {
         match self {
             GameEdition::Global => &[
