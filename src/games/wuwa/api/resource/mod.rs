@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::wuwa::consts::GameEdition;
 
 use super::find_cdn_uri;
@@ -12,7 +14,13 @@ pub fn request(edition: GameEdition) -> anyhow::Result<schema::Response> {
     let cdn = find_cdn_uri(edition)?;
     let resources = super::game::request(edition)?.default.resources;
 
-    Ok(minreq::get(format!("{cdn}/{resources}"))
+    let response = minreq::get(format!("{cdn}/{resources}"))
         .with_timeout(*crate::REQUESTS_TIMEOUT)
-        .send()?.json()?)
+        .send()?;
+
+    let json = flate2::read::GzDecoder::new(response.as_bytes())
+        .bytes()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(serde_json::from_slice(&json)?)
 }

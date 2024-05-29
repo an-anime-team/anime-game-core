@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::wuwa::consts::GameEdition;
 
 pub mod schema;
@@ -7,7 +9,13 @@ pub mod schema;
 pub fn request(edition: GameEdition) -> anyhow::Result<schema::Response> {
     tracing::trace!("Fetching game API");
 
-    Ok(minreq::get(edition.api_uri())
+    let response = minreq::get(edition.api_uri())
         .with_timeout(*crate::REQUESTS_TIMEOUT)
-        .send()?.json()?)
+        .send()?;
+
+    let json = flate2::read::GzDecoder::new(response.as_bytes())
+        .bytes()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(serde_json::from_slice(&json)?)
 }

@@ -18,5 +18,5 @@ pub fn find_cdn_uri(edition: GameEdition) -> anyhow::Result<String> {
         anyhow::bail!("Failed to find game CDN link");
     };
 
-    Ok(cdn.url.clone())
+    Ok(cdn.url.strip_suffix('/').unwrap().to_string())
 }
