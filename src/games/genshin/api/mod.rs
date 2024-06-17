@@ -8,12 +8,14 @@ use crate::genshin::consts::GameEdition;
     result
 )]
 #[tracing::instrument(level = "trace")]
-pub fn request(game_edition: GameEdition) -> anyhow::Result<schema::Response> {
+pub fn request(game_edition: GameEdition) -> anyhow::Result<schema::GamePackage> {
     tracing::trace!("Fetching API for {:?}", game_edition);
 
     let schema: schema::Response = minreq::get(game_edition.api_uri())
         .with_timeout(*crate::REQUESTS_TIMEOUT)
         .send()?.json()?;
 
-    Ok(schema)
+    schema.data.game_packages.into_iter()
+        .find(|game| game.game.biz == "hk4e_global")
+        .ok_or_else(|| anyhow::anyhow!("Failed to find the game in the API"))
 }

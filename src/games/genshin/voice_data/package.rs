@@ -6,7 +6,7 @@ use crate::version::Version;
 
 use crate::genshin::api::{
     self,
-    schema::VoicePack as RemoteVoicePack
+    schema::AudioPackage
 };
 
 use crate::genshin::consts::*;
@@ -20,6 +20,9 @@ use crate::genshin::version_diff::*;
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English(US)   Japanese      Korean        Chinese
+    ("4.7.0",  17116960439,  19217112723,  14393188301,  14656150572), // For whatever reason, who would have known,
+                                                                       // those values are from the `size` field instead of `decompressed_size`
+                                                                       // from the game API because later one looked COMPLETELY WRONG
     ("4.6.0",  16414267279,  18393435927,  13796034335,  14036168895),
     ("4.5.0",  15959234252,  17912625028,  13434833996,  13671635640),
     ("4.4.0",  15719789566,  17526530996,  13139301525,  13399060711), // Predicted
@@ -78,7 +81,7 @@ pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
 }
 
 /// Find voice package with specified locale from list of packages
-fn find_voice_pack(list: Vec<RemoteVoicePack>, locale: VoiceLocale) -> RemoteVoicePack {
+fn find_voice_pack(list: Vec<AudioPackage>, locale: VoiceLocale) -> AudioPackage {
     for pack in list {
         if pack.language == locale.to_code() {
             return pack;
@@ -100,7 +103,7 @@ pub enum VoicePackage {
     NotInstalled {
         locale: VoiceLocale,
         version: Version,
-        data: RemoteVoicePack,
+        data: AudioPackage,
         game_path: Option<PathBuf>,
         game_edition: GameEdition
     }
@@ -139,12 +142,12 @@ impl VoicePackage {
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
     /// technically it can be installed. This method just don't know the game's path
     pub fn with_locale(locale: VoiceLocale, game_edition: GameEdition) -> anyhow::Result<Self> {
-        let latest = api::request(game_edition)?.data.game.latest;
+        let latest = api::request(game_edition)?.main.major;
 
         Ok(Self::NotInstalled {
             locale,
             version: Version::from_str(latest.version).unwrap(),
-            data: find_voice_pack(latest.voice_packs, locale),
+            data: find_voice_pack(latest.audio_pkgs, locale),
             game_path: None,
             game_edition
         })
@@ -180,9 +183,9 @@ impl VoicePackage {
         match self {
             VoicePackage::Installed { path, .. } => (get_size(path).unwrap(), None),
             VoicePackage::NotInstalled { data, .. } => (
-                data.package_size.parse::<u64>().unwrap(),
+                data.decompressed_size.parse::<u64>().unwrap(),
                 Some(data.size.parse::<u64>().unwrap())
-            ),
+            )
         }
     }
 
@@ -202,9 +205,9 @@ impl VoicePackage {
         let response = api::request(game_edition)?;
 
         let mut packages = Vec::new();
-        let version = Version::from_str(response.data.game.latest.version).unwrap();
+        let version = Version::from_str(response.main.major.version).unwrap();
 
-        for package in response.data.game.latest.voice_packs {
+        for package in response.main.major.audio_pkgs {
             packages.push(Self::NotInstalled {
                 locale: VoiceLocale::from_str(&package.language).unwrap(),
                 version: version.clone(),
@@ -256,10 +259,10 @@ impl VoicePackage {
 
                         // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
                         // then we should predict their sizes
-                        if VOICE_PACKAGES_SIZES[0].0 != response.data.game.latest.version {
+                        if VOICE_PACKAGES_SIZES[0].0 != response.main.major.version {
                             let mut t = voice_packages_sizes;
 
-                            voice_packages_sizes = vec![(&response.data.game.latest.version, predict_new_voice_pack_size(*locale))];
+                            voice_packages_sizes = vec![(&response.main.major.version, predict_new_voice_pack_size(*locale))];
                             voice_packages_sizes.append(&mut t);
                         }
 
@@ -349,7 +352,7 @@ impl VoicePackage {
         if self.is_installed() {
             let current = self.try_get_version()?;
 
-            if response.data.game.latest.version == current {
+            if response.main.major.version == current {
                 tracing::debug!("Package version is latest");
 
                 // If we're running latest game version the diff we need to download
@@ -357,18 +360,18 @@ impl VoicePackage {
                 // a loop through possible variants, and if none of them was correct
                 // (which is not possible in reality) we should just say thath the game
                 // is latest
-                if let Some(predownload) = response.data.pre_download_game {
-                    for diff in predownload.diffs {
+                if let Some(predownload) = response.pre_download.major {
+                    for diff in response.pre_download.patches {
                         if diff.version == current {
-                            let diff = find_voice_pack(diff.voice_packs, self.locale());
+                            let diff = find_voice_pack(diff.audio_pkgs, self.locale());
 
                             return Ok(VersionDiff::Predownload {
                                 current,
-                                latest: Version::from_str(predownload.latest.version).unwrap(),
-                                uri: diff.path,
+                                latest: Version::from_str(predownload.version).unwrap(),
+                                uri: diff.url,
 
                                 downloaded_size: diff.size.parse::<u64>().unwrap(),
-                                unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                                unpacked_size: diff.decompressed_size.parse::<u64>().unwrap(),
 
                                 installation_path: match self {
                                     VoicePackage::Installed { .. } => None,
@@ -399,19 +402,19 @@ impl VoicePackage {
             }
 
             else {
-                tracing::debug!("Package is outdated: {} -> {}", current, response.data.game.latest.version);
+                tracing::debug!("Package is outdated: {} -> {}", current, response.main.major.version);
 
-                for diff in response.data.game.diffs {
+                for diff in response.main.patches {
                     if diff.version == current {
-                        let diff = find_voice_pack(diff.voice_packs, self.locale());
+                        let diff = find_voice_pack(diff.audio_pkgs, self.locale());
 
                         return Ok(VersionDiff::Diff {
                             current,
-                            latest: Version::from_str(response.data.game.latest.version).unwrap(),
-                            uri: diff.path,
+                            latest: Version::from_str(response.main.major.version).unwrap(),
+                            uri: diff.url,
 
                             downloaded_size: diff.size.parse::<u64>().unwrap(),
-                            unpacked_size: diff.package_size.parse::<u64>().unwrap(),
+                            unpacked_size: diff.decompressed_size.parse::<u64>().unwrap(),
 
                             installation_path: match self {
                                 VoicePackage::Installed { .. } => None,
@@ -436,7 +439,7 @@ impl VoicePackage {
 
                 Ok(VersionDiff::Outdated {
                     current,
-                    latest: Version::from_str(response.data.game.latest.version).unwrap(),
+                    latest: Version::from_str(response.main.major.version).unwrap(),
                     edition: game_edition
                 })
             }
@@ -445,14 +448,14 @@ impl VoicePackage {
         else {
             tracing::debug!("Package is not installed");
 
-            let latest = find_voice_pack(response.data.game.latest.voice_packs, self.locale());
+            let latest = find_voice_pack(response.main.major.audio_pkgs, self.locale());
 
             Ok(VersionDiff::NotInstalled {
-                latest: Version::from_str(response.data.game.latest.version).unwrap(),
-                segments_uris: vec![latest.path],
+                latest: Version::from_str(response.main.major.version).unwrap(),
+                segments_uris: vec![latest.url],
 
                 downloaded_size: latest.size.parse::<u64>().unwrap(),
-                unpacked_size: latest.package_size.parse::<u64>().unwrap(),
+                unpacked_size: latest.decompressed_size.parse::<u64>().unwrap(),
 
                 installation_path: match self {
                     VoicePackage::Installed { .. } => None,

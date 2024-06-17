@@ -9,7 +9,7 @@ use super::voice_data::locale::VoiceLocale;
 use crate::repairer::IntegrityFile;
 
 fn try_get_some_integrity_files<T: AsRef<str>>(game_edition: GameEdition, file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
-    let decompressed_path = api::request(game_edition)?.data.game.latest.decompressed_path;
+    let decompressed_path = api::request(game_edition)?.main.major.res_list_url;
 
     let pkg_version = minreq::get(format!("{decompressed_path}/{}", file_name.as_ref()))
         .with_timeout(timeout.unwrap_or(*crate::REQUESTS_TIMEOUT))

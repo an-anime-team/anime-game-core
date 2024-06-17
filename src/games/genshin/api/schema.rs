@@ -1,8 +1,5 @@
 use serde::{Serialize, Deserialize};
 
-// In theory this can not contain data field
-// and has some actual error, but I never had it in practice
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Response {
     pub retcode: u16,
@@ -12,55 +9,62 @@ pub struct Response {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Data {
-    pub web_url: String,
-    pub game: Game,
-    pub pre_download_game: Option<Game>
+    pub game_packages: Vec<GamePackage>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Game {
-    pub latest: Latest,
-    pub diffs: Vec<Diff>
+pub struct GamePackage {
+    pub game: GameId,
+    pub main: GameInfo,
+    pub pre_download: GamePredownloadInfo
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Latest {
-    pub name: String,
+pub struct GameId {
+    pub id: String,
+    pub biz: String
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GameInfo {
+    pub major: GameLatestInfo,
+    pub patches: Vec<GamePatch>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GameLatestInfo {
     pub version: String,
-    pub path: String,
-    pub size: String,
-    pub md5: String,
-    pub entry: String,
-    pub package_size: String,
-    pub decompressed_path: String,
-    pub voice_packs: Vec<VoicePack>,
-    pub segments: Vec<Segment>
+    pub game_pkgs: Vec<Segment>,
+    pub audio_pkgs: Vec<AudioPackage>,
+    pub res_list_url: String
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Segment {
-    pub path: String,
-    pub md5: String
+    pub url: String,
+    pub md5: String,
+    pub size: String,
+    pub decompressed_size: String
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct VoicePack {
+pub struct AudioPackage {
     pub language: String,
-    pub name: String,
-    pub path: String,
-    pub size: String,
+    pub url: String,
     pub md5: String,
-    pub package_size: String
+    pub size: String,
+    pub decompressed_size: String
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Diff {
-    pub name: String,
+pub struct GamePatch {
     pub version: String,
-    pub path: String,
-    pub size: String,
-    pub md5: String,
-    pub is_recommended_update: bool,
-    pub package_size: String,
-    pub voice_packs: Vec<VoicePack>
+    pub game_pkgs: Vec<Segment>,
+    pub audio_pkgs: Vec<AudioPackage>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GamePredownloadInfo {
+    pub major: Option<GameLatestInfo>,
+    pub patches: Vec<GamePatch>
 }
