@@ -45,7 +45,7 @@ impl GameExt for Game {
         tracing::trace!("Trying to get latest game version");
 
         // I assume game's API can't return incorrect version format right? Right?
-        Ok(Version::from_str(api::request(edition)?.data.game.latest.version).unwrap())
+        Ok(Version::from_str(api::request(edition)?.main.major.version).unwrap())
     }
 
     #[tracing::instrument(level = "debug", ret)]
@@ -142,15 +142,19 @@ impl Game {
                 Ok(version) => version,
                 Err(err) => {
                     if self.path.exists() && self.path.metadata()?.len() == 0 {
-                        let latest = response.data.game.latest;
-
                         return Ok(VersionDiff::NotInstalled {
-                            latest: Version::from_str(&latest.version).unwrap(),
-                            uri: latest.path,
+                            latest: Version::from_str(&response.main.major.version).unwrap(),
                             edition: self.edition,
 
-                            downloaded_size: latest.package_size.parse::<u64>().unwrap(),
-                            unpacked_size: latest.size.parse::<u64>().unwrap(),
+                            uri: response.main.major.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
+
+                            downloaded_size: response.main.major.game_pkgs.iter()
+                                .flat_map(|pkg| pkg.size.parse::<u64>())
+                                .sum(),
+
+                            unpacked_size: response.main.major.game_pkgs.iter()
+                                .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                                .sum(),
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -162,7 +166,7 @@ impl Game {
                 }
             };
 
-            if response.data.game.latest.version == current {
+            if response.main.major.version == current {
                 tracing::debug!("Game version is latest");
 
                 // If we're running latest game version the diff we need to download
@@ -170,18 +174,23 @@ impl Game {
                 // a loop through possible variants, and if none of them was correct
                 // (which is not possible in reality) we should just say thath the game
                 // is latest
-                if let Some(predownload) = response.data.pre_download_game {
-                    for diff in predownload.diffs {
+                if let Some(predownload) = response.pre_download.major {
+                    for diff in response.pre_download.patches {
                         if diff.version == current {
                             return Ok(VersionDiff::Predownload {
                                 current,
-                                latest: Version::from_str(predownload.latest.version).unwrap(),
+                                latest: Version::from_str(predownload.version).unwrap(),
 
-                                uri: diff.path,
+                                uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
                                 edition: self.edition,
 
-                                downloaded_size: diff.package_size.parse::<u64>().unwrap(),
-                                unpacked_size: diff.size.parse::<u64>().unwrap(),
+                                downloaded_size: diff.game_pkgs.iter()
+                                    .flat_map(|pkg| pkg.size.parse::<u64>())
+                                    .sum(),
+
+                                unpacked_size: diff.game_pkgs.iter()
+                                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                                    .sum(),
 
                                 installation_path: Some(self.path.clone()),
                                 version_file_path: None,
@@ -198,19 +207,24 @@ impl Game {
             }
 
             else {
-                tracing::debug!("Game is outdated: {} -> {}", current, response.data.game.latest.version);
+                tracing::debug!("Game is outdated: {} -> {}", current, response.main.major.version);
 
-                for diff in response.data.game.diffs {
+                for diff in response.main.patches {
                     if diff.version == current {
                         return Ok(VersionDiff::Diff {
                             current,
-                            latest: Version::from_str(response.data.game.latest.version).unwrap(),
+                            latest: Version::from_str(response.main.major.version).unwrap(),
 
-                            uri: diff.path,
+                            uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
                             edition: self.edition,
 
-                            downloaded_size: diff.package_size.parse::<u64>().unwrap(),
-                            unpacked_size: diff.size.parse::<u64>().unwrap(),
+                            downloaded_size: diff.game_pkgs.iter()
+                                .flat_map(|pkg| pkg.size.parse::<u64>())
+                                .sum(),
+
+                            unpacked_size: diff.game_pkgs.iter()
+                                .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                                .sum(),
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -221,7 +235,7 @@ impl Game {
 
                 Ok(VersionDiff::Outdated {
                     current,
-                    latest: Version::from_str(response.data.game.latest.version).unwrap(),
+                    latest: Version::from_str(response.main.major.version).unwrap(),
                     edition: self.edition
                 })
             }
@@ -230,15 +244,19 @@ impl Game {
         else {
             tracing::debug!("Game is not installed");
 
-            let latest = response.data.game.latest;
-
             Ok(VersionDiff::NotInstalled {
-                latest: Version::from_str(&latest.version).unwrap(),
-                uri: latest.path,
+                latest: Version::from_str(&response.main.major.version).unwrap(),
                 edition: self.edition,
 
-                downloaded_size: latest.package_size.parse::<u64>().unwrap(),
-                unpacked_size: latest.size.parse::<u64>().unwrap(),
+                uri: response.main.major.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
+
+                downloaded_size: response.main.major.game_pkgs.iter()
+                    .flat_map(|pkg| pkg.size.parse::<u64>())
+                    .sum(),
+
+                unpacked_size: response.main.major.game_pkgs.iter()
+                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                    .sum(),
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,

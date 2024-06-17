@@ -8,20 +8,14 @@ use crate::star_rail::consts::GameEdition;
     result
 )]
 #[tracing::instrument(level = "trace")]
-pub fn request(game_edition: GameEdition) -> anyhow::Result<schema::Response> {
+pub fn request(game_edition: GameEdition) -> anyhow::Result<schema::GamePackage> {
     tracing::trace!("Fetching API for {:?}", game_edition);
 
-    let mut response = minreq::get(game_edition.api_uri())
+    let schema: schema::Response = minreq::get(game_edition.api_uri())
         .with_timeout(*crate::REQUESTS_TIMEOUT)
-        .send()?.json::<schema::Response>()?;
+        .send()?.json()?;
 
-    // FIXME: temporary workaround for 1.5.0 version
-    if response.data.game.latest.version == "1.5.0" {
-        for diff in &mut response.data.game.diffs {
-            diff.voice_packs = response.data.game.latest.voice_packs.clone();
-        }
-    
-    }
-
-    Ok(response)
+    schema.data.game_packages.into_iter()
+        .find(|game| game.game.biz.starts_with("hkrpg_"))
+        .ok_or_else(|| anyhow::anyhow!("Failed to find the game in the API"))
 }

@@ -26,8 +26,8 @@ impl GameEdition {
     #[inline]
     pub fn api_uri(&self) -> &str {
         match self {
-            GameEdition::Global => concat!("https://hk", "rpg-launcher-static.ho", "yov", "erse.com/hk", "rpg_global/mdk/launcher/api/resource?channel_id=1&key=vplOVX8Vn7cwG8yb&launcher_id=35"),
-            GameEdition::China  => concat!("https://api-launcher.m", "ih", "oy", "o.com/hk", "rpg_cn/mdk/launcher/api/resource?channel_id=1&key=6KcVuOkbcqjJomjZ&launcher_id=33")
+            GameEdition::Global => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=VYTpXlbWo8"),
+            GameEdition::China  => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1")
         }
     }
 
