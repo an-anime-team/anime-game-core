@@ -276,26 +276,25 @@ impl VersionDiffExt for VersionDiff {
                         *old_bytes.borrow_mut() = 0;
                     });
 
-                    Downloader::new(format!("{url}/{file}"))
-                        .expect("Failed to initialize downloader")
+                    // Ignore errors
+                    if let Ok(downloader) = Downloader::new(format!("{url}/{file}")) {
+                        let _ = downloader
+                            // Don't check availability of disk space as it was done before
+                            .with_free_space_check(false)
 
-                        // Don't check availability of disk space as it was done before
-                        .with_free_space_check(false)
+                            // Overwrite outdated file instead of trying to continue its downloading
+                            .with_continue_downloading(false)
 
-                        // Overwrite outdated file instead of trying to continue its downloading
-                        .with_continue_downloading(false)
+                            // Download outdated file
+                            .download(&file_path, move |curr, _total| {
+                                VersionDiff::TL_OLD_BYTES.with(|old_bytes| {
+                                    // Calculate and send how many bytes we've downloaded since last report
+                                    file_send.send(curr - *old_bytes.borrow()).unwrap();
 
-                        // Download outdated file
-                        .download(&file_path, move |curr, _total| {
-                            VersionDiff::TL_OLD_BYTES.with(|old_bytes| {
-                                // Calculate and send how many bytes we've downloaded since last report
-                                file_send.send(curr - *old_bytes.borrow()).unwrap();
-
-                                *old_bytes.borrow_mut() = curr;
+                                    *old_bytes.borrow_mut() = curr;
+                                });
                             });
-                        })
-
-                        .expect("Failed to download file");
+                    }
                 }
             }));
         }

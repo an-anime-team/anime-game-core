@@ -54,63 +54,20 @@ impl GameExt for Game {
     #[tracing::instrument(level = "debug", ret)]
     fn get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!("Trying to get installed game version");
-        
-        return Ok(Version::new(1, 0, 2))
 
-        // fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
-        //     bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - '0' as u8))
-        // }
-        // 
-        // let file = File::open(self.path.join(DATA_FOLDER_NAME).join("globalgamemanagers"))?;
-        // 
-        // // [0..9]
-        // let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
-        // 
-        // let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
-        // let mut version_ptr: usize = 0;
-        // let mut correct = true;
-        // 
-        // for byte in file.bytes().skip(4000).take(10000) {
-        //     if let Ok(byte) = byte {
-        //         match byte {
-        //             0 => {
-        //                 if correct && version_ptr == 2 && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
-        //                     return Ok(Version::new(
-        //                         bytes_to_num(&version[0]),
-        //                         bytes_to_num(&version[1]),
-        //                         bytes_to_num(&version[2])
-        //                     ))
-        //                 }
-        // 
-        //                 version = [vec![], vec![], vec![]];
-        //                 version_ptr = 0;
-        //                 correct = true;
-        //             }
-        // 
-        //             46 => {
-        //                 version_ptr += 1;
-        // 
-        //                 if version_ptr > 2 {
-        //                     correct = false;
-        //                 }
-        //             }
-        // 
-        //             _ => {
-        //                 if correct && allowed.contains(&byte) {
-        //                     version[version_ptr].push(byte);
-        //                 }
-        // 
-        //                 else {
-        //                     correct = false;
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        // 
-        // tracing::error!("Version's bytes sequence wasn't found");
-        // 
-        // anyhow::bail!("Version's bytes sequence wasn't found");
+        if self.path.join(".version").exists() {
+            let version = std::fs::read(self.path.join(".version"))?;
+
+            return Ok(Version::new(
+                version[0],
+                version[1],
+                version[2]
+            ));
+        }
+
+        tracing::error!("Version's bytes sequence wasn't found");
+        
+        anyhow::bail!("Version's bytes sequence wasn't found");
     }
 }
 
