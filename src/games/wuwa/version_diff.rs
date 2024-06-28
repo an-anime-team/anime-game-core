@@ -257,7 +257,15 @@ impl VersionDiffExt for VersionDiff {
             let path = path.to_path_buf();
 
             workers_joiners.push(std::thread::spawn(move || {
-                while let Some(file) = worker_queue.lock().unwrap().pop_front() {
+                loop {
+                    let task = worker_queue.lock()
+                        .unwrap()
+                        .pop_front();
+
+                    let Some(file) = task else {
+                        break;
+                    };
+
                     tracing::debug!("Updating {url}/{file}");
 
                     let file_path = path.join(&file);
