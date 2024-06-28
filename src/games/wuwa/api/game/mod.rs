@@ -13,9 +13,21 @@ pub fn request(edition: GameEdition) -> anyhow::Result<schema::Response> {
         .with_timeout(*crate::REQUESTS_TIMEOUT)
         .send()?;
 
-    let json = flate2::read::GzDecoder::new(response.as_bytes())
-        .bytes()
-        .collect::<Result<Vec<_>, _>>()?;
+    let json = match response.headers.get("content-encoding").map(String::as_str) {
+        Some("gzip") => flate2::read::GzDecoder::new(response.as_bytes())
+            .bytes()
+            .collect::<Result<Vec<_>, _>>()?,
+
+        Some("bz") => {
+            let mut json = Vec::new();
+
+            brotli_decompressor::brotli_decode(response.as_bytes(), &mut json);
+
+            json
+        },
+
+        _ => response.as_bytes().to_vec()
+    };
 
     Ok(serde_json::from_slice(&json)?)
 }
