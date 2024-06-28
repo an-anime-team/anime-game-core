@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use md5::{Md5, Digest};
@@ -113,16 +111,6 @@ impl Game {
                     }
                 }
             }
-
-            // TODO:
-
-            // Push `globalgamemanagers` to the end of the list to not to break launcher compatibility
-            // let game_data_file = format!("{DATA_FOLDER_NAME}/globalgamemanagers");
-            //
-            // if files.contains(&game_data_file) {
-            //     files.retain(|file| file != &game_data_file);
-            //     files.push(game_data_file);
-            // }
 
             Ok((files, total_size))
         }
