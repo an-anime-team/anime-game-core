@@ -175,28 +175,30 @@ impl Game {
                 // a loop through possible variants, and if none of them was correct
                 // (which is not possible in reality) we should just say thath the game
                 // is latest
-                if let Some(predownload) = response.pre_download.major {
-                    for diff in response.pre_download.patches {
-                        if diff.version == current {
-                            return Ok(VersionDiff::Predownload {
-                                current,
-                                latest: Version::from_str(predownload.version).unwrap(),
-
-                                uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
-                                edition: self.edition,
-
-                                downloaded_size: diff.game_pkgs.iter()
-                                    .flat_map(|pkg| pkg.size.parse::<u64>())
-                                    .sum(),
-
-                                unpacked_size: diff.game_pkgs.iter()
-                                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                                    .sum(),
-
-                                installation_path: Some(self.path.clone()),
-                                version_file_path: None,
-                                temp_folder: None
-                            });
+                if let Some(predownload_info) = response.pre_download {
+                    if let Some(predownload_major) = predownload_info.major {
+                        for diff in predownload_info.patches {
+                            if diff.version == current {
+                                return Ok(VersionDiff::Predownload {
+                                    current,
+                                    latest: Version::from_str(predownload_major.version).unwrap(),
+    
+                                    uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
+                                    edition: self.edition,
+    
+                                    downloaded_size: diff.game_pkgs.iter()
+                                        .flat_map(|pkg| pkg.size.parse::<u64>())
+                                        .sum(),
+    
+                                    unpacked_size: diff.game_pkgs.iter()
+                                        .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                                        .sum(),
+    
+                                    installation_path: Some(self.path.clone()),
+                                    version_file_path: None,
+                                    temp_folder: None
+                                });
+                            }
                         }
                     }
                 }

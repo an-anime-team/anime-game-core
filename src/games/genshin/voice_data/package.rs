@@ -360,37 +360,39 @@ impl VoicePackage {
                 // a loop through possible variants, and if none of them was correct
                 // (which is not possible in reality) we should just say thath the game
                 // is latest
-                if let Some(predownload) = response.pre_download.major {
-                    for diff in response.pre_download.patches {
-                        if diff.version == current {
-                            let diff = find_voice_pack(diff.audio_pkgs, self.locale());
-
-                            return Ok(VersionDiff::Predownload {
-                                current,
-                                latest: Version::from_str(predownload.version).unwrap(),
-                                uri: diff.url,
-
-                                downloaded_size: diff.size.parse::<u64>().unwrap(),
-                                unpacked_size: diff.decompressed_size.parse::<u64>().unwrap(),
-
-                                installation_path: match self {
-                                    VoicePackage::Installed { .. } => None,
-                                    VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
-                                },
-
-                                version_file_path: match self {
-                                    VoicePackage::Installed { path, .. } => Some(path.join(".version")),
-                                    VoicePackage::NotInstalled { game_path, .. } => {
-                                        match game_path {
-                                            Some(game_path) => Some(get_voice_package_path(game_path, game_edition, self.locale()).join(".version")),
-                                            None => None
+                if let Some(predownload_info) = response.pre_download {
+                    if let Some(predownload_major) = predownload_info.major {
+                        for diff in predownload_info.patches {
+                            if diff.version == current {
+                                let diff = find_voice_pack(diff.audio_pkgs, self.locale());
+    
+                                return Ok(VersionDiff::Predownload {
+                                    current,
+                                    latest: Version::from_str(predownload_major.version).unwrap(),
+                                    uri: diff.url,
+    
+                                    downloaded_size: diff.size.parse::<u64>().unwrap(),
+                                    unpacked_size: diff.decompressed_size.parse::<u64>().unwrap(),
+    
+                                    installation_path: match self {
+                                        VoicePackage::Installed { .. } => None,
+                                        VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                                    },
+    
+                                    version_file_path: match self {
+                                        VoicePackage::Installed { path, .. } => Some(path.join(".version")),
+                                        VoicePackage::NotInstalled { game_path, .. } => {
+                                            match game_path {
+                                                Some(game_path) => Some(get_voice_package_path(game_path, game_edition, self.locale()).join(".version")),
+                                                None => None
+                                            }
                                         }
-                                    }
-                                },
-
-                                temp_folder: None,
-                                edition: game_edition
-                            })
+                                    },
+    
+                                    temp_folder: None,
+                                    edition: game_edition
+                                })
+                            }
                         }
                     }
                 }

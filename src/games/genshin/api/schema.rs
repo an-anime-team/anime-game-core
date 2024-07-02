@@ -16,7 +16,7 @@ pub struct Data {
 pub struct GamePackage {
     pub game: GameId,
     pub main: GameInfo,
-    pub pre_download: GamePredownloadInfo
+    pub pre_download: Option<GamePredownloadInfo>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
