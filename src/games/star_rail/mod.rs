@@ -17,7 +17,4 @@ pub mod prelude {
 
     #[cfg(feature = "install")]
     pub use super::repairer;
-
-    #[cfg(feature = "linux-patch")]
-    pub use super::linux_patch::*;
 }

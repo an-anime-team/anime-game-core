@@ -5,9 +5,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 lazy_static::lazy_static! {
     /// Default requests timeout in seconds
-    pub static ref REQUESTS_TIMEOUT: u64 = match option_env!("LAUNCHER_REQUESTS_TIMEOUT") {
-        Some(timeout) => timeout.parse().unwrap_or(8),
-        None => 8
+    pub static ref REQUESTS_TIMEOUT: u64 = match std::env::var("LAUNCHER_REQUESTS_TIMEOUT") {
+        Ok(timeout) => timeout.parse().unwrap_or(8),
+        Err(_) => 8
     };
 }
 
@@ -28,6 +28,9 @@ pub use games::genshin;
 
 #[cfg(feature = "star-rail")]
 pub use games::star_rail;
+
+#[cfg(feature = "zzz")]
+pub use games::zzz;
 
 #[cfg(feature = "honkai")]
 pub use games::honkai;
@@ -56,6 +59,7 @@ pub mod prelude {
     pub use super::traits::prelude::*;
 
     #[cfg(feature = "patches")]
+    #[allow(unused_imports)]
     pub use super::patches::prelude::*;
 
     #[cfg(feature = "genshin")]
@@ -63,6 +67,9 @@ pub mod prelude {
 
     #[cfg(feature = "star-rail")]
     pub use super::star_rail::prelude as star_rail;
+
+    #[cfg(feature = "zzz")]
+    pub use super::zzz::prelude as zzz;
 
     #[cfg(feature = "honkai")]
     pub use super::honkai::prelude as honkai;

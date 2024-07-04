@@ -12,7 +12,7 @@ pub mod prelude {
     pub use super::version_diff::*;
     pub use super::game::Game;
     pub use super::telemetry;
- 
+
     #[cfg(feature = "install")]
     pub use super::repairer;
 }
