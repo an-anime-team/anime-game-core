@@ -1,6 +1,6 @@
 [package]
 name = "anime-game-core"
-version = "1.20.2"
+version = "1.21.0"
 authors = ["Nikita Podvirnyi <krypt0nn@vk.com>"]
 license = "GPL-3.0"
 readme = "README.md"
@@ -41,7 +41,6 @@ kinda-virtual-fs = { version = "0.1.1", optional = true }
 
 # Amazing wuwa API
 brotli-decompressor = { version = "4.0", optional = true }
-wincompatlib = { version = "0.7.4", optional = true }
 
 [features]
 genshin = []
@@ -73,7 +72,7 @@ external = ["dep:kinda-virtual-fs"]
 patches = []
 patch-jadeite = []
 patch-mfc140 = []
-patch-vcrun2015 = ["dep:wincompatlib"]
+patch-vcrun2015 = []
 
 all = [
     "install",
