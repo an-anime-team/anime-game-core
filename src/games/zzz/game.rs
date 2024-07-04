@@ -56,7 +56,7 @@ impl GameExt for Game {
         let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
 
         // [0..9]
-        let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
+        let allowed = b"0123456789";
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
@@ -65,20 +65,6 @@ impl GameExt for Game {
         for byte in file.bytes().skip(4000).take(10000).flatten() {
             match byte {
                 0 => {
-                    version = [vec![], vec![], vec![]];
-                    version_ptr = 0;
-                    correct = true;
-                }
-
-                46 => {
-                    version_ptr += 1;
-
-                    if version_ptr > 2 {
-                        correct = false;
-                    }
-                }
-
-                95 => {
                     if correct && !version[0].is_empty() && !version[1].is_empty() && !version[2].is_empty() {
                         return Ok(Version::new(
                             bytes_to_num(&version[0]),
@@ -87,7 +73,17 @@ impl GameExt for Game {
                         ))
                     }
 
-                    correct = false;
+                    version = [vec![], vec![], vec![]];
+                    version_ptr = 0;
+                    correct = true;
+                }
+
+                b'.' => {
+                    version_ptr += 1;
+
+                    if version_ptr > 2 {
+                        correct = false;
+                    }
                 }
 
                 _ => {
