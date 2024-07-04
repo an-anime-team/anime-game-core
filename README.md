@@ -13,7 +13,6 @@ Unified library to control different games installations. Provides basic instrum
 | Install games and download updates                             | `install`     |
 | Manage voice packages, download and update them                | `install`     |
 | Repair game installations                                      | `install`     |
-| Apply linux patches                                            | `linux-patch` |
 
 ## Supported games
 
@@ -21,6 +20,7 @@ Unified library to control different games installations. Provides basic instrum
 |--------------------------------------------------------------------------------------|---------------------------|
 | [An Anime Game](https://github.com/an-anime-team/an-anime-game-launcher)             | `gen-shin` (without dash) |
 | [The Honkers Railway](https://github.com/an-anime-team/the-honkers-railway-launcher) | `star-rail`               |
+| [Sleepy](https://github.com/an-anime-team/sleepy-launcher)                           | `zzz`                     |
 | [Honkers](https://github.com/an-anime-team/honkers-launcher)                         | `hon-kai` (without dash)  |
 | [An Anime Borb](https://github.com/an-anime-team/an-anime-borb-launcher)             | `pgr`                     |
 | [Waves](https://github.com/an-anime-team/wavey-launcher)                             | `wuwa`                    |
