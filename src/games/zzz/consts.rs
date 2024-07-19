@@ -37,11 +37,15 @@ impl GameEdition {
         match self {
             GameEdition::Global => &[
                 concat!("log-upload-os.", "ho", "yo", "verse", ".com"),
-                concat!("overseauspider.", "yu", "ans", "hen", ".com")
+                concat!("overseauspider.", "yu", "ans", "hen", ".com"),
+                concat!("apm-log-upload-os.", "ho", "yo", "verse", ".com"),
+                concat!("zzz-log-upload-os.", "ho", "yo", "verse", ".com")
             ],
             GameEdition::China => &[
                 concat!("log-upload.", "mih", "oyo", ".com"),
-                concat!("uspider.", "yu", "ans", "hen", ".com")
+                concat!("uspider.", "yu", "ans", "hen", ".com"),
+                concat!("apm-log-upload-os.", "ho", "yo", "verse", ".com"),
+                concat!("zzz-log-upload-os.", "ho", "yo", "verse", ".com")
             ]
         }
     }
