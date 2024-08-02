@@ -42,7 +42,7 @@ impl GameExt for Game {
         tracing::trace!("Trying to get latest game version");
 
         // I assume game's API can't return incorrect version format right? Right?
-        Ok(Version::from_str(api::request(edition)?.data.game.latest.version).unwrap())
+        Ok(Version::from_str(api::request(edition)?.main.major.version).unwrap())
     }
 
     #[tracing::instrument(level = "debug", ret)]
@@ -126,27 +126,34 @@ impl Game {
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
-        let latest = api::request(self.edition)?.data.game.latest;
+        let response = api::request(self.edition)?;
 
         if self.is_installed() {
             let current = self.get_version()?;
 
-            if current >= latest.version {
+            if current >= response.main.major.version {
                 tracing::debug!("Game version is latest");
 
                 Ok(VersionDiff::Latest(current))
             }
 
             else {
-                tracing::debug!("Game is outdated: {} -> {}", current, latest.version);
+                tracing::debug!("Game is outdated: {} -> {}", current, response.main.major.version);
 
                 Ok(VersionDiff::Diff {
                     current,
-                    latest: Version::from_str(latest.version).unwrap(),
-                    url: latest.path,
+                    latest: Version::from_str(response.main.major.version).unwrap(),
 
-                    downloaded_size: latest.package_size.parse::<u64>().unwrap(),
-                    unpacked_size: latest.size.parse::<u64>().unwrap(),
+                    // TODO: can be a hard issue in future
+                    url: response.main.major.game_pkgs[0].url.clone(),
+
+                    downloaded_size: response.main.major.game_pkgs.iter()
+                        .flat_map(|pkg| pkg.size.parse::<u64>())
+                        .sum(),
+
+                    unpacked_size: response.main.major.game_pkgs.iter()
+                        .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                        .sum(),
 
                     installation_path: Some(self.path.clone()),
                     version_file_path: None,
@@ -159,11 +166,18 @@ impl Game {
             tracing::debug!("Game is not installed");
 
             Ok(VersionDiff::NotInstalled {
-                latest: Version::from_str(&latest.version).unwrap(),
-                url: latest.path,
+                latest: Version::from_str(&response.main.major.version).unwrap(),
 
-                downloaded_size: latest.package_size.parse::<u64>().unwrap(),
-                unpacked_size: latest.size.parse::<u64>().unwrap(),
+                // TODO: can be a hard issue in future
+                url: response.main.major.game_pkgs[0].url.clone(),
+
+                downloaded_size: response.main.major.game_pkgs.iter()
+                    .flat_map(|pkg| pkg.size.parse::<u64>())
+                    .sum(),
+
+                unpacked_size: response.main.major.game_pkgs.iter()
+                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                    .sum(),
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,

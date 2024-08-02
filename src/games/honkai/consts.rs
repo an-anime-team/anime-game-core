@@ -35,7 +35,10 @@ impl GameEdition {
         match self {
             GameEdition::Global => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=10&key=dpz65xJ3"),
             GameEdition::Sea    => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=9&key=tEGNtVhN"),
-            GameEdition::China  => concat!("https://bh3-launcher.mih", "oyo.com/bh3_global/mdk/launcher/api/resource?launcher_id=4&key=SyvuPnqL"),
+
+            // New API
+            GameEdition::China  => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1"),
+
             GameEdition::Taiwan => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=8&key=demhUTcW"),
             GameEdition::Korea  => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=11&key=PRg571Xh"),
             GameEdition::Japan  => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?key=ojevZ0EyIyZNCy4n&launcher_id=19")
