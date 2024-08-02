@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 use std::fmt::{Debug, Display, Formatter};
+use std::cmp::Ordering;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Version {
@@ -61,6 +62,8 @@ impl Display for Version {
     }
 }
 
+// Equality with strings
+
 impl PartialEq<String> for Version {
     #[inline]
     fn eq(&self, other: &String) -> bool {
@@ -89,12 +92,40 @@ impl PartialEq<Version> for &str {
     }
 }
 
+// Comparison with strings
+
+impl PartialOrd<String> for Version {
+    fn partial_cmp(&self, other: &String) -> Option<Ordering> {
+        self.to_string().partial_cmp(other)
+    }
+}
+
+impl PartialOrd<Version> for String {
+    fn partial_cmp(&self, other: &Version) -> Option<Ordering> {
+        self.partial_cmp(&other.to_string())
+    }
+}
+
+impl PartialOrd<&str> for Version {
+    fn partial_cmp(&self, other: &&str) -> Option<Ordering> {
+        self.to_string()
+            .as_str()
+            .partial_cmp(other)
+    }
+}
+
+impl PartialOrd<Version> for &str {
+    fn partial_cmp(&self, other: &Version) -> Option<Ordering> {
+        self.partial_cmp(&other.to_string().as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    pub fn test_version_new() {
+    fn test_version_new() {
         let version = Version::new(0, 0, 0);
 
         assert_eq!(version, "0.0.0");
@@ -104,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_version_from_str() {
+    fn test_version_from_str() {
         let version = Version::from_str("0.0.0");
 
         assert!(version.is_some());
@@ -118,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_version_long() {
+    fn test_version_long() {
         let version = Version::from_str("100.0.255");
 
         assert!(version.is_some());
@@ -132,9 +163,31 @@ mod tests {
     }
 
     #[test]
-    pub fn test_incorrect_versions() {
+    fn test_incorrect_versions() {
         assert_eq!(Version::from_str(""), None);
         assert_eq!(Version::from_str("..0"), None);
         assert_eq!(Version::from_str("0.0."), None);
+    }
+
+    #[test]
+    #[allow(clippy::cmp_owned)]
+    fn test_version_comparison() {
+        assert!(Version::new(1, 0, 1) > "1.0.0");
+        assert!(Version::new(1, 0, 0) < "1.0.1");
+
+        assert!("1.0.0" < Version::new(1, 0, 1));
+        assert!("1.0.1" > Version::new(1, 0, 0));
+
+        assert!(Version::new(1, 0, 1) > String::from("1.0.0"));
+        assert!(Version::new(1, 0, 0) < String::from("1.0.1"));
+
+        assert!(String::from("1.0.0") < Version::new(1, 0, 1));
+        assert!(String::from("1.0.1") > Version::new(1, 0, 0));
+
+        assert!(Version::new(1, 0, 0) == "1.0.0");
+        assert!("1.0.0" == Version::new(1, 0, 0));
+
+        assert!(Version::new(1, 0, 0) == String::from("1.0.0"));
+        assert!(String::from("1.0.0") == Version::new(1, 0, 0));
     }
 }
