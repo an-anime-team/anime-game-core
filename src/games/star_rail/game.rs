@@ -181,7 +181,7 @@ impl Game {
                 }
             };
 
-            if response.main.major.version == current {
+            if current >= response.main.major.version {
                 tracing::debug!("Game version is latest");
 
                 // If we're running latest game version the diff we need to download

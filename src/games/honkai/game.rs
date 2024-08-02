@@ -131,9 +131,7 @@ impl Game {
         if self.is_installed() {
             let current = self.get_version()?;
 
-            // Hon-kai doesn't have game predownloading feature for launcher,
-            // and just makes players completely reinstall the game, as I know
-            if latest.version == current {
+            if current >= latest.version {
                 tracing::debug!("Game version is latest");
 
                 Ok(VersionDiff::Latest(current))

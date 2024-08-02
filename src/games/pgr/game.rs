@@ -182,7 +182,7 @@ impl Game {
         let latest = api::game::request()?.default;
 
         if let Ok(current) = self.get_version() {
-            if current >= Version::from_str(&latest.version).unwrap() {
+            if current >= latest.version {
                 tracing::debug!("Game version is latest");
 
                 Ok(VersionDiff::Latest(current))
