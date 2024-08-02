@@ -20,6 +20,7 @@ use crate::star_rail::version_diff::*;
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English      Japanese     Korean       Chinese(PRC)
+    ("2.4.0",  5683360499,  6640826693,  4829957054,  4787258680),
     ("2.3.0",  5683360499,  6082790865,  4829957054,  4787258680),
     ("2.2.0",  5428937683,  5790872609,  4587944120,  4548320624), // For whatever reason, who would have known,
                                                                    // those values are from the `size` field instead of `decompressed_size`
