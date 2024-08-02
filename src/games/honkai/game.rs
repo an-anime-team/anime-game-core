@@ -53,10 +53,11 @@ impl GameExt for Game {
             bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - '0' as u8))
         }
 
-        let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
+        let stored_version = std::fs::read(self.path.join(".version"))
+            .map(|version| Version::new(version[0], version[1], version[2]))
+            .ok();
 
-        // [0..9]
-        let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
+        let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
@@ -67,11 +68,21 @@ impl GameExt for Game {
                 match byte {
                     0 => {
                         if correct && version_ptr == 2 && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
-                            return Ok(Version::new(
+                            let found_version = Version::new(
                                 bytes_to_num(&version[0]),
                                 bytes_to_num(&version[1]),
                                 bytes_to_num(&version[2])
-                            ))
+                            );
+    
+                            // Prioritize version stored in the .version file
+                            // because it's parsed from the API directly
+                            if let Some(stored_version) = stored_version {
+                                if stored_version > found_version {
+                                    return Ok(stored_version);
+                                }
+                            }
+    
+                            return Ok(found_version);
                         }
 
                         version = [vec![], vec![], vec![]];
@@ -88,7 +99,7 @@ impl GameExt for Game {
                     }
 
                     _ => {
-                        if correct && allowed.contains(&byte) {
+                        if correct && b"0123456789".contains(&byte) {
                             version[version_ptr].push(byte);
                         }
 
@@ -98,6 +109,10 @@ impl GameExt for Game {
                     }
                 }
             }
+        }
+
+        if let Some(stored_version) = stored_version {
+            return Ok(stored_version);
         }
 
         tracing::error!("Version's bytes sequence wasn't found");

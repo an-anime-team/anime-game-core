@@ -56,10 +56,11 @@ impl GameExt for Game {
             bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
         }
 
-        let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
+        let stored_version = std::fs::read(self.path.join(".version"))
+            .map(|version| Version::new(version[0], version[1], version[2]))
+            .ok();
 
-        // [0..9]
-        let allowed = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57];
+        let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
@@ -83,18 +84,29 @@ impl GameExt for Game {
 
                 95 => {
                     if correct && !version[0].is_empty() && !version[1].is_empty() && !version[2].is_empty() {
-                        return Ok(Version::new(
+                        let found_version = Version::new(
                             bytes_to_num(&version[0]),
                             bytes_to_num(&version[1]),
                             bytes_to_num(&version[2])
-                        ))
+                        );
+
+                        // Little workaround for the minor game patch versions (notably 1.0.1)
+                        // Prioritize version stored in the .version file
+                        // because it's parsed from the API directly
+                        if let Some(stored_version) = stored_version {
+                            if stored_version > found_version {
+                                return Ok(stored_version);
+                            }
+                        }
+
+                        return Ok(found_version);
                     }
 
                     correct = false;
                 }
 
                 _ => {
-                    if correct && allowed.contains(&byte) {
+                    if correct && b"0123456789".contains(&byte) {
                         version[version_ptr].push(byte);
                     }
 
@@ -103,6 +115,10 @@ impl GameExt for Game {
                     }
                 }
             }
+        }
+
+        if let Some(stored_version) = stored_version {
+            return Ok(stored_version);
         }
 
         tracing::error!("Version's bytes sequence wasn't found");

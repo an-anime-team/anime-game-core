@@ -59,9 +59,6 @@ impl GameExt for Game {
 
         let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
 
-        // [0..9]
-        let allowed = b"0123456789";
-
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
         let mut correct = true;
@@ -102,7 +99,7 @@ impl GameExt for Game {
                 }
 
                 _ => {
-                    if correct && allowed.contains(&byte) {
+                    if correct && b"0123456789".contains(&byte) {
                         version[version_ptr].push(byte);
                     }
 
