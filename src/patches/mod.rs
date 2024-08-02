@@ -8,9 +8,6 @@ pub mod mfc140;
 pub mod vcrun2015;
 
 pub mod prelude {
-    #[cfg(feature = "patch-dawn")]
-    pub use super::dawn::prelude::*;
-
     #[cfg(feature = "patch-jadeite")]
     pub use super::jadeite::{
         self,
