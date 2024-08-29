@@ -290,6 +290,13 @@ impl Archive {
                     .arg(format!("-o{}", folder.to_string_lossy()))
                     .arg("-aoa")
                     .output()?;
+
+                // Change permissions again
+                Command::new("chmod")
+                    .arg("-R")
+                    .arg("755")
+                    .arg(&folder)
+                    .output()?;
             }
         }
 
