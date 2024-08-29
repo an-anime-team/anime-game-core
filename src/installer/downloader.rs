@@ -14,27 +14,27 @@ pub const DEFAULT_CHUNK_SIZE: usize = 128 * 1024; // 128 KB
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DownloadingError {
     /// Specified downloading path is not available in system
-    /// 
+    ///
     /// `(path)`
     #[error("Path is not mounted: {0:?}")]
     PathNotMounted(PathBuf),
 
     /// No free space available under specified path
-    /// 
+    ///
     /// `(path, required, available)`
     #[error("No free space availale for specified path: {0:?} (requires {}, available {})", prettify_bytes(*.1), prettify_bytes(*.2))]
     NoSpaceAvailable(PathBuf, u64, u64),
 
     /// Failed to create or open output file
-    /// 
+    ///
     /// `(path, error message)`
     #[error("Failed to create output file {0:?}: {1}")]
     OutputFileError(PathBuf, String),
 
     /// Couldn't get metadata of existing output file
-    /// 
+    ///
     /// This metadata supposed to be used to continue downloading of the file
-    /// 
+    ///
     /// `(path, error message)`
     #[error("Failed to read metadata of the output file {0:?}: {1}")]
     OutputFileMetadataError(PathBuf, String),
@@ -118,7 +118,7 @@ impl Downloader {
     }
 
     /// Get name of downloading file from uri
-    /// 
+    ///
     /// - `https://example.com/example.zip` -> `example.zip`
     /// - `https://example.com` -> `index.html`
     pub fn get_filename(&self) -> &str {
@@ -196,15 +196,16 @@ impl Downloader {
 
             match free_space::available(&path) {
                 Some(space) => {
-                    if let Some(mut required) = self.length() {
-                        required -= downloaded as u64;
+                    if let Some(required) = self.length() {
+                        let required = required.checked_sub(downloaded as u64)
+                            .unwrap_or_default();
 
                         if space < required {
                             return Err(DownloadingError::NoSpaceAvailable(path, required, space));
                         }
                     }
                 }
-    
+
                 None => return Err(DownloadingError::PathNotMounted(path))
             }
         }
@@ -219,10 +220,10 @@ impl Downloader {
                     .send()?;
 
                 // Request content range (downloaded + remained content size)
-                // 
+                //
                 // If finished or overcame: bytes */10611646760
                 // If not finished: bytes 10611646759-10611646759/10611646760
-                // 
+                //
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
                 if let Some(range) = request.headers.get("content-range") {
                     // Finish downloading if header says that we've already downloaded all the data
@@ -239,7 +240,7 @@ impl Downloader {
 
                 // HTTP 416 = provided range is overcame actual content length (means file is downloaded)
                 // I check this here because HEAD request can return 200 OK while GET - 416
-                // 
+                //
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
                 if request.status_code == 416 {
                     (progress)(self.length.unwrap_or(downloaded as u64), self.length.unwrap_or(downloaded as u64));

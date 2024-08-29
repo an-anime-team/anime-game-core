@@ -73,7 +73,7 @@ impl Installer {
     }
 
     /// Get name of downloading file from uri
-    /// 
+    ///
     /// - `https://example.com/example.zip` -> `example.zip`
     /// - `https://example.com` -> `index.html`
     #[inline]
@@ -122,6 +122,12 @@ impl Installer {
             // Check available free space for archive itself
             (updater)(Update::CheckingFreeSpace(temp_path.clone()));
 
+            // Get downloaded file size to substract it from the free space check
+            let downloaded = match temp_path.metadata() {
+                Ok(metadata) => metadata.len(),
+                Err(_) => 0
+            };
+
             let Some(space) = free_space::available(&temp_path) else {
                 tracing::error!("Path is not mounted: {:?}", temp_path);
 
@@ -137,6 +143,10 @@ impl Installer {
                 } else {
                     required
                 };
+
+                // Sub downloaded size from the required one
+                let required = required.checked_sub(downloaded)
+                    .unwrap_or_default();
 
                 if space < required {
                     tracing::error!("No free space available in the temp folder. Required: {required}. Available: {space}");
