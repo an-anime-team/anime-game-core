@@ -90,7 +90,7 @@ impl GameExt for Game {
                                 bytes_to_num(&version[1]),
                                 bytes_to_num(&version[2])
                             );
-    
+
                             // Prioritize version stored in the .version file
                             // because it's parsed from the API directly
                             if let Some(stored_version) = stored_version {
@@ -98,7 +98,7 @@ impl GameExt for Game {
                                     return Ok(stored_version);
                                 }
                             }
-    
+
                             return Ok(found_version);
                         }
 
@@ -157,19 +157,22 @@ impl Game {
                 Ok(version) => version,
                 Err(err) => {
                     if self.path.exists() && self.path.metadata()?.len() == 0 {
+                        let downloaded_size = response.main.major.game_pkgs.iter()
+                            .flat_map(|pkg| pkg.size.parse::<u64>())
+                            .sum();
+
+                        let unpacked_size = response.main.major.game_pkgs.iter()
+                            .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                            .sum::<u64>() - downloaded_size;
+
                         return Ok(VersionDiff::NotInstalled {
                             latest: Version::from_str(&response.main.major.version).unwrap(),
                             edition: self.edition,
 
                             uri: response.main.major.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
 
-                            downloaded_size: response.main.major.game_pkgs.iter()
-                                .flat_map(|pkg| pkg.size.parse::<u64>())
-                                .sum(),
-
-                            unpacked_size: response.main.major.game_pkgs.iter()
-                                .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                                .sum(),
+                            downloaded_size,
+                            unpacked_size,
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -193,21 +196,24 @@ impl Game {
                     if let Some(predownload_major) = predownload_info.major {
                         for diff in predownload_info.patches {
                             if diff.version == current {
+                                let downloaded_size = diff.game_pkgs.iter()
+                                    .flat_map(|pkg| pkg.size.parse::<u64>())
+                                    .sum();
+
+                                let unpacked_size = diff.game_pkgs.iter()
+                                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                                    .sum::<u64>() - downloaded_size;
+
                                 return Ok(VersionDiff::Predownload {
                                     current,
                                     latest: Version::from_str(predownload_major.version).unwrap(),
-    
+
                                     uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
                                     edition: self.edition,
-    
-                                    downloaded_size: diff.game_pkgs.iter()
-                                        .flat_map(|pkg| pkg.size.parse::<u64>())
-                                        .sum(),
-    
-                                    unpacked_size: diff.game_pkgs.iter()
-                                        .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                                        .sum(),
-    
+
+                                    downloaded_size,
+                                    unpacked_size,
+
                                     installation_path: Some(self.path.clone()),
                                     version_file_path: None,
                                     temp_folder: None
@@ -226,6 +232,14 @@ impl Game {
             else {
                 tracing::debug!("Game is outdated: {} -> {}", current, response.main.major.version);
 
+                let downloaded_size = diff.game_pkgs.iter()
+                    .flat_map(|pkg| pkg.size.parse::<u64>())
+                    .sum();
+
+                let unpacked_size = diff.game_pkgs.iter()
+                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                    .sum::<u64>() - downloaded_size;
+
                 for diff in response.main.patches {
                     if diff.version == current {
                         return Ok(VersionDiff::Diff {
@@ -235,13 +249,8 @@ impl Game {
                             uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
                             edition: self.edition,
 
-                            downloaded_size: diff.game_pkgs.iter()
-                                .flat_map(|pkg| pkg.size.parse::<u64>())
-                                .sum(),
-
-                            unpacked_size: diff.game_pkgs.iter()
-                                .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                                .sum(),
+                            downloaded_size,
+                            unpacked_size,
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -261,19 +270,22 @@ impl Game {
         else {
             tracing::debug!("Game is not installed");
 
+            let downloaded_size = response.main.major.game_pkgs.iter()
+                .flat_map(|pkg| pkg.size.parse::<u64>())
+                .sum();
+
+            let unpacked_size = response.main.major.game_pkgs.iter()
+                .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                .sum::<u64>() - downloaded_size;
+
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&response.main.major.version).unwrap(),
                 edition: self.edition,
 
                 uri: response.main.major.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
 
-                downloaded_size: response.main.major.game_pkgs.iter()
-                    .flat_map(|pkg| pkg.size.parse::<u64>())
-                    .sum(),
-
-                unpacked_size: response.main.major.game_pkgs.iter()
-                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                    .sum(),
+                downloaded_size,
+                unpacked_size,
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,
