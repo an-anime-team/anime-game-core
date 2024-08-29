@@ -16,10 +16,12 @@ use crate::genshin::voice_data::locale::VoiceLocale;
 use crate::genshin::version_diff::*;
 
 /// List of voiceover sizes
-/// 
+///
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English(US)   Japanese      Korean        Chinese
+    ("5.0.0",  18503031452,  20808521048,  15590542644,  15865413012),
+    ("4.8.0",  17809995945,  20012816885,  14991865472,  15260781792), // Predicted
     ("4.7.0",  17116960439,  19217112723,  14393188301,  14656150572), // For whatever reason, who would have known,
                                                                        // those values are from the `size` field instead of `decompressed_size`
                                                                        // from the game API because later one looked COMPLETELY WRONG
@@ -138,7 +140,7 @@ impl VoicePackage {
     }
 
     /// Get latest voice package with specified locale
-    /// 
+    ///
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
     /// technically it can be installed. This method just don't know the game's path
     pub fn with_locale(locale: VoiceLocale, game_edition: GameEdition) -> anyhow::Result<Self> {
@@ -165,9 +167,9 @@ impl VoicePackage {
 
     #[inline]
     /// Get installation status of this package
-    /// 
+    ///
     /// This method will return `false` if this package is `VoicePackage::NotInstalled` enum value
-    /// 
+    ///
     /// If you want to check it's actually installed - you'd need to use `is_installed_in`
     pub fn is_installed(&self) -> bool {
         match self {
@@ -177,7 +179,7 @@ impl VoicePackage {
     }
 
     /// Calculate voice package size in bytes
-    /// 
+    ///
     /// (unpacked size, Option(archive size))
     pub fn size(&self) -> (u64, Option<u64>) {
         match self {
@@ -191,7 +193,7 @@ impl VoicePackage {
 
     #[inline]
     /// This method will return `true` if the package has `VoicePackage::Installed` enum value
-    /// 
+    ///
     /// If it's `VoicePackage::NotInstalled`, then this method will check `game_path`'s voices folder
     pub fn is_installed_in<T: AsRef<Path>>(&self, game_path: T) -> bool {
         match self {
@@ -286,7 +288,7 @@ impl VoicePackage {
 
     #[tracing::instrument(level = "trace", ret)]
     /// Try to delete voice package
-    /// 
+    ///
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
     pub fn delete(&self) -> anyhow::Result<()> {
@@ -325,7 +327,7 @@ impl VoicePackage {
 
     #[tracing::instrument(level = "debug", ret)]
     /// Try to delete voice package from specific game directory
-    /// 
+    ///
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
     pub fn delete_in<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> anyhow::Result<()> {
@@ -365,20 +367,20 @@ impl VoicePackage {
                         for diff in predownload_info.patches {
                             if diff.version == current {
                                 let diff = find_voice_pack(diff.audio_pkgs, self.locale());
-    
+
                                 return Ok(VersionDiff::Predownload {
                                     current,
                                     latest: Version::from_str(predownload_major.version).unwrap(),
                                     uri: diff.url,
-    
+
                                     downloaded_size: diff.size.parse::<u64>().unwrap(),
                                     unpacked_size: diff.decompressed_size.parse::<u64>().unwrap(),
-    
+
                                     installation_path: match self {
                                         VoicePackage::Installed { .. } => None,
                                         VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
                                     },
-    
+
                                     version_file_path: match self {
                                         VoicePackage::Installed { path, .. } => Some(path.join(".version")),
                                         VoicePackage::NotInstalled { game_path, .. } => {
@@ -388,7 +390,7 @@ impl VoicePackage {
                                             }
                                         }
                                     },
-    
+
                                     temp_folder: None,
                                     edition: game_edition
                                 })
