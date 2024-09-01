@@ -232,16 +232,16 @@ impl Game {
             else {
                 tracing::debug!("Game is outdated: {} -> {}", current, response.main.major.version);
 
-                let downloaded_size = diff.game_pkgs.iter()
-                    .flat_map(|pkg| pkg.size.parse::<u64>())
-                    .sum();
-
-                let unpacked_size = diff.game_pkgs.iter()
-                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                    .sum::<u64>() - downloaded_size;
-
                 for diff in response.main.patches {
                     if diff.version == current {
+                        let downloaded_size = diff.game_pkgs.iter()
+                            .flat_map(|pkg| pkg.size.parse::<u64>())
+                            .sum();
+
+                        let unpacked_size = diff.game_pkgs.iter()
+                            .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
+                            .sum::<u64>() - downloaded_size;
+
                         return Ok(VersionDiff::Diff {
                             current,
                             latest: Version::from_str(response.main.major.version).unwrap(),
