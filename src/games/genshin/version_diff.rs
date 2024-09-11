@@ -100,7 +100,7 @@ pub enum VersionDiff {
         unpacked_size: u64,
 
         /// Path to the folder this difference should be installed by the `install` method
-        /// 
+        ///
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
@@ -123,7 +123,7 @@ pub enum VersionDiff {
         unpacked_size: u64,
 
         /// Path to the folder this difference should be installed by the `install` method
-        /// 
+        ///
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
@@ -151,7 +151,7 @@ pub enum VersionDiff {
         unpacked_size: u64,
 
         /// Path to the folder this difference should be installed by the `install` method
-        /// 
+        ///
         /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
@@ -179,7 +179,7 @@ impl VersionDiff {
     }
 
     /// Return currently selected temp folder path
-    /// 
+    ///
     /// Default is `std::env::temp_dir()` value
     pub fn temp_folder(&self) -> PathBuf {
         match self {
@@ -467,7 +467,7 @@ impl VersionDiffExt for VersionDiff {
 
                     // Failed to change permissions => likely patch-related file and was made by the sudo, so root
                     #[allow(unused_must_use)]
-                    if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)).is_err() {
+                    if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).is_err() {
                         // For weird reason we can delete files made by root, but can't modify their permissions
                         // We're not checking its result because if it's error - then it's either couldn't be removed (which is not the case)
                         // or the file doesn't exist, which we obviously can just ignore

@@ -169,10 +169,12 @@ impl Game {
                             latest: Version::from_str(&response.main.major.version).unwrap(),
                             edition: self.edition,
 
-                            uri: response.main.major.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
-
                             downloaded_size,
                             unpacked_size,
+
+                            segments_uris: response.main.major.game_pkgs.into_iter()
+                                .map(|segment| segment.url)
+                                .collect(),
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -282,10 +284,12 @@ impl Game {
                 latest: Version::from_str(&response.main.major.version).unwrap(),
                 edition: self.edition,
 
-                uri: response.main.major.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
-
                 downloaded_size,
                 unpacked_size,
+
+                segments_uris: response.main.major.game_pkgs.into_iter()
+                    .map(|segment| segment.url)
+                    .collect(),
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,
