@@ -33,15 +33,24 @@ impl GameEdition {
     #[inline]
     pub fn api_uri(&self) -> &str {
         match self {
-            GameEdition::Global => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=10&key=dpz65xJ3"),
-            GameEdition::Sea    => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=9&key=tEGNtVhN"),
+            GameEdition::China => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1"),
+            _ => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=VYTpXlbWo8")
+        }
+    }
 
-            // New API
-            GameEdition::China  => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1"),
-
-            GameEdition::Taiwan => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=8&key=demhUTcW"),
-            GameEdition::Korea  => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?launcher_id=11&key=PRg571Xh"),
-            GameEdition::Japan  => concat!("https://bh3-launcher.hoy", "ove", "rse.com/bh3_global/mdk/launcher/api/resource?key=ojevZ0EyIyZNCy4n&launcher_id=19")
+    pub fn api_game_id(&self) -> &str {
+        // 5TIVvvcwtM  glb_official
+        // g0mMIvshDb  jp_official
+        // uxB4MC7nzC  kr_official
+        // bxPTXSET5t  overseas_official
+        // wkE5P5WsIf  asia_official
+        match self {
+            Self::Global => "5TIVvvcwtM",
+            Self::Sea    => "bxPTXSET5t", // Nut sure
+            Self::China  => "osvnlOc0S8",
+            Self::Taiwan => "wkE5P5WsIf", // Nut sure
+            Self::Korea  => "uxB4MC7nzC",
+            Self::Japan  => "g0mMIvshDb"
         }
     }
 
@@ -95,4 +104,3 @@ impl GameEdition {
         }
     }
 }
-

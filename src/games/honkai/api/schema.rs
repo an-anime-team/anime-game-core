@@ -1,7 +1,5 @@
 use serde::{Serialize, Deserialize};
 
-use super::schema_old;
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Response {
     pub retcode: u16,
@@ -9,41 +7,16 @@ pub struct Response {
     pub data: Data
 }
 
-impl From<schema_old::Response> for Response {
-    fn from(value: schema_old::Response) -> Self {
-        Response {
-            retcode: value.retcode,
-            message: value.message,
-            data: Data::from(value.data)
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Data {
     pub game_packages: Vec<GamePackage>
 }
 
-impl From<schema_old::Data> for Data {
-    fn from(value: schema_old::Data) -> Self {
-        Data {
-            game_packages: vec![
-                GamePackage {
-                    game: GameId {
-                        id: String::from("osvnlOc0S8"),
-                        biz: String::from("bh3_cn")
-                    },
-                    main: GameInfo::from(value.game)
-                }
-            ]
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GamePackage {
     pub game: GameId,
-    pub main: GameInfo
+    pub main: GameInfo,
+    pub pre_download: Option<GamePredownloadInfo>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -54,39 +27,16 @@ pub struct GameId {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GameInfo {
-    pub major: GameLatestInfo
-}
-
-impl From<schema_old::Game> for GameInfo {
-    fn from(value: schema_old::Game) -> Self {
-        GameInfo {
-            major: GameLatestInfo::from(value.latest)
-        }
-    }
+    pub major: GameLatestInfo,
+    pub patches: Vec<GamePatch>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GameLatestInfo {
     pub version: String,
     pub game_pkgs: Vec<Segment>,
+    pub audio_pkgs: Vec<AudioPackage>,
     pub res_list_url: String
-}
-
-impl From<schema_old::Latest> for GameLatestInfo {
-    fn from(value: schema_old::Latest) -> Self {
-        GameLatestInfo {
-            version: value.version,
-            game_pkgs: vec![
-                Segment {
-                    url: value.path,
-                    md5: value.md5,
-                    size: value.package_size,
-                    decompressed_size: value.size
-                }
-            ],
-            res_list_url: value.decompressed_path
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -95,4 +45,26 @@ pub struct Segment {
     pub md5: String,
     pub size: String,
     pub decompressed_size: String
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AudioPackage {
+    pub language: String,
+    pub url: String,
+    pub md5: String,
+    pub size: String,
+    pub decompressed_size: String
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GamePatch {
+    pub version: String,
+    pub game_pkgs: Vec<Segment>,
+    pub audio_pkgs: Vec<AudioPackage>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GamePredownloadInfo {
+    pub major: Option<GameLatestInfo>,
+    pub patches: Vec<GamePatch>
 }
