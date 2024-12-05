@@ -66,7 +66,7 @@ impl GameExt for Game {
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes().skip(3000).take(10000) {
+        for byte in file.bytes().skip(2000).take(10000) {
             if let Ok(byte) = byte {
                 match byte {
                     0 => {
