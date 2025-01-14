@@ -561,8 +561,10 @@ impl VersionDiffExt for VersionDiff {
             std::fs::write(version_path, self.latest().version);
         }
 
-        // Apply hdiff patches
-        // We're ignoring Err because in practice it means that hdifffiles.txt is missing
+        // Apply hdiff patches from  the hdifffiles.txt file.
+        // We're ignoring Err because in practice it means that the file is missing.
+        //
+        // Since 3.0.0 this file is not used and we rely on hdiffmap.json instead.
         if let Ok(files) = std::fs::read_to_string(path.join("hdifffiles.txt")) {
             tracing::debug!("Applying hdiff patches");
 
@@ -633,6 +635,94 @@ impl VersionDiffExt for VersionDiff {
 
             std::fs::remove_file(path.join("hdifffiles.txt"))
                 .expect("Failed to remove hdifffiles.txt");
+
+            (updater)(Self::Update::ApplyingHdiffFinished);
+        }
+
+        // Apply hdiff patches from the hdiffmap.json file.
+        // We're ignoring Err because in practice it means that the file is missing.
+        //
+        // This file replaces hdifffiles.txt since 3.0.0.
+        if let Ok(diffmap) = std::fs::read(path.join("hdiffmap.json")) {
+            tracing::debug!("Applying hdiff patches");
+
+            (updater)(Self::Update::ApplyingHdiffStarted);
+
+            #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+            struct Diff {
+                pub source_file_name: PathBuf,
+                pub target_file_name: PathBuf,
+                pub patch_file_name: PathBuf
+            }
+
+            #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+            struct DiffMap {
+                pub diff_map: Vec<Diff>
+            }
+
+            dbg!(diffmap.len());
+
+            if let Ok(diffs) = serde_json::from_slice::<DiffMap>(&diffmap) {
+                dbg!(&diffs.diff_map[0]);
+
+                let total_diffs = diffs.diff_map.len() as u64;
+
+                for (i, diff) in diffs.diff_map.into_iter().enumerate() {
+                    let file = path.join(diff.source_file_name);
+                    let output = path.join(&diff.target_file_name);
+                    let patch = path.join(diff.patch_file_name);
+
+                    // If failed to apply the patch.
+                    if let Err(err) = hpatchz::patch(&file, &patch, &output) {
+                        tracing::warn!("Failed to apply hdiff patch for {:?}: {err}", file);
+                        tracing::debug!("Trying to repair corrupted file");
+
+                        // If we were able to get API response - it shouldn't be impossible
+                        // to also get integrity files list from the same API.
+                        match super::repairer::try_get_integrity_file(self.edition(), &diff.target_file_name, Some(*crate::REQUESTS_TIMEOUT)) {
+                            Ok(Some(integrity)) => {
+                                if !integrity.fast_verify(&path) {
+                                    if let Err(err) = integrity.repair(&path) {
+                                        tracing::error!("Failed to repair corrupted file: {err}");
+
+                                        return Err(err.into());
+                                    }
+                                }
+                            }
+
+                            Ok(None) => {
+                                tracing::error!("Failed to repair corrupted file: not found");
+
+                                return Err(Self::Error::HdiffPatch(err.to_string()))
+                            }
+
+                            Err(repair_fail) => {
+                                tracing::error!("Failed to repair corrupted file: {repair_fail}");
+
+                                return Err(Self::Error::HdiffPatch(err.to_string()))
+                            }
+                        }
+
+                        #[allow(unused_must_use)] {
+                            std::fs::remove_file(&patch);
+                        }
+                    }
+
+                    // If patch was successfully applied.
+                    else {
+                        std::fs::remove_file(&file)
+                            .expect(&format!("Failed to remove hdiff patch: {:?}", file));
+
+                        std::fs::remove_file(&patch)
+                            .expect(&format!("Failed to remove hdiff patch: {:?}", patch));
+                    }
+
+                    (updater)(Self::Update::ApplyingHdiffProgress(i as u64 + 1, total_diffs));
+                }
+            }
+
+            std::fs::remove_file(path.join("hdiffmap.json"))
+                .expect("Failed to remove hdiffmap.json");
 
             (updater)(Self::Update::ApplyingHdiffFinished);
         }
