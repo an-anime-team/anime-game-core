@@ -81,65 +81,62 @@ impl Game {
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
-        fn get_files(edition: GameEdition, game_path: &PathBuf, fast_verify: bool) -> anyhow::Result<(Vec<String>, u64)> {
-            let mut files = Vec::new();
-            let mut total_size = 0;
+        let response = api::game::request(self.edition)?;
+        let cdn_url = api::find_cdn_uri(self.edition)?;
 
-            for mut file in api::resource::request(edition)?.resource {
-                // Remove "/" from the beginning of the path
-                file.dest = file.dest.strip_prefix('/').unwrap().to_string();
+        let latest_version = Version::from_str(&response.default.version).unwrap();
+        let resources_base_path = &response.default.resourcesBasePath;
+        let unpacked_url = format!("{cdn_url}/{resources_base_path}");
 
-                let file_path = game_path.join(&file.dest);
+        let resource_files = api::resource::request(self.edition)?;
+        let total_size: u64 = resource_files.resource.iter()
+            .map(|file| file.size)
+            .sum();
 
-                // Add file here if it is not downloaded
-                if !file_path.exists() {
-                    files.push(file.dest.clone());
+        let files: Vec<String> = resource_files.resource.iter()
+            .map(|file| file.dest.strip_prefix('/').unwrap_or(&file.dest).to_string())
+            .collect();
 
-                    total_size += file.size;
-                }
+        if self.is_installed() {
+            let current = match self.get_version() {
+                Ok(version) => version,
+                Err(err) => {
+                    // Handle empty install folder case
+                    if self.path.exists() && self.path.metadata()?.len() == 0 {
+                        tracing::debug!("Game folder exists but appears empty");
 
-                // Or try to get downloaded file's metadata
-                else if let Ok(metadata) = file_path.metadata() {
-                    // And compare updated file size with downloaded one. If they're equal,
-                    // then as well compare their md5 hashes if fast_verify = false
-                    if metadata.len() != file.size || (!fast_verify && format!("{:x}", Md5::digest(std::fs::read(file_path)?)).to_ascii_lowercase() != file.md5.to_ascii_lowercase()) {
-                        files.push(file.dest.clone());
-
-                        // Add only files difference in size to the total download size
-                        // If remote file is smaller than downloaded, then total value will decrease
-                        total_size += file.size - metadata.len();
+                        return Ok(VersionDiff::NotInstalled {
+                            latest: latest_version,
+                            unpacked_url,
+                            files,
+                            total_size,
+                            installation_path: Some(self.path.clone()),
+                            version_file_path: None,
+                            threads: DEFAULT_DOWNLOADER_THREADS
+                        });
                     }
+
+                    return Err(err)
                 }
-            }
+            };
 
-            Ok((files, total_size))
-        }
-
-        let latest = api::game::request(self.edition)?.default;
-
-        if let Ok(current) = self.get_version() {
-            if current >= Version::from_str(&latest.version).unwrap() {
+            if current >= latest_version {
                 tracing::debug!("Game version is latest");
 
                 Ok(VersionDiff::Latest(current))
             }
 
             else {
-                tracing::debug!("Game is outdated: {} -> {}", current, latest.version);
-
-                let (files, total_size) = get_files(self.edition, &self.path, self.fast_verify)?;
+                tracing::debug!("Game is outdated: {} -> {}", current, latest_version);
 
                 Ok(VersionDiff::Outdated {
                     current,
-                    latest: Version::from_str(latest.version).unwrap(),
-
-                    unpacked_url: format!("{}/{}", api::find_cdn_uri(self.edition)?, latest.resourcesBasePath),
+                    latest: latest_version,
+                    unpacked_url,
                     files,
                     total_size,
-
                     installation_path: Some(self.path.clone()),
                     version_file_path: None,
-
                     threads: DEFAULT_DOWNLOADER_THREADS
                 })
             }
@@ -148,12 +145,9 @@ impl Game {
         else {
             tracing::debug!("Game is not installed");
 
-            let (files, total_size) = get_files(self.edition, &self.path, self.fast_verify)?;
-
             Ok(VersionDiff::NotInstalled {
-                latest: Version::from_str(&latest.version).unwrap(),
-
-                unpacked_url: format!("{}/{}", api::find_cdn_uri(self.edition)?, latest.resourcesBasePath),
+                latest: latest_version,
+                unpacked_url,
                 files,
                 total_size,
 
