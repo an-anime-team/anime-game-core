@@ -15,6 +15,7 @@ pub mod version;
 pub mod traits;
 pub mod prettify_bytes;
 pub mod check_domain;
+pub mod file_strings;
 
 #[cfg(feature = "patches")]
 pub mod patches;
@@ -55,7 +56,7 @@ pub mod repairer;
 pub mod prelude {
     pub use super::version::*;
     pub use super::prettify_bytes::prettify_bytes;
-
+    
     pub use super::traits::prelude::*;
 
     #[cfg(feature = "patches")]
