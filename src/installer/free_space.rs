@@ -5,13 +5,10 @@ use sysinfo::Disks;
 // TODO: support for relative paths
 
 /// Get available free disk space by specified path
-/// 
+///
 /// Can return `None` if path is not prefixed by any available disk
 pub fn available(path: impl AsRef<Path>) -> Option<u64> {
-    let mut disks = Disks::new();
-
-    disks.refresh_list();
-    disks.refresh();
+    let mut disks = Disks::new_with_refreshed_list();
 
     disks.sort_by(|a, b| {
         let a = a.mount_point().as_os_str().len();
@@ -35,10 +32,7 @@ pub fn available(path: impl AsRef<Path>) -> Option<u64> {
 
 /// Check if two paths exist on the same disk
 pub fn is_same_disk(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> bool {
-    let mut disks = Disks::new();
-
-    disks.refresh_list();
-    disks.refresh();
+    let mut disks = Disks::new_with_refreshed_list();
 
     disks.sort_by(|a, b| {
         let a = a.mount_point().as_os_str().len();
