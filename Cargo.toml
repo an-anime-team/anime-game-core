@@ -8,14 +8,14 @@ repository = "https://github.com/an-anime-team/anime-game-core"
 edition = "2021"
 
 [dependencies]
-minreq = { version = "2.12", features = ["json-using-serde", "https-rustls-probe", "proxy"] }
+minreq = { version = "2.13", features = ["json-using-serde", "https-rustls-probe", "proxy"] }
 dns-lookup = "2.0"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 fs_extra = "1.3.0"
-cached = { version = "0.53", features = ["proc_macro"] }
+cached = { version = "0.55", features = ["proc_macro"] }
 
 anyhow = { version = "1.0", features = ["backtrace"] }
 thiserror = "1.0"
@@ -23,8 +23,8 @@ tracing = "0.1"
 lazy_static = "1.5.0"
 
 # Install feature
-sysinfo = { version = "0.32", optional = true, features = ["linux-netdevs"] }
-zip = { version = "2.1", optional = true }
+sysinfo = { version = "0.34", optional = true, features = ["linux-netdevs"] }
+zip = { version = "2.6", optional = true }
 tar = { version = "0.4", optional = true }
 # sevenz-rust = { version = "0.2", optional = true }
 
