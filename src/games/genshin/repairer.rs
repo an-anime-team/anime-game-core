@@ -6,26 +6,20 @@ use super::api;
 use super::consts::GameEdition;
 use super::voice_data::locale::VoiceLocale;
 
-use crate::repairer::IntegrityFile;
+use crate::{repairer::IntegrityFile, sophon};
 
-fn try_get_some_integrity_files<T: AsRef<str>>(game_edition: GameEdition, file_name: T, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
-    let decompressed_path = api::request(game_edition)?.main.major.res_list_url;
-
-    let pkg_version = minreq::get(format!("{decompressed_path}/{}", file_name.as_ref()))
-        .with_timeout(timeout.unwrap_or(*crate::REQUESTS_TIMEOUT))
-        .send()?;
+fn try_get_some_integrity_files(game_edition: GameEdition, matching_field: &str, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
+    let client = reqwest::blocking::Client::new();
+    let game_branches = sophon::get_game_branches_info(client.clone(), game_edition.into())?;
+    let latest_ver = game_branches.latest_version_by_id(game_edition.game_id()).unwrap();
+    let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_ver).unwrap();
+    let downloads = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, false, game_edition.into())?;
+    let download_manifest = sophon::installer::get_download_manifest(client.clone(), downloads.manifests.iter().find(|sdi| sdi.matching_field == matching_field).unwrap())?;
 
     let mut files = Vec::new();
 
-    for line in String::from_utf8_lossy(pkg_version.as_bytes()).lines() {
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
-            files.push(IntegrityFile {
-                path: PathBuf::from(value["remoteName"].as_str().unwrap()),
-                md5: value["md5"].as_str().unwrap().to_string(),
-                size: value["fileSize"].as_u64().unwrap(),
-                base_url: decompressed_path.clone()
-            });
-        }
+    for asset_info in &download_manifest.Assets {
+        files.push(asset_info.into())
     }
 
     Ok(files)
@@ -34,13 +28,13 @@ fn try_get_some_integrity_files<T: AsRef<str>>(game_edition: GameEdition, file_n
 /// Try to list latest game files
 #[cached(result)]
 pub fn try_get_integrity_files(game_edition: GameEdition, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
-    try_get_some_integrity_files(game_edition, "pkg_version", timeout)
+    try_get_some_integrity_files(game_edition, "game", timeout)
 }
 
 /// Try to list latest voice package files
 #[cached(result)]
 pub fn try_get_voice_integrity_files(game_edition: GameEdition, locale: VoiceLocale, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
-    try_get_some_integrity_files(game_edition, format!("Audio_{}_pkg_version", locale.to_folder()), timeout)
+    try_get_some_integrity_files(game_edition, locale.to_code(), timeout)
 }
 
 /// Try to get specific integrity file

@@ -110,7 +110,7 @@ impl PartialOrd<&str> for Version {
     fn partial_cmp(&self, other: &&str) -> Option<Ordering> {
         self.to_string()
             .as_str()
-            .partial_cmp(other)
+            .partial_cmp(*other)
     }
 }
 

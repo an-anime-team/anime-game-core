@@ -6,13 +6,12 @@ use thiserror::Error;
 
 use super::consts::GameEdition;
 
-use crate::version::Version;
+use crate::{sophon::{self, api_schemas::{sophon_diff::SophonDiff, sophon_manifests::{SophonDownloadInfo, SophonDownloads}, DownloadOrDiff}, SophonError}, version::Version};
 use crate::traits::version_diff::VersionDiffExt;
 
 #[cfg(feature = "install")]
 use crate::{
     installer::{
-        downloader::{Downloader, DownloadingError},
         installer::Update as InstallerUpdate,
         free_space,
         archives::Archive
@@ -25,6 +24,9 @@ pub enum DiffUpdate {
     CheckingFreeSpace(PathBuf),
 
     InstallerUpdate(InstallerUpdate),
+
+    SophonInstallerUpdate(sophon::installer::Update),
+    SophonPatcherUpdate(sophon::updater::Update),
 
     ApplyingHdiffStarted,
     ApplyingHdiffProgress(u64, u64),
@@ -39,6 +41,20 @@ impl From<InstallerUpdate> for DiffUpdate {
     #[inline]
     fn from(update: InstallerUpdate) -> Self {
         Self::InstallerUpdate(update)
+    }
+}
+
+impl From<sophon::installer::Update> for DiffUpdate {
+    #[inline]
+    fn from(value: sophon::installer::Update) -> Self {
+        Self::SophonInstallerUpdate(value)
+    }
+}
+
+impl From<sophon::updater::Update> for DiffUpdate {
+    #[inline]
+    fn from(value: sophon::updater::Update) -> Self {
+        Self::SophonPatcherUpdate(value)
     }
 }
 
@@ -57,9 +73,9 @@ pub enum DiffDownloadingError {
     #[error("Component has multiple downloading urls and can't be saved as a single file")]
     MultipleSegments,
 
-    /// Failed to fetch remove data. Redirected from `Downloader`
+    /// Sophon download/patch error
     #[error("{0}")]
-    DownloadingError(#[from] DownloadingError),
+    SophonError(#[from] SophonError),
 
     /// Failed to apply hdiff patch
     #[error("Failed to apply hdiff patch: {0}")]
@@ -74,9 +90,9 @@ pub enum DiffDownloadingError {
     PathNotSpecified
 }
 
-impl From<minreq::Error> for DiffDownloadingError {
-    fn from(error: minreq::Error) -> Self {
-        DownloadingError::Minreq(error.to_string()).into()
+impl From<reqwest::Error> for DiffDownloadingError {
+    fn from(error: reqwest::Error) -> Self {
+        SophonError::Reqwest(error.to_string()).into()
     }
 }
 
@@ -93,7 +109,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        uri: String,
+        download_info: DownloadOrDiff,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -116,7 +132,7 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        uri: String,
+        diff: SophonDiff,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -144,7 +160,8 @@ pub enum VersionDiff {
     /// Component is not yet installed
     NotInstalled {
         latest: Version,
-        segments_uris: Vec<String>,
+
+        download_info: SophonDownloadInfo,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -222,6 +239,40 @@ impl VersionDiff {
                 self
             }
         }
+    }
+
+    fn download_game(&self, download_info: &SophonDownloadInfo, path: impl AsRef<Path>, updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static) -> Result<(), <Self as VersionDiffExt>::Error> {
+        let client = reqwest::blocking::Client::new();
+        let installer = sophon::installer::SophonInstaller::new(download_info, client, self.temp_folder())?;
+
+        installer.install(path.as_ref(), move |msg| { (updater)(msg.into()) })?;
+
+        Ok(())
+    }
+
+    fn patch_game(&self, from: Version, diff: &SophonDiff, path: impl AsRef<Path>, updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static) -> Result<(), <Self as VersionDiffExt>::Error> {
+        let client = reqwest::blocking::Client::new();
+        let patcher = sophon::updater::SophonPatcher::new(diff, client, self.temp_folder())?;
+
+        patcher.sophon_apply_patches(path, from, move |msg | (updater)(msg.into()))?;
+
+        Ok(())
+    }
+
+    fn pre_download(&self, download_or_patch_info: &DownloadOrDiff, from: Version, updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static) -> Result<(), <Self as VersionDiffExt>::Error> {
+        let client = reqwest::blocking::Client::new();
+        match download_or_patch_info {
+            DownloadOrDiff::Download(download_info) => {
+                let installer = sophon::installer::SophonInstaller::new(download_info, client, self.temp_folder())?;
+                installer.pre_download(move |msg| {(updater)(msg.into())})?;
+            }
+            DownloadOrDiff::Patch(diff_info) => {
+                let patcher = sophon::updater::SophonPatcher::new(diff_info, client, self.temp_folder())?;
+                patcher.pre_download(from, move |msg| {(updater)(msg.into())})?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -303,6 +354,12 @@ impl VersionDiffExt for VersionDiff {
         }
     }
 
+    // There isn't a single type providing download information, so this method is useless
+    fn downloading_uri(&self) -> Option<String> {
+        None
+    }
+
+    /*
     fn downloading_uri(&self) -> Option<String> {
         match self {
             // Can't be installed
@@ -317,46 +374,44 @@ impl VersionDiffExt for VersionDiff {
             Self::NotInstalled { .. } => None
         }
     }
+    */
 
+    // no singular file to download
     fn download_as(&mut self, path: impl AsRef<Path>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), Self::Error> {
         tracing::debug!("Downloading version difference");
 
-        let mut downloader = Downloader::new(match self {
+        match self {
             // Can't be downloaded
-            Self::Latest { .. } => return Err(Self::Error::AlreadyLatest),
-            Self::Outdated { .. } => return Err(Self::Error::Outdated),
+            Self::Latest { .. } => Err(Self::Error::AlreadyLatest),
+            Self::Outdated { .. } => Err(Self::Error::Outdated),
 
             // Can be downloaded
-            Self::Predownload { uri, .. } |
-            Self::Diff { uri, .. } => uri,
+            //Self::Predownload { uri, .. } |
+            //Self::Diff { uri, .. } => uri,
 
             // Can be installed but amogus
-            Self::NotInstalled { .. } => return Err(Self::Error::MultipleSegments)
-        })?;
-
-        if let Err(err) = downloader.download(path.as_ref(), progress) {
-            tracing::error!("Failed to download version difference: {err}");
-
-            return Err(err.into());
+            //Self::NotInstalled { .. } => return Err(Self::Error::MultipleSegments),
+            _ => Err(Self::Error::MultipleSegments)
         }
-
-        Ok(())
     }
 
     fn install_to(&self, path: impl AsRef<Path>, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error> {
         tracing::debug!("Installing version difference");
 
-        let uris = match self {
+        match self {
             // Can't be installed
-            Self::Latest { .. } => return Err(Self::Error::AlreadyLatest),
-            Self::Outdated { .. } => return Err(Self::Error::Outdated),
+            Self::Latest { .. } => Err(Self::Error::AlreadyLatest),
+            Self::Outdated { .. } => Err(Self::Error::Outdated),
 
             // Can be installed
-            Self::Predownload { uri, .. } |
-            Self::Diff { uri, .. } => vec![uri.to_owned()],
+            Self::Diff { diff, current, .. } => self.patch_game(*current, diff, path, updater),
+            Self::NotInstalled { download_info, .. } => self.download_game(download_info, path, updater),
 
-            Self::NotInstalled { segments_uris, .. } => segments_uris.to_owned()
-        };
+            // Predownload without applying
+            Self::Predownload { download_info, current , ..} => { self.pre_download(download_info, *current, updater) }
+        }
+
+        /*
 
         let path = path.as_ref().to_path_buf();
         let temp_folder = self.temp_folder();
@@ -664,5 +719,6 @@ impl VersionDiffExt for VersionDiff {
         }
 
         Ok(())
+        */
     }
 }
