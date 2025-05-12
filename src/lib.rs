@@ -52,6 +52,9 @@ pub mod installer;
 #[cfg(feature = "install")]
 pub mod repairer;
 
+#[cfg(feature = "sophon")]
+pub mod sophon;
+
 pub mod prelude {
     pub use super::version::*;
     pub use super::prettify_bytes::prettify_bytes;

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+message SophonPatchProto
+{
+    repeated SophonPatchAssetProperty  PatchAssets  = 1;
+    map<string, SophonUnusedAssetInfo> UnusedAssets = 2;
+}
+
+message SophonPatchAssetProperty
+{
+    string                             AssetName    = 1; // Path to the file relative to the game directory
+    uint64                             AssetSize    = 2; // Size of the entire file
+    string                             AssetHashMd5 = 3; // md5 file hash AFTER patching
+    map<string, SophonPatchAssetChunk> AssetPatchChunks  = 4;
+}
+
+message SophonPatchAssetChunk 
+{
+    string PatchName           = 1;
+    string VersionTag          = 2; // Game version, e.g. "5.5.0" or "5.4.0" (when updating to "5.6.0")
+    string BuildId             = 3;
+    uint64 PatchSize           = 4;
+    string PatchMd5            = 5;
+    uint64 PatchOffset         = 6;
+    uint64 PatchLength         = 7;
+    string OriginalFileName    = 8;
+    uint64 OriginalFileLength  = 9;
+    string OriginalFileMd5     = 10; // md5 file hash BEFORE patching
+}
+
+message SophonUnusedAssetInfo
+{
+    repeated SophonUnusedAssetFile Assets = 1;
+}
+
+message SophonUnusedAssetFile
+{
+    string FileName = 1;
+    uint64 FileSize = 2;
+    string FileMd5  = 3;
+}

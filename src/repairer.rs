@@ -3,6 +3,8 @@ use std::collections::HashSet;
 
 use md5::{Md5, Digest};
 
+use crate::sophon::protos::SophonManifest::SophonManifestAssetProperty;
+
 use super::installer::downloader::{Downloader, DownloadingError};
 
 // {"remoteName": "UnityPlayer.dll", "md5": "8c8c3d845b957e4cb84c662bed44d072", "fileSize": 33466104}
@@ -12,6 +14,17 @@ pub struct IntegrityFile {
     pub md5: String,
     pub size: u64,
     pub base_url: String
+}
+
+impl From<&SophonManifestAssetProperty> for IntegrityFile {
+    fn from(value: &SophonManifestAssetProperty) -> Self {
+        Self {
+            path: PathBuf::from(&value.AssetName),
+            md5: value.AssetHashMd5.clone(),
+            size: value.AssetSize,
+            base_url: "".to_owned() // empty because there's no single url for downloading
+        }
+    }
 }
 
 impl IntegrityFile {

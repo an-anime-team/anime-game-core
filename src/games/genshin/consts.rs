@@ -66,6 +66,14 @@ impl GameEdition {
             Self::Global
         }
     }
+
+    #[inline]
+    pub fn game_id(&self) -> &str {
+        match self {
+            Self::Global => "gopR6Cufr3",
+            Self::China => "1Z8W5NHUQb"
+        }
+    }
 }
 
 #[inline]
