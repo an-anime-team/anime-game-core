@@ -62,12 +62,12 @@ impl IntegrityFile {
         tracing::trace!("Verifying file");
 
         std::fs::metadata(game_path.into().join(&self.path))
-            .and_then(|metadata| Ok(metadata.len() == self.size))
+            .map(|metadata| metadata.len() == self.size)
             .unwrap_or(false)
     }
 
     /// Replace remote file with the latest one
-    /// 
+    ///
     /// This method doesn't compare them, so you should do it manually
     #[tracing::instrument(level = "debug", ret)]
     pub fn repair<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> Result<(), DownloadingError> {
@@ -83,9 +83,9 @@ impl IntegrityFile {
 }
 
 /// Calculate difference between actual files stored in `game_dir`, and files listed in `used_files`
-/// 
+///
 /// Returned difference will contain files that are not used by the game and should (or just can) be deleted
-/// 
+///
 /// `used_files` can be both absolute and relative to `game_dir`
 pub fn try_get_unused_files<T, F, U>(game_dir: T, used_files: F, skip_names: U) -> anyhow::Result<Vec<PathBuf>>
 where
@@ -114,7 +114,7 @@ where
                 if entry.file_type()?.is_dir() {
                     files.append(&mut list_files(entry_path, skip_names)?);
                 }
-    
+
                 else {
                     files.push(entry_path);
                 }
@@ -125,7 +125,6 @@ where
     }
 
     let used_files = used_files.into_iter()
-        .map(|path| path.into())
         .collect::<HashSet<PathBuf>>();
 
     let skip_names = skip_names.into_iter()
@@ -149,7 +148,7 @@ where
             }
 
             // File not persist in used_files => not unused
-            return true;
+            true
         })
         .collect())
 }

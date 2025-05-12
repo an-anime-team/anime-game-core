@@ -8,7 +8,7 @@ use reqwest::blocking::Client;
 
 // I ain't refactoring it.
 use super::{
-    api_request_post,
+    api_post_request,
     api_schemas::{
         game_branches::PackageInfo,
         sophon_diff::{SophonDiff, SophonDiffs},
@@ -54,7 +54,7 @@ pub fn get_game_diffs_sophon_info(
         edition,
     );
 
-    api_request_post(client, &url)
+    api_post_request(client, &url)
 }
 
 pub fn get_patch_manifest(
@@ -394,11 +394,13 @@ impl SophonPatcher {
         }
 
         else {
-            if !check_file(
+            let valid_file = check_file(
                 &target_file_path,
                 patch_info.AssetSize,
                 &patch_info.AssetHashMd5,
-            )? {
+            )?;
+
+            if !valid_file {
                 (updater)(Update::FileHashCheckFailed(target_file_path));
             }
         }
