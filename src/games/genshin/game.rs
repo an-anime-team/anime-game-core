@@ -39,6 +39,11 @@ impl GameExt for Game {
         self.edition
     }
 
+    #[inline]
+    fn is_installed(&self) -> bool {
+        self.path.join("globalgamemanagers").exists()
+    }
+
     #[tracing::instrument(level = "trace", ret)]
     /// Try to get latest game version
     fn get_latest_version(edition: GameEdition) -> anyhow::Result<Version> {
