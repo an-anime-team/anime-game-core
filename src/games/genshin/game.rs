@@ -41,7 +41,9 @@ impl GameExt for Game {
 
     #[inline]
     fn is_installed(&self) -> bool {
-        self.path.join("globalgamemanagers").exists()
+        self.path.join(self.edition.data_folder())
+            .join("globalgamemanagers")
+            .exists()
     }
 
     #[tracing::instrument(level = "trace", ret)]
