@@ -247,6 +247,16 @@ impl VersionDiff {
 
         installer.install(path.as_ref(), move |msg| { (updater)(msg.into()) })?;
 
+        // Create `.version` file here even if hdiff patching is failed because
+        // it's easier to explain user why he should run files repairer than
+        // why he should re-download entire game update because something is failed
+        #[allow(unused_must_use)] {
+            let version_path = self.version_file_path()
+                .unwrap_or(path.as_ref().join(".version"));
+
+            std::fs::write(version_path, self.latest().version);
+        }
+
         Ok(())
     }
 
@@ -254,7 +264,17 @@ impl VersionDiff {
         let client = reqwest::blocking::Client::new();
         let patcher = sophon::updater::SophonPatcher::new(diff, client, self.temp_folder())?;
 
-        patcher.sophon_apply_patches(path, from, move |msg | (updater)(msg.into()))?;
+        patcher.sophon_apply_patches(&path, from, move |msg | (updater)(msg.into()))?;
+
+        // Create `.version` file here even if hdiff patching is failed because
+        // it's easier to explain user why he should run files repairer than
+        // why he should re-download entire game update because something is failed
+        #[allow(unused_must_use)] {
+            let version_path = self.version_file_path()
+                .unwrap_or(path.as_ref().join(".version"));
+
+            std::fs::write(version_path, self.latest().version);
+        }
 
         Ok(())
     }

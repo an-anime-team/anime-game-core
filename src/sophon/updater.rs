@@ -15,7 +15,7 @@ use super::{
     },
     get_protobuf_from_url, md5_hash_str,
     protos::SophonPatch::{
-        SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetFile,
+        self, SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetFile
     },
     GameEdition, SophonError,
 };
@@ -318,26 +318,37 @@ impl SophonPatcher {
         }
 
         for file_patch_info in &self.patch_manifest.PatchAssets {
-            let result = self.sophon_patch_file(
-                file_patch_info,
-                &target_dir,
-                from,
-                &mut progress,
-                updater.clone(),
-            );
-
-            if let Err(err) = result {
-                (updater)(Update::DownloadingError(err));
+            if file_patch_info.AssetName.ends_with("globalgamemanagers") {
+                continue;
             }
+            self.patch_file_updater_handler(file_patch_info, &target_dir, from, &mut progress, updater.clone());
+        }
 
-            else {
-                progress.patched_files += 1;
-
-                (updater)(progress.msg_files());
-            }
+        if let Some(file_patch_info) = self.patch_manifest.PatchAssets.iter().find(|passet| passet.AssetName.ends_with("globalgamemanagers")) {
+            self.patch_file_updater_handler(file_patch_info, target_dir, from, &mut progress, updater);
         }
 
         Ok(())
+    }
+
+    fn patch_file_updater_handler(&self, file_patch_info: &SophonPatchAssetProperty, target_dir: impl AsRef<Path>, installed_ver: Version, progress: &mut PatchingStats, updater: impl Fn(Update) + Clone + Send + 'static) {
+        let result = self.sophon_patch_file(
+            file_patch_info,
+            &target_dir,
+            installed_ver,
+            progress,
+            updater.clone(),
+        );
+
+        if let Err(err) = result {
+            (updater)(Update::DownloadingError(err));
+        }
+
+        else {
+            progress.patched_files += 1;
+
+            (updater)(progress.msg_files());
+        }
     }
 
     fn sophon_patch_file(

@@ -268,15 +268,25 @@ impl SophonInstaller {
         progress: &mut DownloadProgress
     ) {
         for asset_file in &self.manifest.Assets {
-            match self.download_chunked_file(output_folder, asset_file, updater.clone(), progress) {
-                Ok(()) => {
-                    progress.downloaded_files += 1;
-
-                    (updater)(progress.msg_files());
-                }
-
-                Err(e) => (updater)(Update::DownloadingError(e))
+            if asset_file.AssetName.ends_with("globalgamemanagers") {
+                continue;
             }
+            self.download_file_updater_handler(output_folder, asset_file, updater.clone(), progress);
+        }
+        if let Some(asset_file) = self.manifest.Assets.iter().find(|asset| asset.AssetName.ends_with("globalgamemanagers")) {
+            self.download_file_updater_handler(output_folder, asset_file, updater.clone(), progress);
+        }
+    }
+
+    fn download_file_updater_handler(&self, output_folder: &Path, asset_file: &SophonManifestAssetProperty, updater: impl Fn(Update) + Clone + Send + 'static, progress: &mut DownloadProgress) {
+        match self.download_chunked_file(output_folder, asset_file, updater.clone(), progress) {
+            Ok(()) => {
+                progress.downloaded_files += 1;
+
+                (updater)(progress.msg_files());
+            }
+
+            Err(e) => (updater)(Update::DownloadingError(e))
         }
     }
 
