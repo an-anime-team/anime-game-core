@@ -1,16 +1,15 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{Read, Write},
-    os::unix::fs::FileExt,
-    path::{Path, PathBuf},
-};
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::os::unix::fs::FileExt;
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
+// I ain't refactoring all this.
 use super::{
-    api_request,
+    api_get_request,
     api_schemas::{
         game_branches::PackageInfo,
         sophon_manifests::{SophonDownloadInfo, SophonDownloads},
@@ -21,6 +20,7 @@ use super::{
     },
     GameEdition, SophonError,
 };
+
 use crate::prelude::free_space;
 
 fn sophon_download_info_url(
@@ -47,14 +47,15 @@ pub fn get_game_download_sophon_info(
         &package_info.password,
         &package_info.package_id,
         pre_download,
-        edition,
+        edition
     );
-    api_request(client, &url)
+
+    api_get_request(client, &url)
 }
 
 pub fn get_download_manifest(
     client: Client,
-    download_info: &SophonDownloadInfo,
+    download_info: &SophonDownloadInfo
 ) -> Result<SophonManifestProto, SophonError> {
     let url_prefix = &download_info.manifest_download.url_prefix;
     let url_suffix = &download_info.manifest_download.url_suffix;
@@ -65,7 +66,7 @@ pub fn get_download_manifest(
     get_protobuf_from_url(
         &download_url,
         client,
-        download_info.manifest_download.compression == 1,
+        download_info.manifest_download.compression == 1
     )
 }
 
@@ -122,7 +123,7 @@ pub enum Update {
     DownloadingFinished,
     DownloadingError(SophonError),
 
-    FileHashCheckFailed(PathBuf),
+    FileHashCheckFailed(PathBuf)
 }
 
 #[derive(Debug)]
@@ -230,6 +231,7 @@ impl SophonInstaller {
         updater: impl Fn(Update) + Clone + Send + 'static,
     ) -> Result<(), SophonError> {
         let mut progress = DownloadProgress::new_from_manifest(&self.manifest);
+
         let download_size = self.download_info.stats.compressed_size.parse().unwrap();
         let installed_size = self.download_info.stats.uncompressed_size.parse().unwrap();
 
@@ -237,8 +239,11 @@ impl SophonInstaller {
 
         if self.check_free_space {
             (updater)(Update::CheckingFreeSpace(self.temp_folder.clone()));
+
             Self::free_space_check(updater.clone(), &self.temp_folder, download_size)?;
+
             (updater)(Update::CheckingFreeSpace(output_folder.to_owned()));
+
             Self::free_space_check(updater.clone(), output_folder, installed_size)?;
         }
 
@@ -260,15 +265,17 @@ impl SophonInstaller {
         &self,
         output_folder: &Path,
         updater: impl Fn(Update) + Clone + Send + 'static,
-        progress: &mut DownloadProgress,
+        progress: &mut DownloadProgress
     ) {
         for asset_file in &self.manifest.Assets {
             match self.download_chunked_file(output_folder, asset_file, updater.clone(), progress) {
                 Ok(()) => {
                     progress.downloaded_files += 1;
-                    (updater)(progress.msg_files())
+
+                    (updater)(progress.msg_files());
                 }
-                Err(e) => (updater)(Update::DownloadingError(e)),
+
+                Err(e) => (updater)(Update::DownloadingError(e))
             }
         }
     }
@@ -280,30 +287,32 @@ impl SophonInstaller {
         output_folder: &Path,
         file_info: &SophonManifestAssetProperty,
         updater: impl Fn(Update) + Clone + Send + 'static,
-        progress: &mut DownloadProgress,
+        progress: &mut DownloadProgress
     ) -> Result<(), SophonError> {
         let out_file_path = output_folder.join(&file_info.AssetName);
 
         // check if file exists and hash matches to skip download
         if check_file(&out_file_path, file_info.AssetSize, &file_info.AssetHashMd5)? {
-            progress.downloaded_bytes += file_info
-                .AssetChunks
-                .iter()
+            progress.downloaded_bytes += file_info.AssetChunks.iter()
                 .map(|chunk| chunk.ChunkSize)
                 .sum::<u64>();
+
             (updater)(progress.msg_bytes());
+
             return Ok(());
         }
 
-        let temp_file_path = self
-            .temp_folder
-            .join(format!("{}.temp", file_info.AssetHashMd5));
+        let temp_file_path = self.temp_folder.join(format!("{}.temp", file_info.AssetHashMd5));
+
         let file = File::create(&temp_file_path).unwrap();
+
         file.set_len(file_info.AssetSize).unwrap();
 
         for chunk_info in &file_info.AssetChunks {
             let mut chunk_file = self.download_chunk_uncompressed(chunk_info, progress)?;
+
             (updater)(progress.msg_bytes());
+
             let mut buf = Vec::with_capacity(chunk_info.ChunkSizeDecompressed as usize);
 
             chunk_file.read_to_end(&mut buf)?;
@@ -313,28 +322,34 @@ impl SophonInstaller {
 
         drop(file);
 
-        let file_contents =
-            std::fs::read(&temp_file_path).map_err(|e| SophonError::TempFileError {
+        let file_contents = std::fs::read(&temp_file_path)
+            .map_err(|e| SophonError::TempFileError {
                 path: temp_file_path.clone(),
                 message: e.to_string(),
             })?;
+
         if bytes_check_md5(&file_contents, &file_info.AssetHashMd5) {
             ensure_parent(&out_file_path).map_err(|e| SophonError::TempFileError {
                 path: temp_file_path.clone(),
                 message: e.to_string(),
             })?;
+
             std::fs::copy(&temp_file_path, &out_file_path).map_err(|e| {
                 SophonError::OutputFileError {
                     path: temp_file_path.clone(),
                     message: e.to_string(),
                 }
             })?;
+
             std::fs::remove_file(&temp_file_path).map_err(|e| SophonError::OutputFileError {
                 path: temp_file_path.clone(),
                 message: e.to_string(),
             })?;
+
             Ok(())
-        } else {
+        }
+
+        else {
             Err(SophonError::FileHashMismatch {
                 path: temp_file_path,
                 expected: file_info.AssetHashMd5.clone(),
@@ -360,36 +375,44 @@ impl SophonInstaller {
     fn download_chunk_raw(
         &self,
         chunk_info: &SophonManifestAssetChunk,
-        progress: &mut DownloadProgress,
+        progress: &mut DownloadProgress
     ) -> Result<PathBuf, SophonError> {
-        let (chunk_file_name, chunk_size, chunk_hash) =
-            if self.download_info.chunk_download.compression == 1 {
-                (
-                    format!("{}.chunk.zstd", chunk_info.ChunkName),
-                    chunk_info.ChunkSize,
-                    &chunk_info.ChunkCompressedHashMd5,
-                )
-            } else {
-                (
-                    format!("{}.chunk", chunk_info.ChunkName),
-                    chunk_info.ChunkSizeDecompressed,
-                    &chunk_info.ChunkDecompressedHashMd5,
-                )
-            };
+        let (chunk_file_name, chunk_size, chunk_hash) = if self.download_info.chunk_download.compression == 1 {
+            (
+                format!("{}.chunk.zstd", chunk_info.ChunkName),
+                chunk_info.ChunkSize,
+                &chunk_info.ChunkCompressedHashMd5
+            )
+        } else {
+            (
+                format!("{}.chunk", chunk_info.ChunkName),
+                chunk_info.ChunkSizeDecompressed,
+                &chunk_info.ChunkDecompressedHashMd5
+            )
+        };
+
         let chunk_path = self.temp_folder.join(&chunk_file_name);
+
         if check_file(&chunk_path, chunk_size, chunk_hash)? {
             Ok(chunk_path)
         } else {
             let chunk_url = self.chunk_download_url(&chunk_info.ChunkName);
+
             let response = self.client.get(&chunk_url).send()?.error_for_status()?;
+
             let chunk_bytes = response.bytes()?;
+
             if chunk_bytes.len() as u64 == chunk_size && bytes_check_md5(&chunk_bytes, chunk_hash) {
                 std::fs::write(&chunk_path, &chunk_bytes)?;
+
                 progress.downloaded_bytes += chunk_size;
+
                 Ok(chunk_path)
-            } else {
+            }
+
+            else {
                 Err(SophonError::ChunkHashMismatch {
-                    expected: chunk_hash.clone(),
+                    expected: chunk_hash.to_string(),
                     got: md5_hash_str(&chunk_bytes),
                 })
             }
@@ -403,48 +426,53 @@ impl SophonInstaller {
     fn download_chunk_uncompressed(
         &self,
         chunk_info: &SophonManifestAssetChunk,
-        progress: &mut DownloadProgress,
+        progress: &mut DownloadProgress
     ) -> Result<File, SophonError> {
-        let uncompressed_chunk_path = self
-            .temp_folder
-            .join(format!("{}.chunk", chunk_info.ChunkName));
+        let uncompressed_chunk_path = self.temp_folder.join(format!("{}.chunk", chunk_info.ChunkName));
+
         let uncompressed_size = chunk_info.ChunkSizeDecompressed;
         let uncompressed_hash = &chunk_info.ChunkDecompressedHashMd5;
-        if std::fs::exists(&uncompressed_chunk_path)?
-            && check_file(
-                &uncompressed_chunk_path,
-                uncompressed_size,
-                uncompressed_hash,
-            )?
-        {
+
+        if std::fs::exists(&uncompressed_chunk_path)? && check_file(&uncompressed_chunk_path, uncompressed_size, uncompressed_hash)? {
             progress.downloaded_bytes += chunk_info.ChunkSize;
+
             File::open(&uncompressed_chunk_path).map_err(Into::into)
-        } else {
+        }
+
+        else {
             let raw_chunk_path = self.download_chunk_raw(chunk_info, progress)?;
+
             if self.download_info.chunk_download.compression == 1 {
                 // File is compressed, decompress it
                 let file_contents = std::fs::read(&raw_chunk_path)?;
                 let decompressed_bytes = zstd::decode_all(&*file_contents)?;
-                if decompressed_bytes.len() as u64 == uncompressed_size
-                    && bytes_check_md5(&decompressed_bytes, uncompressed_hash)
-                {
+
+                if decompressed_bytes.len() as u64 == uncompressed_size && bytes_check_md5(&decompressed_bytes, uncompressed_hash) {
                     let mut file = File::create(&uncompressed_chunk_path)?;
+
                     file.write_all(&decompressed_bytes)?;
+
                     // Remove compressed file because there is an uncompressed one already
                     std::fs::remove_file(
-                        self.temp_folder
-                            .join(format!("{}.chunk.zstd", chunk_info.ChunkName)),
+                        self.temp_folder.join(format!("{}.chunk.zstd", chunk_info.ChunkName))
                     )?;
+
                     drop(file);
+
                     progress.downloaded_bytes += chunk_info.ChunkSize;
+
                     Ok(File::open(&uncompressed_chunk_path)?)
-                } else {
+                }
+
+                else {
                     Err(SophonError::ChunkHashMismatch {
-                        expected: uncompressed_hash.clone(),
+                        expected: uncompressed_hash.to_string(),
                         got: md5_hash_str(&decompressed_bytes),
                     })
                 }
-            } else {
+            }
+
+            else {
                 // File already downloaded uncompressed
                 File::open(&raw_chunk_path).map_err(Into::into)
             }

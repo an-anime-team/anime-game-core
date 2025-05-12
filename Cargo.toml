@@ -83,7 +83,7 @@ all = [
     "install",
     "external",
     "patches",
-    "sophon",
+    "sophon"
 ]
 
 [build-dependencies]

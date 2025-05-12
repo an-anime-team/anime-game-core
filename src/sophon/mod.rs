@@ -7,12 +7,20 @@ use reqwest::blocking::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{genshin, prettify_bytes::prettify_bytes};
+#[cfg(feature = "genshin")]
+use crate::genshin;
+
+use crate::prettify_bytes::prettify_bytes;
+
+pub mod api_schemas;
+pub mod installer;
+pub mod protos;
+pub mod updater;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum GameEdition {
     Global,
-    China,
+    China
 }
 
 #[cfg(feature = "genshin")]
@@ -20,7 +28,7 @@ impl From<genshin::consts::GameEdition> for GameEdition {
     fn from(value: genshin::consts::GameEdition) -> Self {
         match value {
             genshin::consts::GameEdition::China => Self::China,
-            genshin::consts::GameEdition::Global => Self::Global,
+            genshin::consts::GameEdition::Global => Self::Global
         }
     }
 }
@@ -29,28 +37,16 @@ impl GameEdition {
     #[inline]
     pub fn branches_host(&self) -> &str {
         match self {
-            Self::Global => {
-                concat!("https://", "s", "g-hy", "p-api.", "h", "oy", "over", "se", ".com")
-            }
-            Self::China => concat!("https://", "hy", "p-api.", "mi", "h", "oyo", ".com"),
+            Self::Global => concat!("https://", "s", "g-hy", "p-api.", "h", "oy", "over", "se", ".com"),
+            Self::China => concat!("https://", "hy", "p-api.", "mi", "h", "oyo", ".com")
         }
     }
 
     #[inline]
     pub fn api_host(&self) -> &str {
         match self {
-            Self::Global => concat!(
-                "https://",
-                "s",
-                "g-pu",
-                "blic-api.",
-                "h",
-                "oy",
-                "over",
-                "se",
-                ".com"
-            ),
-            Self::China => concat!("https://", "api-t", "ak", "umi.", "mi", "h", "oyo", ".com"),
+            Self::Global => concat!("https://", "s", "g-pu", "blic-api.", "h", "oy", "over", "se", ".com"),
+            Self::China => concat!("https://", "api-t", "ak", "umi.", "mi", "h", "oyo", ".com")
         }
     }
 
@@ -58,43 +54,34 @@ impl GameEdition {
     pub fn launcher_id(&self) -> &str {
         match self {
             Self::Global => "VYTpXlbWo8",
-            Self::China => "jGHBHlcOq1",
+            Self::China => "jGHBHlcOq1"
         }
     }
 }
 
-pub mod api_schemas;
-pub mod installer;
-pub mod protos;
-pub mod updater;
-
 #[inline(always)]
 fn get_game_branches_url(edition: GameEdition) -> String {
-    format!(
-        "{}/hyp/hyp-connect/api/getGameBranches?launcher_id={}",
-        edition.branches_host(),
-        edition.launcher_id()
-    )
+    format!("{}/hyp/hyp-connect/api/getGameBranches?launcher_id={}", edition.branches_host(), edition.launcher_id())
 }
 
 #[inline(always)]
 pub fn get_game_branches_info(
     client: Client,
-    edition: GameEdition,
+    edition: GameEdition
 ) -> Result<GameBranches, SophonError> {
-    api_request(client, &get_game_branches_url(edition))
+    api_get_request(client, &get_game_branches_url(edition))
 }
 
-fn api_request<T: DeserializeOwned>(client: Client, url: &str) -> Result<T, SophonError> {
+fn api_get_request<T: DeserializeOwned>(client: Client, url: &str) -> Result<T, SophonError> {
     let response = client.get(url).send()?.error_for_status()?;
-    let parsed_response: ApiResponse<T> = response.json()?;
-    Ok(parsed_response.data)
+
+    Ok(response.json::<ApiResponse<T>>()?.data)
 }
 
-fn api_request_post<T: DeserializeOwned>(client: Client, url: &str) -> Result<T, SophonError> {
+fn api_post_request<T: DeserializeOwned>(client: Client, url: &str) -> Result<T, SophonError> {
     let response = client.post(url).send()?.error_for_status()?;
-    let parsed_response: ApiResponse<T> = response.json()?;
-    Ok(parsed_response.data)
+
+    Ok(response.json::<ApiResponse<T>>()?.data)
 }
 
 fn get_protobuf_from_url<T: Message>(
@@ -118,16 +105,13 @@ fn get_protobuf_from_url<T: Message>(
 }
 
 fn ensure_parent(path: impl AsRef<Path>) -> std::io::Result<()> {
-    let parent_path = path.as_ref().parent();
-    if let Some(parent) = parent_path {
+    if let Some(parent) = path.as_ref().parent() {
         if !parent.exists() {
-            std::fs::create_dir_all(parent)
-        } else {
-            Ok(())
+            std::fs::create_dir_all(parent)?;
         }
-    } else {
-        Ok(())
     }
+
+    Ok(())
 }
 
 fn md5_hash_str(data: &[u8]) -> String {
@@ -136,25 +120,28 @@ fn md5_hash_str(data: &[u8]) -> String {
 
 fn bytes_check_md5(data: &[u8], expected_hash: &str) -> bool {
     let computed_hash = md5_hash_str(data);
+
     expected_hash == computed_hash
 }
 
 fn check_file(
     file_path: impl AsRef<Path>,
     expected_size: u64,
-    expected_md5: &str,
+    expected_md5: &str
 ) -> std::io::Result<bool> {
-    if std::fs::exists(&file_path).unwrap() {
-        let file_size = std::fs::metadata(&file_path)?.len();
-        if file_size == expected_size {
-            let file_contents = std::fs::read(&file_path)?;
-            Ok(bytes_check_md5(&file_contents, expected_md5))
-        } else {
-            Ok(false)
-        }
-    } else {
-        Ok(false)
+    if !std::fs::exists(&file_path)? {
+        return Ok(false);
     }
+
+    let file_size = std::fs::metadata(&file_path)?.len();
+
+    if file_size != expected_size {
+        return Ok(false);
+    }
+
+    let file_contents = std::fs::read(&file_path)?;
+
+    Ok(bytes_check_md5(&file_contents, expected_md5))
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -175,24 +162,36 @@ pub enum SophonError {
 
     /// Failed to create or open output file
     #[error("Failed to create output file {path:?}: {message}")]
-    OutputFileError { path: PathBuf, message: String },
+    OutputFileError {
+        path: PathBuf,
+        message: String
+    },
 
     /// Failed to create or open temporary output file
     #[error("Failed to create temporary output file {path:?}: {message}")]
-    TempFileError { path: PathBuf, message: String },
+    TempFileError {
+        path: PathBuf,
+        message: String
+    },
 
     /// Couldn't get metadata of existing output file
     ///
     /// This metadata supposed to be used to continue downloading of the file
     #[error("Failed to read metadata of the output file {path:?}: {message}")]
-    OutputFileMetadataError { path: PathBuf, message: String },
+    OutputFileMetadataError {
+        path: PathBuf,
+        message: String
+    },
 
     /// reqwest error
     #[error("reqwest error: {0}")]
     Reqwest(String),
 
     #[error("Chunk hash mismatch: expected `{expected}`, got `{got}`")]
-    ChunkHashMismatch { expected: String, got: String },
+    ChunkHashMismatch {
+        expected: String,
+        got: String
+    },
 
     #[error("File {path:?} hash mismatch: expected `{expected}`, got `{got}`")]
     FileHashMismatch {
@@ -202,7 +201,7 @@ pub enum SophonError {
     },
 
     #[error("IO error: {0}")]
-    IoError(String),
+    IoError(String)
 }
 
 impl From<reqwest::Error> for SophonError {

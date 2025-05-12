@@ -10,11 +10,11 @@ pub mod sophon_manifests;
 pub struct ApiResponse<T> {
     pub retcode: i16,
     pub message: String,
-    pub data: T,
+    pub data: T
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DownloadOrDiff {
     Download(SophonDownloadInfo),
-    Patch(SophonDiff),
+    Patch(SophonDiff)
 }
