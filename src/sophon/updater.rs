@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::os::unix::fs::FileExt;
@@ -112,7 +112,7 @@ pub struct SophonPatcher {
     pub temp_folder: PathBuf,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct PatchingStats {
     total_bytes: u64,
     downloaded_bytes: u64,
@@ -120,10 +120,11 @@ struct PatchingStats {
     patched_files: u64,
     total_unused: u64,
     deleted_files: u64,
+    downloaded_patch_chunks: HashSet<String>
 }
 
 impl PatchingStats {
-    fn new(total_bytes: u64, total_files: u64, total_unused: u64) -> Self {
+    fn new(total_bytes: u64, total_files: u64, total_unused: u64, total_patch_chunks: usize) -> Self {
         Self {
             total_bytes,
             total_files,
@@ -131,6 +132,7 @@ impl PatchingStats {
             downloaded_bytes: 0,
             patched_files: 0,
             deleted_files: 0,
+            downloaded_patch_chunks: HashSet::with_capacity(total_patch_chunks)
         }
     }
 
@@ -155,6 +157,13 @@ impl PatchingStats {
         Update::DownloadingProgressDeletedFiles {
             deleted_files: self.deleted_files,
             total_unused: self.total_unused
+        }
+    }
+
+    fn count_patch_chunk(&mut self, patch_chunk_info: &SophonPatchAssetChunk) {
+        if !self.downloaded_patch_chunks.contains(&patch_chunk_info.PatchName) {
+            self.downloaded_bytes += patch_chunk_info.PatchSize;
+            self.downloaded_patch_chunks.insert(patch_chunk_info.PatchName.clone());
         }
     }
 }
@@ -240,7 +249,7 @@ impl SophonPatcher {
             .map(|patch_chunk| patch_chunk.PatchSize)
             .sum();
 
-        let mut progress = PatchingStats::new(total_bytes, 0, 0);
+        let mut progress = PatchingStats::new(total_bytes, 0, 0, patch_chunks.values().count());
 
         if self.check_free_space {
             let download_bytes = self.diff_info.stats.get(&from.to_string()).unwrap()
@@ -290,7 +299,7 @@ impl SophonPatcher {
 
         let total_unused = unused_assets_for_ver.map(|(_, assets_info)| assets_info.Assets.len() as u64);
 
-        let mut progress = PatchingStats::new(total_bytes, total_files, total_unused.unwrap_or(0));
+        let mut progress = PatchingStats::new(total_bytes, total_files, total_unused.unwrap_or(0), patch_chunks.values().count());
 
         if self.check_free_space {
             let download_bytes = self.diff_info.stats.get(&from.to_string()).unwrap()
@@ -584,7 +593,7 @@ impl SophonPatcher {
         )?;
 
         if valid_file {
-            progress.downloaded_bytes += patch_chunk_info.PatchSize;
+            progress.count_patch_chunk(patch_chunk_info);
 
             (updater)(progress.msg_bytes());
 
@@ -603,7 +612,7 @@ impl SophonPatcher {
             if patch_chunk_bytes.len() as u64 == patch_chunk_info.PatchSize && bytes_check_md5(&patch_chunk_bytes, &patch_chunk_info.PatchMd5) {
                 std::fs::write(&patch_path, &patch_chunk_bytes)?;
 
-                progress.downloaded_bytes += patch_chunk_info.PatchSize;
+                progress.count_patch_chunk(patch_chunk_info);
 
                 (updater)(progress.msg_bytes());
 
