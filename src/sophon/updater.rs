@@ -1,9 +1,17 @@
-use std::{collections::{HashMap, HashSet}, io::{Read, Seek, Take}};
+use std::collections::{HashMap, HashSet};
+use std::io::{Read, Seek, Take};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 use reqwest::blocking::Client;
+
+use crate::{
+    external::hpatchz,
+    prelude::free_space,
+    sophon::{bytes_check_md5, check_file},
+    version::Version,
+};
 
 // I ain't refactoring it.
 use super::{
@@ -13,13 +21,6 @@ use super::{
     }, file_md5_hash_str, get_protobuf_from_url, md5_hash_str, protos::SophonPatch::{
         SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetFile
     }, GameEdition, SophonError
-};
-
-use crate::{
-    external::hpatchz,
-    prelude::free_space,
-    sophon::{bytes_check_md5, check_file},
-    version::Version,
 };
 
 fn sophon_patch_info_url(
@@ -46,7 +47,7 @@ pub fn get_game_diffs_sophon_info(
         &package_info.password,
         &package_info.package_id,
         pre_download,
-        edition,
+        edition
     );
 
     api_post_request(client, &url)
@@ -54,7 +55,7 @@ pub fn get_game_diffs_sophon_info(
 
 pub fn get_patch_manifest(
     client: Client,
-    diff_info: &SophonDiff,
+    diff_info: &SophonDiff
 ) -> Result<SophonPatchProto, SophonError> {
     let url_prefix = &diff_info.manifest_download.url_prefix;
     let url_suffix = &diff_info.manifest_download.url_suffix;
@@ -65,7 +66,7 @@ pub fn get_patch_manifest(
     get_protobuf_from_url(
         &download_url,
         client,
-        diff_info.manifest_download.compression == 1,
+        diff_info.manifest_download.compression == 1
     )
 }
 
@@ -135,7 +136,7 @@ impl PatchingStats {
     fn msg_bytes(&self) -> Update {
         Update::DownloadingProgressBytes {
             downloaded_bytes: self.downloaded_bytes,
-            total_bytes: self.total_bytes,
+            total_bytes: self.total_bytes
         }
     }
 
@@ -143,7 +144,7 @@ impl PatchingStats {
     fn msg_files(&self) -> Update {
         Update::DownloadingProgressFiles {
             patched_files: self.patched_files,
-            total_files: self.total_files,
+            total_files: self.total_files
         }
     }
 
@@ -158,6 +159,7 @@ impl PatchingStats {
     fn count_patch_chunk(&mut self, patch_chunk_info: &SophonPatchAssetChunk) {
         if !self.downloaded_patch_chunks.contains(&patch_chunk_info.PatchName) {
             self.downloaded_bytes += patch_chunk_info.PatchSize;
+
             self.downloaded_patch_chunks.insert(patch_chunk_info.PatchName.clone());
         }
     }
@@ -192,29 +194,30 @@ impl SophonPatcher {
         self
     }
 
-    /// Folder to temporarily store downloaded patch chunks
+    /// Folder to temporarily store files being updated (patched, created, etc)
     #[inline(always)]
-    fn patch_chunk_temp_folder(&self) -> PathBuf {
-        self.temp_folder.join("updating/patch_chunks/")
+    fn files_temp(&self) -> PathBuf {
+        self.temp_folder.join("updating")
     }
 
     /// Folder to temporarily store hdiff files
     #[inline(always)]
     fn patches_temp(&self) -> PathBuf {
-        self.temp_folder.join("updating/patches/")
+        self.files_temp().join("patches")
     }
 
-    /// Folder to temporarily store files being updated (patched, created, etc)
+    /// Folder to temporarily store downloaded patch chunks
     #[inline(always)]
-    fn files_temp(&self) -> PathBuf {
-        self.temp_folder.join("updating/")
+    fn patch_chunk_temp_folder(&self) -> PathBuf {
+        self.files_temp().join("patch_chunks")
     }
 
     /// Create all needed sub-directories in the temp folder
     fn create_temp_dirs(&self) -> std::io::Result<()> {
-        std::fs::create_dir_all(self.patch_chunk_temp_folder())?;
-        std::fs::create_dir_all(self.patches_temp())?;
         std::fs::create_dir_all(self.files_temp())?;
+        std::fs::create_dir_all(self.patches_temp())?;
+        std::fs::create_dir_all(self.patch_chunk_temp_folder())?;
+
         Ok(())
     }
 
@@ -225,28 +228,28 @@ impl SophonPatcher {
     ) -> Result<(), SophonError> {
         (updater)(Update::CheckingFreeSpace(path.as_ref().to_owned()));
 
-        if let Some(space) = free_space::available(&path) {
-            if space >= required {
-                return Ok(());
+        match free_space::available(&path) {
+            Some(space) if space >= required => Ok(()),
+
+            Some(space) => {
+                let err = SophonError::NoSpaceAvailable {
+                    path: path.as_ref().to_owned(),
+                    required,
+                    available: space
+                };
+
+                (updater)(Update::DownloadingError(err.clone()));
+
+                Err(err)
             }
 
-            let err = SophonError::NoSpaceAvailable {
-                path: path.as_ref().to_owned(),
-                required,
-                available: space
-            };
+            None => {
+                let err = SophonError::PathNotMounted(path.as_ref().to_owned());
 
-            (updater)(Update::DownloadingError(err.clone()));
+                (updater)(Update::DownloadingError(err.clone()));
 
-            Err(err)
-        }
-
-        else {
-            let err = SophonError::PathNotMounted(path.as_ref().to_owned());
-
-            (updater)(Update::DownloadingError(err.clone()));
-
-            Err(err)
+                Err(err)
+            }
         }
     }
 
@@ -355,17 +358,37 @@ impl SophonPatcher {
             if file_patch_info.AssetName.ends_with("globalgamemanagers") {
                 continue;
             }
-            self.patch_file_updater_handler(file_patch_info, &target_dir, from, &mut progress, updater.clone());
+
+            self.patch_file_updater_handler(
+                file_patch_info,
+                &target_dir,
+                from,
+                &mut progress,
+                updater.clone()
+            );
         }
 
         if let Some(file_patch_info) = self.patch_manifest.PatchAssets.iter().find(|passet| passet.AssetName.ends_with("globalgamemanagers")) {
-            self.patch_file_updater_handler(file_patch_info, target_dir, from, &mut progress, updater);
+            self.patch_file_updater_handler(
+                file_patch_info,
+                target_dir,
+                from,
+                &mut progress,
+                updater.clone()
+            );
         }
 
         Ok(())
     }
 
-    fn patch_file_updater_handler(&self, file_patch_info: &SophonPatchAssetProperty, target_dir: impl AsRef<Path>, installed_ver: Version, progress: &mut PatchingStats, updater: impl Fn(Update) + Clone + Send + 'static) {
+    fn patch_file_updater_handler(
+        &self,
+        file_patch_info: &SophonPatchAssetProperty,
+        target_dir: impl AsRef<Path>,
+        installed_ver: Version,
+        progress: &mut PatchingStats,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) {
         let result = self.sophon_patch_file(
             file_patch_info,
             &target_dir,
@@ -408,7 +431,7 @@ impl SophonPatcher {
                     patch_info.AssetSize,
                     &patch_info.AssetHashMd5,
                     progress,
-                    updater.clone(),
+                    updater.clone()
                 )?;
             }
 
@@ -433,7 +456,7 @@ impl SophonPatcher {
                     patch_info,
                     patch_chunk,
                     progress,
-                    updater.clone(),
+                    updater.clone()
                 )?;
             }
         }
@@ -442,7 +465,7 @@ impl SophonPatcher {
             let valid_file = check_file(
                 &target_file_path,
                 patch_info.AssetSize,
-                &patch_info.AssetHashMd5,
+                &patch_info.AssetHashMd5
             )?;
 
             if !valid_file {
@@ -480,12 +503,12 @@ impl SophonPatcher {
 
         extract_patch_chunk_region_to_file(patch_chunk_file, &patch_path_tmp, patch_chunk)?;
 
-        let tmp_out_file_path = self
-            .files_temp()
+        let tmp_out_file_path = self.files_temp()
             .join(format!("{}.tmp", &asset_info.AssetHashMd5));
 
         if let Err(err) = hpatchz::patch(from.as_ref(), &patch_path_tmp, &tmp_out_file_path) {
             (updater)(Update::PatchingError(err.to_string()));
+
             return Ok(());
         }
 
@@ -494,7 +517,7 @@ impl SophonPatcher {
         let valid_file = check_file(
             &tmp_out_file_path,
             asset_info.AssetSize,
-            &asset_info.AssetHashMd5,
+            &asset_info.AssetHashMd5
         )?;
 
         if !valid_file {
@@ -505,7 +528,7 @@ impl SophonPatcher {
             return Err(SophonError::FileHashMismatch {
                 path: tmp_out_file_path,
                 expected: asset_info.AssetHashMd5.clone(),
-                got: file_hash,
+                got: file_hash
             });
         }
 
@@ -546,7 +569,7 @@ impl SophonPatcher {
             Err(SophonError::FileHashMismatch {
                 path: tmp_file_path,
                 expected: expected_md5.to_owned(),
-                got: file_hash,
+                got: file_hash
             })
         }
 
@@ -563,7 +586,7 @@ impl SophonPatcher {
         unused_assets: &[SophonUnusedAssetFile],
         target_dir: impl AsRef<Path>,
         progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Clone + Send + 'static
+        updater: impl Fn(Update) + Send + 'static
     ) -> Result<(), SophonError> {
         for unused in unused_assets {
             tracing::trace!("Unused file `{}`", &unused.FileName);
@@ -595,7 +618,7 @@ impl SophonPatcher {
         &self,
         patch_chunk_info: &SophonPatchAssetChunk,
         progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Clone + Send + 'static,
+        updater: impl Fn(Update) + Send + 'static,
     ) -> Result<PathBuf, SophonError> {
         let patch_path = self.patch_chunk_temp_folder().join(format!("{}.patch_chunk", patch_chunk_info.PatchName));
 
@@ -648,11 +671,17 @@ fn extract_patch_chunk_region(
     length: u64
 ) -> std::io::Result<Take<File>> {
     let mut file = File::open(patch_chunk)?;
+
     file.seek(std::io::SeekFrom::Start(offset))?;
+
     Ok(file.take(length))
 }
 
-fn extract_patch_chunk_region_to_file(patch_chunk_file: impl AsRef<Path>, out_path: impl AsRef<Path>, patch_chunk: &SophonPatchAssetChunk) -> std::io::Result<()> {
+fn extract_patch_chunk_region_to_file(
+    patch_chunk_file: impl AsRef<Path>,
+    out_path: impl AsRef<Path>,
+    patch_chunk: &SophonPatchAssetChunk
+) -> std::io::Result<()> {
     let mut patch_data = extract_patch_chunk_region(
         patch_chunk_file,
         patch_chunk.PatchOffset,

@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, fs::OpenOptions, io::{Seek, SeekFrom}};
-use std::io::{Read, Write};
-use std::fs::File;
+use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write, Seek, SeekFrom};
+use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::os::unix::fs::FileExt;
 
@@ -86,7 +86,7 @@ impl DownloadProgress {
             total_files: manifest.total_files(),
             downloaded_bytes: 0,
             downloaded_files: 0,
-            downloaded_chunks: HashSet::with_capacity(manifest.total_chunks() as usize),
+            downloaded_chunks: HashSet::with_capacity(manifest.total_chunks() as usize)
         }
     }
 
@@ -100,13 +100,14 @@ impl DownloadProgress {
     fn msg_bytes(&self) -> Update {
         Update::DownloadingProgressBytes {
             downloaded_bytes: self.downloaded_bytes,
-            total_bytes: self.total_bytes,
+            total_bytes: self.total_bytes
         }
     }
 
     fn count_chunk(&mut self, chunk_info: &SophonManifestAssetChunk) {
         if !self.downloaded_chunks.contains(&chunk_info.ChunkName) {
             self.downloaded_bytes += chunk_info.ChunkSize;
+
             self.downloaded_chunks.insert(chunk_info.ChunkName.clone());
         }
     }
@@ -141,14 +142,14 @@ pub struct SophonInstaller {
     pub manifest: SophonManifestProto,
     pub download_info: SophonDownloadInfo,
     pub check_free_space: bool,
-    pub temp_folder: PathBuf,
+    pub temp_folder: PathBuf
 }
 
 impl SophonInstaller {
     pub fn new(
         download_info: &SophonDownloadInfo,
         client: Client,
-        temp_dir: impl AsRef<Path>,
+        temp_dir: impl AsRef<Path>
     ) -> Result<Self, SophonError> {
         let manifest = get_download_manifest(client.clone(), download_info)?;
         Ok(Self {
@@ -156,86 +157,94 @@ impl SophonInstaller {
             manifest,
             download_info: download_info.clone(),
             check_free_space: true,
-            temp_folder: temp_dir.as_ref().to_owned(),
+            temp_folder: temp_dir.as_ref().to_owned()
         })
     }
 
     #[inline(always)]
     pub fn with_free_space_check(mut self, check: bool) -> Self {
         self.check_free_space = check;
+
         self
     }
 
     #[inline(always)]
     pub fn with_temp_folder(mut self, temp_folder: PathBuf) -> Self {
         self.temp_folder = temp_folder;
-        self
-    }
 
-    /// Folder to temporarily store chunks
-    #[inline(always)]
-    fn chunk_temp_folder(&self) -> PathBuf {
-        self.temp_folder.join("downloading/chunks/")
+        self
     }
 
     /// Folder to temporarily store files being downloaded
     #[inline(always)]
     fn downloading_temp(&self) -> PathBuf {
-        self.temp_folder.join("downloading/")
+        self.temp_folder.join("downloading")
+    }
+
+    /// Folder to temporarily store chunks
+    #[inline(always)]
+    fn chunk_temp_folder(&self) -> PathBuf {
+        self.downloading_temp().join("chunks")
     }
 
     /// Create all needed sub-directories in the temp folder
     fn create_temp_dirs(&self) -> std::io::Result<()> {
-        std::fs::create_dir_all(self.chunk_temp_folder())?;
         std::fs::create_dir_all(self.downloading_temp())?;
+        std::fs::create_dir_all(self.chunk_temp_folder())?;
+
         Ok(())
     }
 
     fn free_space_check(
         updater: impl Fn(Update) + Clone + Send + 'static,
         path: impl AsRef<Path>,
-        required: u64,
+        required: u64
     ) -> Result<(), SophonError> {
         (updater)(Update::CheckingFreeSpace(path.as_ref().to_owned()));
 
-        if let Some(space) = free_space::available(&path) {
-            if space < required {
+        match free_space::available(&path) {
+            Some(space) if space >= required => Ok(()),
+
+            Some(space) => {
                 let err = SophonError::NoSpaceAvailable {
                     path: path.as_ref().to_owned(),
                     required,
-                    available: space,
+                    available: space
                 };
+
                 (updater)(Update::DownloadingError(err.clone()));
+
                 Err(err)
-            } else {
-                Ok(())
             }
-        } else {
-            let err = SophonError::PathNotMounted(path.as_ref().to_owned());
-            (updater)(Update::DownloadingError(err.clone()));
-            Err(err)
+
+            None => {
+                let err = SophonError::PathNotMounted(path.as_ref().to_owned());
+
+                (updater)(Update::DownloadingError(err.clone()));
+
+                Err(err)
+            }
         }
     }
 
     pub fn pre_download(
         &self,
-        updater: impl Fn(Update) + Clone + Send + 'static,
+        updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         let mut progress = DownloadProgress::new_from_manifest(&self.manifest);
 
-        // Collect deduplicated map of chunks. If some files share chunks, they will not be
-        // downloaded more than once.
-        let chunks: HashMap<&String, &SophonManifestAssetChunk> = self
-            .manifest
-            .Assets
-            .iter()
+        // Collect deduplicated map of chunks. If some files share chunks, they
+        // will not be downloaded more than once.
+        let chunks: HashMap<&String, &SophonManifestAssetChunk> = self.manifest.Assets.iter()
             .flat_map(|asset| &asset.AssetChunks)
             .map(|chunk_info| (&chunk_info.ChunkName, chunk_info))
             .collect();
 
         if self.check_free_space {
             (updater)(Update::CheckingFreeSpace(self.temp_folder.clone()));
+
             let download_size = self.download_info.stats.compressed_size.parse().unwrap();
+
             Self::free_space_check(updater.clone(), &self.temp_folder, download_size)?;
         }
 
@@ -258,7 +267,7 @@ impl SophonInstaller {
     pub fn install(
         &self,
         output_folder: &Path,
-        updater: impl Fn(Update) + Clone + Send + 'static,
+        updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         let mut progress = DownloadProgress::new_from_manifest(&self.manifest);
 
@@ -309,14 +318,32 @@ impl SophonInstaller {
             if asset_file.AssetName.ends_with("globalgamemanagers") {
                 continue;
             }
-            self.download_file_updater_handler(output_folder, asset_file, updater.clone(), progress);
+
+            self.download_file_updater_handler(
+                output_folder,
+                asset_file,
+                updater.clone(),
+                progress
+            );
         }
+
         if let Some(asset_file) = self.manifest.Assets.iter().find(|asset| asset.AssetName.ends_with("globalgamemanagers")) {
-            self.download_file_updater_handler(output_folder, asset_file, updater.clone(), progress);
+            self.download_file_updater_handler(
+                output_folder,
+                asset_file,
+                updater.clone(),
+                progress
+            );
         }
     }
 
-    fn download_file_updater_handler(&self, output_folder: &Path, asset_file: &SophonManifestAssetProperty, updater: impl Fn(Update) + Clone + Send + 'static, progress: &mut DownloadProgress) {
+    fn download_file_updater_handler(
+        &self,
+        output_folder: &Path,
+        asset_file: &SophonManifestAssetProperty,
+        updater: impl Fn(Update) + Clone + Send + 'static,
+        progress: &mut DownloadProgress
+    ) {
         match self.download_chunked_file(output_folder, asset_file, updater.clone(), progress) {
             Ok(()) => {
                 progress.downloaded_files += 1;
@@ -334,7 +361,7 @@ impl SophonInstaller {
         &self,
         output_folder: &Path,
         file_info: &SophonManifestAssetProperty,
-        updater: impl Fn(Update) + Clone + Send + 'static,
+        updater: impl Fn(Update) + Send + 'static,
         progress: &mut DownloadProgress
     ) -> Result<(), SophonError> {
         let out_file_path = output_folder.join(&file_info.AssetName);
@@ -376,6 +403,7 @@ impl SophonInstaller {
             // If the chunk was downlaoded uncompressed - don't remove it
             if self.download_info.chunk_download.compression == 1 {
                 let uncompressed_chunk_path = self.chunk_temp_folder().join(format!("{}.chunk", chunk_info.ChunkName));
+
                 std::fs::remove_file(&uncompressed_chunk_path)?;
             }
         }
@@ -455,16 +483,22 @@ impl SophonInstaller {
 
         if check_file(&chunk_path, chunk_size, chunk_hash)? {
             progress.count_chunk(chunk_info);
+
             Ok(chunk_path)
-        } else {
+        }
+
+        else {
             let chunk_url = self.chunk_download_url(&chunk_info.ChunkName);
 
-            let response = self.client.get(&chunk_url).send()?.error_for_status()?;
+            let response = self.client.get(&chunk_url)
+                .send()?
+                .error_for_status()?;
 
             let chunk_bytes = response.bytes()?;
 
             if chunk_bytes.len() as u64 == chunk_size && bytes_check_md5(&chunk_bytes, chunk_hash) {
                 std::fs::write(&chunk_path, &chunk_bytes)?;
+
                 progress.count_chunk(chunk_info);
 
                 Ok(chunk_path)
@@ -473,7 +507,7 @@ impl SophonInstaller {
             else {
                 Err(SophonError::ChunkHashMismatch {
                     expected: chunk_hash.to_string(),
-                    got: md5_hash_str(&chunk_bytes),
+                    got: md5_hash_str(&chunk_bytes)
                 })
             }
         }
@@ -508,9 +542,15 @@ impl SophonInstaller {
                 if decompressed_bytes.len() as u64 == uncompressed_size && bytes_check_md5(&decompressed_bytes, uncompressed_hash) {
                     // Use OpenOptions so that the file doesn't need to be reopened because of
                     // missing `read` option when using `File::create`
-                    let mut file = OpenOptions::new().write(true).create(true).truncate(true).read(true).open(&uncompressed_chunk_path)?;
+                    let mut file = OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .read(true)
+                        .open(&uncompressed_chunk_path)?;
 
                     file.write_all(&decompressed_bytes)?;
+
                     // Rewind the cursor
                     file.seek(SeekFrom::Start(0))?;
 
@@ -520,7 +560,7 @@ impl SophonInstaller {
                 else {
                     Err(SophonError::ChunkHashMismatch {
                         expected: uncompressed_hash.to_string(),
-                        got: md5_hash_str(&decompressed_bytes),
+                        got: md5_hash_str(&decompressed_bytes)
                     })
                 }
             }

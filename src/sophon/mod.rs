@@ -1,11 +1,15 @@
-use std::{fs::File, path::{Path, PathBuf}};
+use std::fs::File;
+use std::path::{Path, PathBuf};
 
-use api_schemas::{game_branches::GameBranches, ApiResponse};
 use md5::{Digest, Md5};
 use protobuf::Message;
 use reqwest::blocking::Client;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
+use serde::de::DeserializeOwned;
 use thiserror::Error;
+
+use api_schemas::ApiResponse;
+use api_schemas::game_branches::GameBranches;
 
 #[cfg(feature = "genshin")]
 use crate::genshin;
@@ -128,9 +132,10 @@ fn bytes_check_md5(data: &[u8], expected_hash: &str) -> bool {
 fn file_md5_hash_str(file_path: impl AsRef<Path>) -> std::io::Result<String> {
     let mut file = File::open(&file_path)?;
     let mut md5 = Md5::new();
+
     std::io::copy(&mut file, &mut md5)?;
-    let result_hash = md5.finalize();
-    Ok(format!("{result_hash:x}"))
+
+    Ok(format!("{:x}", md5.finalize()))
 }
 
 fn check_file(
