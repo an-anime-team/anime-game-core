@@ -258,6 +258,10 @@ impl VersionDiff {
             std::fs::write(version_path, self.latest().version);
         }
 
+        tracing::warn!("Removing downloading cache from {:?}", installer.downloading_temp());
+
+        std::fs::remove_dir_all(installer.downloading_temp());
+
         Ok(())
     }
 
@@ -277,6 +281,10 @@ impl VersionDiff {
 
             std::fs::write(version_path, self.latest().version);
         }
+
+        tracing::warn!("Removing patching cache from {:?}", patcher.files_temp());
+
+        std::fs::remove_dir_all(patcher.files_temp());
 
         Ok(())
     }

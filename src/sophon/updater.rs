@@ -196,7 +196,7 @@ impl SophonPatcher {
 
     /// Folder to temporarily store files being updated (patched, created, etc)
     #[inline(always)]
-    fn files_temp(&self) -> PathBuf {
+    pub fn files_temp(&self) -> PathBuf {
         self.temp_folder.join("updating")
     }
 
