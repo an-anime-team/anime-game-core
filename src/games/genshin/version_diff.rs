@@ -242,6 +242,7 @@ impl VersionDiff {
     }
 
     fn download_game(&self, download_info: &SophonDownloadInfo, path: impl AsRef<Path>, updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static) -> Result<(), <Self as VersionDiffExt>::Error> {
+        tracing::trace!("Downloading using {download_info:?} in {:?}", path.as_ref());
         let client = reqwest::blocking::Client::new();
         let installer = sophon::installer::SophonInstaller::new(download_info, client, self.temp_folder())?;
 
@@ -261,6 +262,7 @@ impl VersionDiff {
     }
 
     fn patch_game(&self, from: Version, diff: &SophonDiff, path: impl AsRef<Path>, updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static) -> Result<(), <Self as VersionDiffExt>::Error> {
+        tracing::debug!("Patching from {from}, using diff {diff:?}, in {:?}", path.as_ref());
         let client = reqwest::blocking::Client::new();
         let patcher = sophon::updater::SophonPatcher::new(diff, client, self.temp_folder())?;
 
@@ -280,6 +282,7 @@ impl VersionDiff {
     }
 
     fn pre_download(&self, download_or_patch_info: &DownloadOrDiff, from: Version, updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static) -> Result<(), <Self as VersionDiffExt>::Error> {
+        tracing::debug!("Predownloading from {from}, using diff {download_or_patch_info:?}");
         let client = reqwest::blocking::Client::new();
         match download_or_patch_info {
             DownloadOrDiff::Download(download_info) => {
