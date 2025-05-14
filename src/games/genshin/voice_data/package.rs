@@ -19,6 +19,7 @@ use crate::genshin::version_diff::*;
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English(US)   Japanese      Korean        Chinese
+    ("5.6.0",  18981328917,  21627518083,  16446002370,  16665257451),
     ("5.5.0",  18412510172,  20933946124,  15886079840,  16128960332),
 
     // Size changed back and forth so I decided to comment old records.
@@ -263,11 +264,14 @@ impl VoicePackage {
     pub fn try_get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!("Trying to get {} voice package version", self.locale().to_code());
 
+        let reqwest_client = reqwest::blocking::Client::new();
+
         match &self {
             Self::NotInstalled { version, .. } => Ok(*version),
             Self::Installed { path, locale, game_edition } => {
                 let package_size = get_size(&path)?;
-                let response = api::request(*game_edition)?;
+                let game_branches = sophon::get_game_branches_info(reqwest_client.clone(), (*game_edition).into())?;
+                let game_branch_info = game_branches.get_game_latest_by_id(game_edition.game_id()).expect("Latest version should be available");
 
                 match std::fs::read(path.join(".version")) {
                     Ok(curr) => {
@@ -286,10 +290,10 @@ impl VoicePackage {
 
                         // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
                         // then we should predict their sizes
-                        if VOICE_PACKAGES_SIZES[0].0 != response.main.major.version {
+                        if VOICE_PACKAGES_SIZES[0].0 != game_branch_info.main.tag {
                             let mut t = voice_packages_sizes;
 
-                            voice_packages_sizes = vec![(&response.main.major.version, predict_new_voice_pack_size(*locale))];
+                            voice_packages_sizes = vec![(&game_branch_info.main.tag, predict_new_voice_pack_size(*locale))];
                             voice_packages_sizes.append(&mut t);
                         }
 

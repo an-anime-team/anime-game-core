@@ -177,7 +177,7 @@ impl SophonInstaller {
 
     /// Folder to temporarily store files being downloaded
     #[inline(always)]
-    fn downloading_temp(&self) -> PathBuf {
+    pub fn downloading_temp(&self) -> PathBuf {
         self.temp_folder.join("downloading")
     }
 
