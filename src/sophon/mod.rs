@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{fs::File, os::unix::fs::PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use md5::{Digest, Md5};
@@ -156,6 +156,22 @@ fn check_file(
     let file_md5 = file_md5_hash_str(&file_path)?;
 
     Ok(file_md5 == expected_md5)
+}
+
+fn add_user_write_permission_to_file(path: impl AsRef<Path>) -> std::io::Result<()> {
+    if !path.as_ref().exists() {
+        return Ok(());
+    }
+
+    let mut permissions = std::fs::metadata(&path)?.permissions();
+    if permissions.readonly() {
+        let perm_mode = permissions.mode();
+        let user_write_mode = perm_mode | 0o200;
+        permissions.set_mode(user_write_mode);
+        std::fs::set_permissions(path, permissions)?;
+    }
+
+    Ok(())
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
