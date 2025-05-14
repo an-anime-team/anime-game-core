@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 use crate::{
     external::hpatchz,
     prelude::free_space,
-    sophon::{bytes_check_md5, check_file},
+    sophon::{add_user_write_permission_to_file, bytes_check_md5, check_file},
     version::Version,
 };
 
@@ -74,6 +74,15 @@ pub fn get_patch_manifest(
 pub enum Update {
     CheckingFreeSpace(PathBuf),
 
+    DeletingStarted,
+
+    DeletingProgress {
+        deleted_files: u64,
+        total_unused: u64,
+    },
+
+    DeletingFinished,
+
     /// `(temp path)`
     DownloadingStarted(PathBuf),
 
@@ -82,17 +91,17 @@ pub enum Update {
         total_bytes: u64,
     },
 
-    DownloadingProgressFiles {
+    DownloadingFinished,
+
+    PatchingStarted,
+
+    PatchingProgress {
         patched_files: u64,
         total_files: u64,
     },
 
-    DownloadingProgressDeletedFiles {
-        deleted_files: u64,
-        total_unused: u64,
-    },
+    PatchingFinished,
 
-    DownloadingFinished,
     DownloadingError(SophonError),
     PatchingError(String),
 
@@ -142,7 +151,7 @@ impl PatchingStats {
 
     #[inline]
     fn msg_files(&self) -> Update {
-        Update::DownloadingProgressFiles {
+        Update::PatchingProgress {
             patched_files: self.patched_files,
             total_files: self.total_files
         }
@@ -150,7 +159,7 @@ impl PatchingStats {
 
     #[inline]
     fn msg_deleted(&self) -> Update {
-        Update::DownloadingProgressDeletedFiles {
+        Update::DeletingProgress {
             deleted_files: self.deleted_files,
             total_unused: self.total_unused
         }
@@ -336,9 +345,7 @@ impl SophonPatcher {
 
         self.create_temp_dirs()?;
 
-        (updater)(Update::DownloadingStarted(target_dir.as_ref().to_owned()));
-        (updater)(progress.msg_bytes());
-        (updater)(progress.msg_files());
+        (updater)(Update::DeletingStarted);
         (updater)(progress.msg_deleted());
 
         if let Some((_unused_ver, unused_assets)) = unused_assets_for_ver {
@@ -353,6 +360,22 @@ impl SophonPatcher {
                 (updater)(Update::DownloadingError(err));
             }
         }
+
+        (updater)(Update::DeletingFinished);
+
+        (updater)(Update::DownloadingStarted(target_dir.as_ref().to_owned()));
+        (updater)(progress.msg_bytes());
+
+        for (_name, patch_chunk) in patch_chunks {
+            if let Err(err) = self.download_patch_chunk(patch_chunk, &mut progress, updater.clone()) {
+                (updater)(Update::DownloadingError(err));
+            }
+        }
+
+        (updater)(Update::DownloadingFinished);
+
+        (updater)(Update::PatchingStarted);
+        (updater)(progress.msg_files());
 
         for file_patch_info in &self.patch_manifest.PatchAssets {
             if file_patch_info.AssetName.ends_with("globalgamemanagers") {
@@ -378,6 +401,8 @@ impl SophonPatcher {
             );
         }
 
+        (updater)(Update::PatchingFinished);
+
         Ok(())
     }
 
@@ -398,7 +423,9 @@ impl SophonPatcher {
         );
 
         if let Err(err) = result {
+            tracing::error!("Error {err:?} with `{}`", file_patch_info.AssetName);
             (updater)(Update::DownloadingError(err));
+            tracing::trace!("the asset patching info: {file_patch_info:?}");
         }
 
         else {
@@ -462,6 +489,7 @@ impl SophonPatcher {
         }
 
         else {
+            tracing::trace!("Just checking file `{}`", target_file_path.display());
             let valid_file = check_file(
                 &target_file_path,
                 patch_info.AssetSize,
@@ -534,13 +562,19 @@ impl SophonPatcher {
 
         // Delete original if patching is also a move
         if asset_info.AssetName != patch_chunk.OriginalFileName {
+            tracing::trace!("Pactching is a move, deleting original");
             std::fs::remove_file(from)?;
         }
 
+        tracing::trace!("Tweaking permissions for copy");
+        add_user_write_permission_to_file(&to)?;
+        tracing::trace!("Copying `{tmp_out_file_path:?}` to `{:?}`", to.as_ref());
         std::fs::copy(&tmp_out_file_path, &to)?;
 
         // tmp file was checked, doesn't need to be checked after copy
+        tracing::trace!("Removing tmp output {tmp_out_file_path:?}");
         std::fs::remove_file(&tmp_out_file_path)?;
+        tracing::trace!("Removing tmp patch {patch_path_tmp:?}");
         std::fs::remove_file(&patch_path_tmp)?;
 
         Ok(())
