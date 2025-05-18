@@ -76,7 +76,7 @@ pub struct DownloadProgress {
     pub total_files: u64,
     pub downloaded_bytes: u64,
     pub downloaded_files: u64,
-    pub downloaded_chunks: HashSet<String>,
+    pub downloaded_chunks: HashSet<String>
 }
 
 impl DownloadProgress {
@@ -93,7 +93,7 @@ impl DownloadProgress {
     fn msg_files(&self) -> Update {
         Update::DownloadingProgressFiles {
             downloaded_files: self.downloaded_files,
-            total_files: self.total_files,
+            total_files: self.total_files
         }
     }
 
@@ -122,12 +122,12 @@ pub enum Update {
 
     DownloadingProgressBytes {
         downloaded_bytes: u64,
-        total_bytes: u64,
+        total_bytes: u64
     },
 
     DownloadingProgressFiles {
         downloaded_files: u64,
-        total_files: u64,
+        total_files: u64
     },
 
     DownloadingFinished,
@@ -152,6 +152,7 @@ impl SophonInstaller {
         temp_dir: impl AsRef<Path>
     ) -> Result<Self, SophonError> {
         let manifest = get_download_manifest(client.clone(), download_info)?;
+
         Ok(Self {
             client,
             manifest,
@@ -413,25 +414,25 @@ impl SophonInstaller {
         let file_contents = std::fs::read(&temp_file_path)
             .map_err(|e| SophonError::TempFileError {
                 path: temp_file_path.clone(),
-                message: e.to_string(),
+                message: e.to_string()
             })?;
 
         if bytes_check_md5(&file_contents, &file_info.AssetHashMd5) {
             ensure_parent(&out_file_path).map_err(|e| SophonError::TempFileError {
                 path: temp_file_path.clone(),
-                message: e.to_string(),
+                message: e.to_string()
             })?;
 
             std::fs::copy(&temp_file_path, &out_file_path).map_err(|e| {
                 SophonError::OutputFileError {
                     path: temp_file_path.clone(),
-                    message: e.to_string(),
+                    message: e.to_string()
                 }
             })?;
 
             std::fs::remove_file(&temp_file_path).map_err(|e| SophonError::OutputFileError {
                 path: temp_file_path.clone(),
-                message: e.to_string(),
+                message: e.to_string()
             })?;
 
             Ok(())

@@ -4,9 +4,15 @@ use std::os::unix::prelude::PermissionsExt;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
-use super::consts::GameEdition;
+use crate::version::Version;
+use crate::sophon::SophonError;
+use crate::sophon::api_schemas::{
+    sophon_diff::SophonDiff,
+    sophon_manifests::{SophonDownloadInfo, SophonDownloads},
+    DownloadOrDiff
+};
+use crate::sophon;
 
-use crate::{sophon::{self, api_schemas::{sophon_diff::SophonDiff, sophon_manifests::{SophonDownloadInfo, SophonDownloads}, DownloadOrDiff}, SophonError}, version::Version};
 use crate::traits::version_diff::VersionDiffExt;
 
 #[cfg(feature = "install")]
@@ -18,6 +24,8 @@ use crate::{
     },
     external::hpatchz
 };
+
+use super::consts::GameEdition;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiffUpdate {

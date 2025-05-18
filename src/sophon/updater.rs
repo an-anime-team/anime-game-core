@@ -419,7 +419,7 @@ impl SophonPatcher {
             &target_dir,
             installed_ver,
             progress,
-            updater.clone(),
+            updater.clone()
         );
 
         if let Err(err) = result {
@@ -563,18 +563,25 @@ impl SophonPatcher {
         // Delete original if patching is also a move
         if asset_info.AssetName != patch_chunk.OriginalFileName {
             tracing::trace!("Pactching is a move, deleting original");
+
             std::fs::remove_file(from)?;
         }
 
         tracing::trace!("Tweaking permissions for copy");
+
         add_user_write_permission_to_file(&to)?;
+
         tracing::trace!("Copying `{tmp_out_file_path:?}` to `{:?}`", to.as_ref());
+
         std::fs::copy(&tmp_out_file_path, &to)?;
 
         // tmp file was checked, doesn't need to be checked after copy
         tracing::trace!("Removing tmp output {tmp_out_file_path:?}");
+
         std::fs::remove_file(&tmp_out_file_path)?;
+
         tracing::trace!("Removing tmp patch {patch_path_tmp:?}");
+
         std::fs::remove_file(&patch_path_tmp)?;
 
         Ok(())

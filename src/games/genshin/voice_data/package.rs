@@ -2,12 +2,14 @@ use std::path::{Path, PathBuf};
 
 use fs_extra::dir::get_size;
 
-use crate::{sophon::{self, api_schemas::{sophon_diff::SophonDiff, sophon_manifests::SophonDownloadInfo}}, version::Version};
-
-use crate::genshin::api::{
-    self,
+use crate::version::Version;
+use crate::sophon::api_schemas::{
+    sophon_diff::SophonDiff,
+    sophon_manifests::SophonDownloadInfo
 };
+use crate::sophon;
 
+use crate::genshin::api;
 use crate::genshin::consts::*;
 use crate::genshin::voice_data::locale::VoiceLocale;
 
@@ -397,16 +399,25 @@ impl VoicePackage {
                 // is latest
                 if let Some(predownload_info) = &game_branch_info.pre_download {
                     if predownload_info.diff_tags.iter().any(|pre_ver| *pre_ver == current) {
-                        let game_patches = sophon::updater::get_game_diffs_sophon_info(client.clone(), predownload_info, true, game_edition.into())?;
+                        let game_patches = sophon::updater::get_game_diffs_sophon_info(
+                            client.clone(),
+                            predownload_info,
+                            true,
+                            game_edition.into()
+                        )?;
+
                         let diff = find_voice_pack_diff(&game_patches.manifests, self.locale());
-                        let predownload_ver = predownload_info.version();
 
                         return Ok(VersionDiff::Predownload {
                             current,
-                            latest: predownload_ver,
+                            latest: predownload_info.version(),
 
-                            downloaded_size: diff.stats.get(&current.to_string()).unwrap().compressed_size.parse().unwrap(),
-                            unpacked_size: diff.stats.get(&current.to_string()).unwrap().uncompressed_size.parse().unwrap(),
+                            downloaded_size: diff.stats.get(&current.to_string()).unwrap()
+                                .compressed_size.parse().unwrap(),
+
+                            unpacked_size: diff.stats.get(&current.to_string()).unwrap()
+                                .uncompressed_size.parse().unwrap(),
+
                             download_info: sophon::api_schemas::DownloadOrDiff::Patch(diff),
 
                             installation_path: match self {
@@ -440,7 +451,13 @@ impl VoicePackage {
                 tracing::debug!("Package is outdated: {} -> {}", current, latest_game_ver);
 
                 if game_branch_info.main.diff_tags.iter().any(|tagstr| *tagstr == current) {
-                    let game_patches = sophon::updater::get_game_diffs_sophon_info(client.clone(), &game_branch_info.main, false, game_edition.into())?;
+                    let game_patches = sophon::updater::get_game_diffs_sophon_info(
+                        client.clone(),
+                        &game_branch_info.main,
+                        false,
+                        game_edition.into()
+                    )?;
+
                     let diff = find_voice_pack_diff(&game_patches.manifests, self.locale());
 
                     let current_ver_patch_stats = diff.stats.get(&current.to_string()).unwrap();

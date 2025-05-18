@@ -163,11 +163,15 @@ fn add_user_write_permission_to_file(path: impl AsRef<Path>) -> std::io::Result<
         return Ok(());
     }
 
-    let mut permissions = std::fs::metadata(&path)?.permissions();
+    let mut permissions = std::fs::metadata(&path)?
+        .permissions();
+
     if permissions.readonly() {
         let perm_mode = permissions.mode();
         let user_write_mode = perm_mode | 0o200;
+
         permissions.set_mode(user_write_mode);
+
         std::fs::set_permissions(path, permissions)?;
     }
 
@@ -227,7 +231,7 @@ pub enum SophonError {
     FileHashMismatch {
         path: PathBuf,
         expected: String,
-        got: String,
+        got: String
     },
 
     #[error("IO error: {0}")]
