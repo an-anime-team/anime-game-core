@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::os::unix::prelude::PermissionsExt;
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -8,7 +7,7 @@ use crate::version::Version;
 use crate::sophon::SophonError;
 use crate::sophon::api_schemas::{
     sophon_diff::SophonDiff,
-    sophon_manifests::{SophonDownloadInfo, SophonDownloads},
+    sophon_manifests::SophonDownloadInfo,
     DownloadOrDiff
 };
 use crate::sophon;
@@ -16,14 +15,7 @@ use crate::sophon;
 use crate::traits::version_diff::VersionDiffExt;
 
 #[cfg(feature = "install")]
-use crate::{
-    installer::{
-        installer::Update as InstallerUpdate,
-        free_space,
-        archives::Archive
-    },
-    external::hpatchz
-};
+use crate::installer::installer::Update as InstallerUpdate;
 
 use super::consts::GameEdition;
 
@@ -268,7 +260,7 @@ impl VersionDiff {
 
         tracing::warn!("Removing downloading cache from {:?}", installer.downloading_temp());
 
-        std::fs::remove_dir_all(installer.downloading_temp());
+        let _ = std::fs::remove_dir_all(installer.downloading_temp());
 
         Ok(())
     }
@@ -292,7 +284,7 @@ impl VersionDiff {
 
         tracing::warn!("Removing patching cache from {:?}", patcher.files_temp());
 
-        std::fs::remove_dir_all(patcher.files_temp());
+        let _ = std::fs::remove_dir_all(patcher.files_temp());
 
         Ok(())
     }

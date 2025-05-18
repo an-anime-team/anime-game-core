@@ -2,17 +2,20 @@ use std::path::{Path, PathBuf};
 
 use cached::proc_macro::cached;
 
-use super::api;
+use crate::repairer::IntegrityFile;
+use crate::sophon;
+
 use super::consts::GameEdition;
 use super::voice_data::locale::VoiceLocale;
 
-use crate::{repairer::IntegrityFile, sophon};
-
 fn try_get_some_integrity_files(game_edition: GameEdition, matching_field: &str, timeout: Option<u64>) -> anyhow::Result<Vec<IntegrityFile>> {
     let client = reqwest::blocking::Client::new();
+
     let game_branches = sophon::get_game_branches_info(client.clone(), game_edition.into())?;
+
     let latest_ver = game_branches.latest_version_by_id(game_edition.game_id()).unwrap();
     let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_ver).unwrap();
+
     let downloads = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, false, game_edition.into())?;
     let download_manifest = sophon::installer::get_download_manifest(client.clone(), downloads.manifests.iter().find(|sdi| sdi.matching_field == matching_field).unwrap())?;
 
@@ -38,7 +41,7 @@ pub fn try_get_voice_integrity_files(game_edition: GameEdition, locale: VoiceLoc
 }
 
 /// Try to get specific integrity file
-/// 
+///
 /// `relative_path` must be relative to the game's root folder, so
 /// if your file is e.g. `/path/to/[AnimeGame]/[AnimeGame_Data]/level0`, then root folder is `/path/to/[AnimeGame]`,
 /// and `relative_path` must be `[AnimeGame_Data]/level0`
@@ -67,7 +70,7 @@ pub fn try_get_integrity_file(game_edition: GameEdition, relative_path: impl AsR
 }
 
 /// Try to get list of files that are not more used by the game and can be deleted
-/// 
+///
 /// ⚠️ Be aware that the game can create its own files after downloading, so "unused files" may not be really unused.
 /// It's strongly recommended to use this function only with manual control from user's side, in example to show him
 /// paths to these files and let him choose what to do with them
@@ -88,7 +91,7 @@ pub fn try_get_unused_files(game_edition: GameEdition, game_dir: impl Into<PathB
 }
 
 /// Try to get list of files that are not more used by the game and can be deleted
-/// 
+///
 /// ⚠️ Be aware that the game can create its own files after downloading, so "unused files" may not be really unused.
 /// It's strongly recommended to use this function only with manual control from user's side, in example to show him
 /// paths to these files and let him choose what to do with them

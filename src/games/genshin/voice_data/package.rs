@@ -9,7 +9,6 @@ use crate::sophon::api_schemas::{
 };
 use crate::sophon;
 
-use crate::genshin::api;
 use crate::genshin::consts::*;
 use crate::genshin::voice_data::locale::VoiceLocale;
 
