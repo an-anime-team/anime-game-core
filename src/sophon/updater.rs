@@ -32,7 +32,7 @@ fn sophon_patch_info_url(
     format!(
         "{}/downloader/sophon_chunk/api/getPatchBuild?branch={}&password={password}&package_id={package_id}",
         edition.api_host(),
-        if pre_download { "pre_download" } else { "main" }
+        if pre_download { "predownload" } else { "main" }
     )
 }
 
