@@ -16,7 +16,7 @@ fn try_get_some_integrity_files(game_edition: GameEdition, matching_field: &str,
     let latest_ver = game_branches.latest_version_by_id(game_edition.game_id()).unwrap();
     let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_ver).unwrap();
 
-    let downloads = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, false, game_edition.into())?;
+    let downloads = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, game_edition.into())?;
     let download_manifest = sophon::installer::get_download_manifest(client.clone(), downloads.manifests.iter().find(|sdi| sdi.matching_field == matching_field).unwrap())?;
 
     let mut files = Vec::new();

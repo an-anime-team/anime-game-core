@@ -166,7 +166,7 @@ impl VoicePackage {
         let game_branches = sophon::get_game_branches_info(client.clone(), game_edition.into())?;
         let latest_game_ver = game_branches.latest_version_by_id(game_edition.game_id()).unwrap();
         let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_game_ver).unwrap();
-        let downloads_info = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, false, game_edition.into())?;
+        let downloads_info = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, game_edition.into())?;
 
         Ok(Self::NotInstalled {
             locale,
@@ -230,7 +230,7 @@ impl VoicePackage {
         let game_branches = sophon::get_game_branches_info(client.clone(), game_edition.into())?;
         let latest_game_ver = game_branches.latest_version_by_id(game_edition.game_id()).unwrap();
         let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_game_ver).unwrap();
-        let downloads_info = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, false, game_edition.into())?;
+        let downloads_info = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, game_edition.into())?;
 
         let mut packages = Vec::new();
 
@@ -383,7 +383,7 @@ impl VoicePackage {
         let game_branches = sophon::get_game_branches_info(client.clone(), game_edition.into())?;
         let latest_game_ver = game_branches.latest_version_by_id(game_edition.game_id()).unwrap();
         let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_game_ver).unwrap();
-        let downloads_info = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, false, game_edition.into())?;
+        let downloads_info = sophon::installer::get_game_download_sophon_info(client.clone(), &game_branch_info.main, game_edition.into())?;
 
         if self.is_installed() {
             let current = self.try_get_version()?;
@@ -401,7 +401,6 @@ impl VoicePackage {
                         let game_patches = sophon::updater::get_game_diffs_sophon_info(
                             client.clone(),
                             predownload_info,
-                            true,
                             game_edition.into()
                         )?;
 
@@ -453,7 +452,6 @@ impl VoicePackage {
                     let game_patches = sophon::updater::get_game_diffs_sophon_info(
                         client.clone(),
                         &game_branch_info.main,
-                        false,
                         game_edition.into()
                     )?;
 
