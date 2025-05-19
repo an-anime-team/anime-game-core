@@ -173,7 +173,6 @@ impl Game {
                         let game_downloads = sophon::installer::get_game_download_sophon_info(
                             reqwest_client.clone(),
                             &branch_info.main,
-                            false,
                             game_edition.into()
                         )?;
 
@@ -212,7 +211,6 @@ impl Game {
                         let diffs = sophon::updater::get_game_diffs_sophon_info(
                             reqwest_client.clone(),
                             predownload_info,
-                            true,
                             game_edition.into()
                         )?;
 
@@ -247,7 +245,7 @@ impl Game {
             else {
                 tracing::debug!("Game is outdated: {} -> {}", current, latest_game_version);
 
-                let diffs = sophon::updater::get_game_diffs_sophon_info(reqwest_client, &branch_info.main, false, game_edition.into())?;
+                let diffs = sophon::updater::get_game_diffs_sophon_info(reqwest_client, &branch_info.main, game_edition.into())?;
 
                 if branch_info.main.diff_tags.iter().any(|tag| *tag == current) {
                     for diff in &diffs.manifests {
@@ -287,7 +285,6 @@ impl Game {
             let game_downloads = sophon::installer::get_game_download_sophon_info(
                 reqwest_client.clone(),
                 &branch_info.main,
-                false,
                 game_edition.into()
             )?;
 

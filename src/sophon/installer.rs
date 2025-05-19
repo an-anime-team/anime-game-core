@@ -24,15 +24,15 @@ use super::{
 use crate::prelude::free_space;
 
 fn sophon_download_info_url(
-    password: &str,
-    package_id: &str,
-    pre_download: bool,
+    package_info: &PackageInfo,
     edition: GameEdition,
 ) -> String {
     format!(
-        "{}/downloader/sophon_chunk/api/getBuild?branch={}&password={password}&package_id={package_id}",
+        "{}/downloader/sophon_chunk/api/getBuild?branch={}&password={}&package_id={}",
         edition.api_host(),
-        if pre_download { "pre_download" } else { "main" }
+        package_info.branch,
+        package_info.password,
+        package_info.package_id
     )
 }
 
@@ -40,13 +40,10 @@ fn sophon_download_info_url(
 pub fn get_game_download_sophon_info(
     client: Client,
     package_info: &PackageInfo,
-    pre_download: bool,
     edition: GameEdition,
 ) -> Result<SophonDownloads, SophonError> {
     let url = sophon_download_info_url(
-        &package_info.password,
-        &package_info.package_id,
-        pre_download,
+        package_info,
         edition
     );
 
