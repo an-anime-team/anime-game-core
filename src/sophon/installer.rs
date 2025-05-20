@@ -9,16 +9,12 @@ use serde::{Deserialize, Serialize};
 
 // I ain't refactoring all this.
 use super::{
-    api_get_request,
-    api_schemas::{
+    api_get_request, api_schemas::{
         game_branches::PackageInfo,
         sophon_manifests::{SophonDownloadInfo, SophonDownloads},
-    },
-    bytes_check_md5, check_file, ensure_parent, get_protobuf_from_url, md5_hash_str,
-    protos::SophonManifest::{
+    }, bytes_check_md5, check_file, ensure_parent, file_md5_hash_str, get_protobuf_from_url, md5_hash_str, protos::SophonManifest::{
         SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto,
-    },
-    GameEdition, SophonError,
+    }, GameEdition, SophonError
 };
 
 use crate::prelude::free_space;
@@ -408,13 +404,7 @@ impl SophonInstaller {
 
         drop(file);
 
-        let file_contents = std::fs::read(&temp_file_path)
-            .map_err(|e| SophonError::TempFileError {
-                path: temp_file_path.clone(),
-                message: e.to_string()
-            })?;
-
-        if bytes_check_md5(&file_contents, &file_info.AssetHashMd5) {
+        if check_file(&temp_file_path, file_info.AssetSize, &file_info.AssetHashMd5)? {
             ensure_parent(&out_file_path).map_err(|e| SophonError::TempFileError {
                 path: temp_file_path.clone(),
                 message: e.to_string()
@@ -437,9 +427,9 @@ impl SophonInstaller {
 
         else {
             Err(SophonError::FileHashMismatch {
+                got: file_md5_hash_str(&temp_file_path)?,
                 path: temp_file_path,
                 expected: file_info.AssetHashMd5.clone(),
-                got: md5_hash_str(&file_contents),
             })
         }
     }
