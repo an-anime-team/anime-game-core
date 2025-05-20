@@ -1,4 +1,4 @@
-use std::{fs::File, os::unix::fs::PermissionsExt};
+use std::{fs::File, io::{Read, Seek, SeekFrom}, os::unix::fs::PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use md5::{Digest, Md5};
@@ -19,6 +19,7 @@ use crate::prettify_bytes::prettify_bytes;
 pub mod api_schemas;
 pub mod installer;
 pub mod protos;
+pub mod repairer;
 pub mod updater;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -176,6 +177,14 @@ fn add_user_write_permission_to_file(path: impl AsRef<Path>) -> std::io::Result<
     }
 
     Ok(())
+}
+
+fn file_region_hash_md5(file: &mut File, offset: u64, length: u64) -> std::io::Result<String> {
+    file.seek(SeekFrom::Start(offset))?;
+    let mut region_reader = file.take(length);
+    let mut hasher = Md5::new();
+    std::io::copy(&mut region_reader, &mut hasher)?;
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
