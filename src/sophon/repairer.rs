@@ -1,10 +1,28 @@
-use std::{fs::{File, OpenOptions}, io::{Read, Seek, SeekFrom, Write}, os::unix::fs::FileExt, path::{Path, PathBuf}, sync::{atomic::AtomicU64, mpsc, Mutex}};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::unix::fs::FileExt;
+use std::fs::{File, OpenOptions};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
+use std::sync::Mutex;
 
-use md5::{Digest, Md5};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-use super::{api_schemas::sophon_manifests::{DownloadInfo, SophonDownloadInfo}, bytes_check_md5, check_file, ensure_parent, file_md5_hash_str, file_region_hash_md5, installer::get_download_manifest, md5_hash_str, protos::SophonManifest::{SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto}, SophonError};
+use super::{
+    api_schemas::sophon_manifests::{
+        DownloadInfo,
+        SophonDownloadInfo
+    },
+    bytes_check_md5, check_file, ensure_parent, file_md5_hash_str,
+    file_region_hash_md5, md5_hash_str,
+    installer::get_download_manifest,
+    protos::SophonManifest::{
+        SophonManifestAssetChunk,
+        SophonManifestAssetProperty,
+        SophonManifestProto
+    },
+    SophonError
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Update {
@@ -84,7 +102,12 @@ impl SophonRepairer {
         Ok(())
     }
 
-    pub fn check_and_repair(&self, game_dir: impl AsRef<Path>, file_check_threads: usize, updater: impl Fn(Update) + Clone + Send + 'static) -> Result<(), SophonError> {
+    pub fn check_and_repair(
+        &self,
+        game_dir: impl AsRef<Path>,
+        file_check_threads: usize,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) -> Result<(), SophonError> {
         (updater)(Update::VerifyingStarted);
 
         let broken = self.get_broken_files(&game_dir, file_check_threads, updater.clone())?;
@@ -97,6 +120,7 @@ impl SophonRepairer {
         self.create_temp_dirs()?;
 
         let mut repaired = 0;
+
         (updater)(Update::RepairingProgress { total: total_broken, repaired });
 
         for (download_info, asset_info) in broken {
@@ -105,11 +129,15 @@ impl SophonRepairer {
             match res {
                 Err(err) => {
                     tracing::error!("Error repairing file `{}`: {err}", asset_info.AssetName);
+
                     (updater)(Update::DownloadingError(err))
                 }
+
                 Ok(()) => {
                     tracing::trace!("Repaired file `{}`", asset_info.AssetName);
+
                     repaired += 1;
+
                     (updater)(Update::RepairingProgress { total: total_broken, repaired })
                 }
             }
@@ -120,79 +148,112 @@ impl SophonRepairer {
         Ok(())
     }
 
-    pub fn get_broken_files(&self, game_dir: impl AsRef<Path>, threads: usize, updater: impl Fn(Update) + Clone + Send + 'static) -> std::io::Result<Vec<(&DownloadInfo, &SophonManifestAssetProperty)>> {
-        let all_files = 
-            self
-            .manifests
-            .iter()
-            .flat_map(|(di, manifest)| manifest
-                .Assets
-                .iter()
-                .map(move |asset| (&di.chunk_download, asset))
-                )
+    pub fn get_broken_files(
+        &self,
+        game_dir: impl AsRef<Path>,
+        threads: usize,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) -> std::io::Result<Vec<(&DownloadInfo, &SophonManifestAssetProperty)>> {
+        let all_files = self.manifests.iter()
+            .flat_map(|(di, manifest)| {
+                manifest.Assets.iter()
+                    .map(move |asset| (&di.chunk_download, asset))
+            })
             .collect::<Vec<_>>();
+
         let total = all_files.len() as u64;
+
         (updater)(Update::VerifyingProgress { total, checked: 0 });
+
         let files_to_check_pool = Mutex::new(all_files);
-        let pool = &files_to_check_pool;
-        let (sender, receiver) = mpsc::channel::<(&DownloadInfo, &SophonManifestAssetProperty)>();
-    
         let verified_atomic = AtomicU64::new(0);
-        // scoped threads to allow borrowing some stuff from outer stuff
+
+        let pool = &files_to_check_pool;
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+
+        // scoped threads to allow borrowing some stuff from outer stuff.
         Ok(std::thread::scope(|scope| {
-                    let verified = &verified_atomic;
-                    for _ in 0..threads {
-                        let game_dir = game_dir.as_ref();
-                        let sender_clone = sender.clone();
-                        let updater_clone = updater.clone();
-                        scope.spawn(move || {
-                            'checkloop: loop {
-                                let (download_info, next_file) = {
-                                    let mut pool_lock = pool.lock().unwrap();
-                                    if let Some(next) = pool_lock.pop() {
-                                        next
-                                    } else {
-                                        break 'checkloop;
-                                    }
-                                };
-                                tracing::trace!("Checking `{}`", next_file.AssetName);
-                                match check_file(game_dir.join(&next_file.AssetName), next_file.AssetSize, &next_file.AssetHashMd5) {
-                                    Err(err) => {
-                                        tracing::error!("Failed to check file `{}`: {err}", next_file.AssetName)
-                                    },
-                                    Ok(false) => {
-                                        let _ = sender_clone.send((download_info, next_file));
-                                    },
-                                    Ok(true) => {
-                                        // Do nothing
-                                    }
-                                };
-                                tracing::trace!("Check `{}` completed", next_file.AssetName);
-                                (updater_clone)(Update::VerifyingProgress { total, checked: verified.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 });
+            let verified = &verified_atomic;
+
+            for _ in 0..threads {
+                let game_dir = game_dir.as_ref();
+                let sender_clone = sender.clone();
+                let updater_clone = updater.clone();
+
+                scope.spawn(move || {
+                    'checkloop: loop {
+                        let (download_info, next_file) = {
+                            let mut pool_lock = pool.lock().unwrap();
+
+                            if let Some(next) = pool_lock.pop() {
+                                next
+                            } else {
+                                break 'checkloop;
                             }
+                        };
+
+                        tracing::trace!("Checking `{}`", next_file.AssetName);
+
+                        match check_file(game_dir.join(&next_file.AssetName), next_file.AssetSize, &next_file.AssetHashMd5) {
+                            Err(err) => tracing::error!("Failed to check file `{}`: {err}", next_file.AssetName),
+
+                            Ok(false) => {
+                                let _ = sender_clone.send((download_info, next_file));
+                            },
+
+                            Ok(true) => ()
+                        };
+
+                        tracing::trace!("Check `{}` completed", next_file.AssetName);
+
+                        (updater_clone)(Update::VerifyingProgress {
+                            total,
+                            checked: verified.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
                         });
                     }
-                    drop(sender);
-                    receiver.into_iter().collect()
-                }))
+                });
+            }
+
+            drop(sender);
+
+            receiver.into_iter().collect()
+        }))
     }
 
-    pub fn repair_file(&self, game_dir: impl AsRef<Path>, download_info: &DownloadInfo, asset_info: &SophonManifestAssetProperty) -> Result<(), SophonError> {
-        let target_file = game_dir.as_ref().join(&asset_info.AssetName);
+    pub fn repair_file(
+        &self,
+        game_dir: impl AsRef<Path>,
+        download_info: &DownloadInfo,
+        asset_info: &SophonManifestAssetProperty
+    ) -> Result<(), SophonError> {
+        let target_file = game_dir.as_ref()
+            .join(&asset_info.AssetName);
 
         if !target_file.exists() {
             self.download_chunked_file(&game_dir, download_info, asset_info)
-        } else {
+        }
+
+        else {
             let mut file = OpenOptions::new()
                 .write(true)
                 .read(true)
                 .open(&target_file)?;
+
             file.set_len(asset_info.AssetSize)?;
 
             for chunk in &asset_info.AssetChunks {
-                if chunk.ChunkDecompressedHashMd5 != file_region_hash_md5(&mut file, chunk.ChunkOnFileOffset, chunk.ChunkSizeDecompressed)? {
+                let region_hash = file_region_hash_md5(
+                    &mut file,
+                    chunk.ChunkOnFileOffset,
+                    chunk.ChunkSizeDecompressed
+                )?;
+
+                if chunk.ChunkDecompressedHashMd5 != region_hash {
                     let mut chunk_file = self.download_chunk_uncompressed(download_info, chunk)?;
+
                     file.seek(SeekFrom::Start(chunk.ChunkOnFileOffset))?;
+
                     std::io::copy(&mut chunk_file, &mut file)?;
                 }
             }
@@ -200,14 +261,14 @@ impl SophonRepairer {
             drop(file);
 
             if !check_file(&target_file, asset_info.AssetSize, &asset_info.AssetHashMd5)? {
-                Err(SophonError::FileHashMismatch {
+                return Err(SophonError::FileHashMismatch {
                     got: file_md5_hash_str(&target_file)?,
                     path: target_file,
                     expected: asset_info.AssetHashMd5.clone(),
-                })
-            } else {
-                Ok(())
+                });
             }
+
+            Ok(())
         }
     }
 

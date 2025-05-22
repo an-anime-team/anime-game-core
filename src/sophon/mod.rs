@@ -1,4 +1,6 @@
-use std::{fs::File, io::{Read, Seek, SeekFrom}, os::unix::fs::PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
+use std::io::{Read, Seek, SeekFrom};
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use md5::{Digest, Md5};
@@ -181,9 +183,12 @@ fn add_user_write_permission_to_file(path: impl AsRef<Path>) -> std::io::Result<
 
 fn file_region_hash_md5(file: &mut File, offset: u64, length: u64) -> std::io::Result<String> {
     file.seek(SeekFrom::Start(offset))?;
+
     let mut region_reader = file.take(length);
     let mut hasher = Md5::new();
+
     std::io::copy(&mut region_reader, &mut hasher)?;
+
     Ok(format!("{:x}", hasher.finalize()))
 }
 

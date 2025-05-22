@@ -111,7 +111,7 @@ pub struct SophonPatcher {
     pub patch_manifest: SophonPatchProto,
     pub diff_info: SophonDiff,
     pub check_free_space: bool,
-    pub temp_folder: PathBuf,
+    pub temp_folder: PathBuf
 }
 
 #[derive(Debug, Clone)]
@@ -200,7 +200,7 @@ impl SophonPatcher {
         self
     }
 
-    /// Folder to temporarily store files being updated (patched, created, etc)
+    /// Folder to temporarily store files being updated (patched, created, etc).
     #[inline(always)]
     pub fn files_temp(&self) -> PathBuf {
         self.temp_folder.join("updating")
@@ -421,7 +421,9 @@ impl SophonPatcher {
 
         if let Err(err) = result {
             tracing::error!("Error {err:?} with `{}`", file_patch_info.AssetName);
+
             (updater)(Update::DownloadingError(err));
+
             tracing::trace!("the asset patching info: {file_patch_info:?}");
         }
 
