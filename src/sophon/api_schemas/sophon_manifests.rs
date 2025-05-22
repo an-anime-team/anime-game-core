@@ -44,6 +44,12 @@ pub struct DownloadInfo {
     pub url_suffix: String
 }
 
+impl DownloadInfo {
+    pub fn download_url(&self, id: &str) -> String {
+        format!("{}{}/{id}", self.url_prefix, self.url_suffix)
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestStats {
     pub compressed_size: String,
