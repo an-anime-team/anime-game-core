@@ -255,7 +255,10 @@ pub enum SophonError {
     },
 
     #[error("IO error: {0}")]
-    IoError(String)
+    IoError(String),
+
+    #[error("Failed to download chunk {0}, out of retries")]
+    ChunkDownloadFailed(String)
 }
 
 impl From<reqwest::Error> for SophonError {
