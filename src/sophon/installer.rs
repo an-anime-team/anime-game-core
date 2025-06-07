@@ -14,12 +14,10 @@ use super::{
         sophon_manifests::{DownloadInfo, SophonDownloadInfo, SophonDownloads},
     }, check_file, ensure_parent, file_md5_hash_str, get_protobuf_from_url, protos::SophonManifest::{
         SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto,
-    }, GameEdition, SophonError
+    }, ChunkState, GameEdition, SophonError
 };
 
-use crate::prelude::free_space;
-
-const DEFAULT_CHUNK_RETRIES: u8 = 4;
+use crate::{prelude::free_space, sophon::DEFAULT_CHUNK_RETRIES};
 
 fn sophon_download_info_url(
     package_info: &PackageInfo,
@@ -233,22 +231,12 @@ impl<'a> DownloadingIndex<'a> {
     }
 
     fn add_files(&self, amount: u64) {
-        self.downloaded_files.fetch_add(amount, std::sync::atomic::Ordering::AcqRel);
+        self.downloaded_files.fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
     }
 
     fn add_bytes(&self, amount: u64) {
-        self.downloaded_bytes.fetch_add(amount, std::sync::atomic::Ordering::AcqRel);
+        self.downloaded_bytes.fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum ChunkState {
-    // Chunk successfully downloaded
-    Downloaded,
-    // Download failed, run out of retries
-    Failed,
-    // Amount of retries left, 0 means last retry is being run
-    Downloading(u8)
 }
 
 #[derive(Debug)]
@@ -374,7 +362,7 @@ impl SophonInstaller {
                             continue;
                         }
                         if let Steal::Success(chunk_download_task) = download_queue.steal() {
-                            self.chunk_download_handler(chunk_download_task, &chunk_check_queue, &local_updater);
+                            self.chunk_download_handler(chunk_download_task, &chunk_states, &download_queue, &chunk_check_queue, &local_updater);
                             continue;
                         }
                         // All queues are empty, end the thread
@@ -393,7 +381,7 @@ impl SophonInstaller {
 
         let downloading_index = DownloadingIndex::new(&self.download_info, &self.manifest);
         tracing::info!("{} Chunks to download, {} Files to install", downloading_index.chunks.len(), downloading_index.files.len());
-        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(downloading_index.chunks.keys().map(|id| (*id, ChunkState::Downloading(DEFAULT_CHUNK_RETRIES)))));
+        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(downloading_index.chunks.keys().map(|id| (*id, ChunkState::default()))));
 
         (updater)(downloading_index.msg_files());
         (updater)(downloading_index.msg_bytes());
@@ -439,7 +427,7 @@ impl SophonInstaller {
                         }
                         // Download next chunk
                         if let Steal::Success(chunk_download_task) = download_queue.steal() {
-                            self.chunk_download_handler(chunk_download_task, &chunk_check_queue, &local_updater);
+                            self.chunk_download_handler(chunk_download_task, &chunk_states, &download_queue, &chunk_check_queue, &local_updater);
                             continue;
                         }
                         // All queues are empty, end the thread
@@ -507,7 +495,14 @@ impl SophonInstaller {
         }
     }
 
-    fn chunk_download_handler<'a>(&self, chunk_download_task: &'a ChunkInfo<'a>, chunk_check_queue: &Injector<&'a ChunkInfo<'a>>, local_updater: impl Fn(Update)) {
+    fn chunk_download_handler<'a>(
+        &self,
+        chunk_download_task: &'a ChunkInfo<'a>,
+        chunk_states: &Mutex<HashMap<&'a String, ChunkState>>,
+        download_queue: &Injector<&'a ChunkInfo<'a>>,
+        chunk_check_queue: &Injector<&'a ChunkInfo<'a>>,
+        local_updater: impl Fn(Update)
+    ) {
         let res = self.download_chunk(chunk_download_task);
         match res {
             Ok(()) => {
@@ -516,6 +511,7 @@ impl SophonInstaller {
             Err(err) => {
                 tracing::error!("Error downloading chunk `{}`: {err}", chunk_download_task.chunk_manifest.ChunkName);
                 (local_updater)(Update::DownloadingError(err));
+                self.fail_chunk(chunk_download_task, chunk_states, download_queue, local_updater);
             }
         }
     }

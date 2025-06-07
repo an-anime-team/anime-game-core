@@ -24,6 +24,25 @@ pub mod protos;
 pub mod repairer;
 pub mod updater;
 
+const DEFAULT_CHUNK_RETRIES: u8 = 4;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum ChunkState {
+    // Chunk successfully downloaded
+    Downloaded,
+    // Download failed, run out of retries
+    Failed,
+    // Amount of retries left, 0 means last retry is being run
+    Downloading(u8)
+}
+
+impl Default for ChunkState {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::Downloading(DEFAULT_CHUNK_RETRIES)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum GameEdition {
     Global,
