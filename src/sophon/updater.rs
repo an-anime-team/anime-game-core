@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, sync::{atomic::AtomicU64, Mutex}};
+use std::{collections::HashMap, sync::{atomic::AtomicU64, Mutex}};
 use std::io::{Read, Seek, Take};
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ use crate::{
 
 // I ain't refactoring it.
 use super::{
-    api_post_request, api_schemas::{
+    add_user_write_permission_to_file, api_post_request, api_schemas::{
         game_branches::PackageInfo,
         sophon_diff::{SophonDiff, SophonDiffs}, sophon_manifests::DownloadInfo,
     }, file_md5_hash_str, get_protobuf_from_url, protos::SophonPatch::{
@@ -266,7 +266,7 @@ impl<'a> UpdateIndex<'a> {
     }
 
     #[inline]
-    fn msg_files(&self) -> Update {
+    fn msg_patched(&self) -> Update {
         Update::PatchingProgress {
             patched_files: self.files_patched.load(std::sync::atomic::Ordering::Acquire),
             total_files: self.total_files()
@@ -451,7 +451,7 @@ impl SophonPatcher {
         let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(update_index.patch_chunks.keys().map(|id| (*id, ChunkState::default()))));
 
         (updater)(update_index.msg_deleted());
-        (updater)(update_index.msg_files());
+        (updater)(update_index.msg_patched());
         (updater)(update_index.msg_bytes());
 
         let download_queue: Injector<&PatchChunkInfo> = Injector::new();
@@ -485,7 +485,7 @@ impl SophonPatcher {
                     // 3. Download a patch chunk.
                     'worker: loop {
                         if let Steal::Success(file_patch_task) = file_patch_queue.steal() {
-                            self.file_patch_handler(file_patch_task, game_folder, &local_updater);
+                            self.file_patch_handler(file_patch_task, &update_index, game_folder, &local_updater);
                             continue;
                         }
                         if let Steal::Success(download_check_task) = download_check_queue.steal() {
@@ -516,11 +516,15 @@ impl SophonPatcher {
     fn file_patch_handler<'b>(
         &self,
         file_patch_task: &FilePatchInfo,
+        update_index: &UpdateIndex,
         game_folder: &Path,
         updater: impl Fn(Update) + 'b
     ) {
         let tmp_file_path = file_patch_task.temp_file_path(self.files_temp());
         let target_file_path = file_patch_task.target_file_path(game_folder);
+        if target_file_path.exists() {
+            let _ = add_user_write_permission_to_file(&target_file_path);
+        }
 
         // copy file to tmp location if it is going to be actually patched
         if let Some(patch_info) = file_patch_task.patch_chunk {
@@ -542,6 +546,8 @@ impl SophonPatcher {
                 if let Err(e) = self.move_patched_file(&tmp_file_path, &target_file_path) {
                     tracing::error!("Failed to move patched file into final destination: {e}");
                 }
+                update_index.count_patched(1);
+                (updater)(update_index.msg_patched())
             }
             Err(e) => {
                 tracing::error!("Patching for file `{}` failed: {e}", file_patch_task.file_manifest.AssetName);
@@ -569,16 +575,15 @@ impl SophonPatcher {
 
                 self.copy_over_file_temp(
                     patch_chunk,
-                    file_patch_task,
                     &tmp_file_path
                 )?;
-            }
-
-            else {
+            } else {
                 tracing::trace!("Patching `{}`", file_patch_task.file_manifest.AssetName);
 
                 self.apply_file_patch(&tmp_file_path, patch_chunk, file_patch_task)?;
             }
+
+            let _ = add_user_write_permission_to_file(&tmp_file_path);
 
             if !check_file(
                 &tmp_file_path,
@@ -614,7 +619,7 @@ impl SophonPatcher {
         Ok(())
     }
 
-    fn copy_over_file_temp(&self, patch_chunk: &SophonPatchAssetChunk, file_info: &FilePatchInfo, tmp_file_path: impl AsRef<Path>) -> std::io::Result<()> {
+    fn copy_over_file_temp(&self, patch_chunk: &SophonPatchAssetChunk, tmp_file_path: impl AsRef<Path>) -> std::io::Result<()> {
         let patch_chunk_path = self.patch_chunk_temp_folder().join(&patch_chunk.PatchName);
         extract_patch_chunk_region_to_file(patch_chunk_path, tmp_file_path, patch_chunk)
     }
@@ -688,6 +693,8 @@ impl SophonPatcher {
                     let chunk_state = states_lock.get_mut(&download_check_task.patch_chunk_manifest.PatchName).unwrap();
                     *chunk_state = ChunkState::Downloaded;
                 }
+                update_index.count_downloaded(download_check_task.patch_chunk_manifest.PatchSize);
+                (updater)(update_index.msg_bytes());
                 if let Some(file_patch_queue) = file_patch_queue {
                     for file_name in &download_check_task.used_in_files {
                         if let Some(file_info) = update_index.files_to_patch.get(*file_name) {
@@ -716,7 +723,7 @@ impl SophonPatcher {
 
     fn fail_chunk<'a>(&self, chunk_info: &'a PatchChunkInfo<'a>, states: &Mutex<HashMap<&'a String, ChunkState>>, download_queue: &Injector<&'a PatchChunkInfo<'a>>, updater: impl Fn(Update)) {
         // Check/download failed, file corrupt, so try to delete it.
-        let chunk_path = chunk_info.chunk_path(&self.patch_chunk_temp_folder());
+        let chunk_path = chunk_info.chunk_path(self.patch_chunk_temp_folder());
         let _ = std::fs::remove_file(&chunk_path);
         {
             let mut states_lock = states.lock().unwrap();
