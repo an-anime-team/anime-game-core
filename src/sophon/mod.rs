@@ -277,7 +277,10 @@ pub enum SophonError {
     IoError(String),
 
     #[error("Failed to download chunk {0}, out of retries")]
-    ChunkDownloadFailed(String)
+    ChunkDownloadFailed(String),
+
+    #[error("Failed to apply hdiff patch: {0}")]
+    PatchingError(String)
 }
 
 impl From<reqwest::Error> for SophonError {
