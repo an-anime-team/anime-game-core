@@ -632,6 +632,7 @@ impl SophonInstaller {
 
     pub fn pre_download(
         &self,
+        thread_count: usize,
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         if self.check_free_space {
@@ -644,7 +645,7 @@ impl SophonInstaller {
 
         self.create_temp_dirs()?;
 
-        self.predownload_multithreaded(14, updater);
+        self.predownload_multithreaded(thread_count, updater);
 
         Ok(())
     }
@@ -652,6 +653,7 @@ impl SophonInstaller {
     pub fn install(
         &self,
         output_folder: &Path,
+        thread_count: usize,
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         let download_size = self.download_info.stats.compressed_size.parse().unwrap();
@@ -681,7 +683,7 @@ impl SophonInstaller {
 
         self.create_temp_dirs()?;
 
-        self.install_multithreaded(14, output_folder, updater.clone());
+        self.install_multithreaded(thread_count, output_folder, updater.clone());
 
         (updater)(Update::DownloadingFinished);
 

@@ -789,6 +789,7 @@ impl SophonPatcher {
     pub fn pre_download(
         &self,
         from: Version,
+        thread_count: usize,
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
 
@@ -803,7 +804,7 @@ impl SophonPatcher {
 
         (updater)(Update::DownloadingStarted(self.temp_folder.clone()));
 
-        self.predownload_multithreaded(14, from, updater.clone());
+        self.predownload_multithreaded(thread_count, from, updater.clone());
 
         (updater)(Update::DownloadingFinished);
 
@@ -814,6 +815,7 @@ impl SophonPatcher {
         &self,
         target_dir: impl AsRef<Path>,
         from: Version,
+        thread_count: usize,
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         if self.check_free_space {
@@ -827,7 +829,7 @@ impl SophonPatcher {
 
         (updater)(Update::PatchingStarted);
 
-        self.update_multithreaded(14, target_dir, from, updater.clone());
+        self.update_multithreaded(thread_count, target_dir, from, updater.clone());
 
         (updater)(Update::PatchingFinished);
 

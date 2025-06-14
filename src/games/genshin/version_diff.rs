@@ -247,6 +247,7 @@ impl VersionDiff {
     fn download_game(
         &self,
         download_info: &SophonDownloadInfo,
+        thread_count: usize,
         path: impl AsRef<Path>,
         updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
     ) -> Result<(), <Self as VersionDiffExt>::Error> {
@@ -264,7 +265,7 @@ impl VersionDiff {
             self.temp_folder()
         )?;
 
-        installer.install(path.as_ref(), move |msg| {
+        installer.install(path.as_ref(), thread_count, move |msg| {
             (updater)(msg.into());
         })?;
 
@@ -291,6 +292,7 @@ impl VersionDiff {
     fn patch_game(
         &self,
         from: Version,
+        thread_count: usize,
         diff: &SophonDiff,
         path: impl AsRef<Path>,
         updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
@@ -306,7 +308,7 @@ impl VersionDiff {
 
         let patcher = SophonPatcher::new(client, diff, self.temp_folder())?;
 
-        patcher.sophon_apply_patches(&path, from, move |msg | {
+        patcher.sophon_apply_patches(&path, from, thread_count, move |msg | {
             (updater)(msg.into());
         })?;
 
@@ -334,6 +336,7 @@ impl VersionDiff {
         &self,
         download_or_patch_info: &DownloadOrDiff,
         from: Version,
+        thread_count: usize,
         updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
     ) -> Result<(), <Self as VersionDiffExt>::Error> {
         tracing::debug!(
@@ -348,7 +351,9 @@ impl VersionDiff {
             DownloadOrDiff::Download(download_info) => {
                 let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
 
-                installer.pre_download(move |msg| {
+                installer.pre_download(
+                    thread_count,
+                    move |msg| {
                     (updater)(msg.into());
                 })?;
             }
@@ -356,7 +361,7 @@ impl VersionDiff {
             DownloadOrDiff::Patch(diff_info) => {
                 let patcher = SophonPatcher::new(client, diff_info, self.temp_folder())?;
 
-                patcher.pre_download(from, move |msg| {
+                patcher.pre_download(from, thread_count, move |msg| {
                     (updater)(msg.into());
                 })?;
             }
@@ -493,7 +498,7 @@ impl VersionDiffExt for VersionDiff {
                 }
             });
 
-            self.install_to(folder, move |msg| {
+            self.install_to(folder, 1, move |msg| {
                 match msg {
                     DiffUpdate::SophonPatcherUpdate(sophon::updater::Update::DownloadingProgressBytes { downloaded_bytes, total_bytes }) => {
                         let _ = sender.send((downloaded_bytes, total_bytes));
@@ -517,6 +522,7 @@ impl VersionDiffExt for VersionDiff {
     fn install_to(
         &self,
         path: impl AsRef<Path>,
+        thread_count: usize,
         updater: impl Fn(Self::Update) + Clone + Send + 'static
     ) -> Result<(), Self::Error> {
         tracing::debug!("Installing version difference");
@@ -527,11 +533,11 @@ impl VersionDiffExt for VersionDiff {
             Self::Outdated { .. } => Err(Self::Error::Outdated),
 
             // Can be installed
-            Self::Diff { diff, current, .. } => self.patch_game(*current, diff, path, updater),
-            Self::NotInstalled { download_info, .. } => self.download_game(download_info, path, updater),
+            Self::Diff { diff, current, .. } => self.patch_game(*current, thread_count, diff, path, updater),
+            Self::NotInstalled { download_info, .. } => self.download_game(download_info, thread_count, path, updater),
 
             // Predownload without applying
-            Self::Predownload { download_info, current , ..} => self.pre_download(download_info, *current, updater)
+            Self::Predownload { download_info, current , ..} => self.pre_download(download_info, *current, thread_count, updater)
         }
     }
 }
