@@ -1,5 +1,3 @@
-pub use minreq;
-
 /// Core library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -22,6 +20,11 @@ pub mod patches;
 // Games-specific functionality
 
 mod games;
+
+pub use minreq;
+
+#[cfg(feature = "sophon")]
+pub use reqwest;
 
 #[cfg(feature = "genshin")]
 pub use games::genshin;
