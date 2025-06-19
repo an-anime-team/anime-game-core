@@ -154,7 +154,7 @@ impl FilePatchInfo<'_> {
 }
 
 struct UpdateIndex<'a> {
-    unused: &'a SophonUnusedAssetInfo,
+    unused: Option<&'a SophonUnusedAssetInfo>,
     unused_deleted: AtomicU64,
     patch_chunks: HashMap<&'a String, PatchChunkInfo<'a>>,
     total_bytes: u64,
@@ -194,7 +194,7 @@ impl<'a> UpdateIndex<'a> {
         Self {
             unused: update_manifest.UnusedAssets
                 .iter()
-                .find_map(|(fromver, unused)| (*fromver == from).then_some(unused)).expect("Unused files are expected"),
+                .find_map(|(fromver, unused)| (*fromver == from).then_some(unused)),
             unused_deleted: AtomicU64::new(0),
             patch_chunks,
             total_bytes,
@@ -232,7 +232,7 @@ impl<'a> UpdateIndex<'a> {
         Self {
             unused: update_manifest.UnusedAssets
                 .iter()
-                .find_map(|(fromver, unused)| (*fromver == from).then_some(unused)).expect("Unused files are expected"),
+                .find_map(|(fromver, unused)| (*fromver == from).then_some(unused)),
             unused_deleted: AtomicU64::new(0),
             patch_chunks,
             total_bytes,
@@ -254,7 +254,7 @@ impl<'a> UpdateIndex<'a> {
 
     #[inline]
     fn total_unused(&self) -> u64 {
-        self.unused.Assets.len() as u64
+        self.unused.map(|una| una.Assets.len()).unwrap_or(0) as u64
     }
 
     #[inline]
@@ -447,7 +447,7 @@ impl SophonPatcher {
         tracing::debug!("Starting multithreaded download and update process");
 
         let update_index = UpdateIndex::new(&self.patch_manifest, &self.diff_info.diff_download, from);
-        tracing::info!("{} Patch Chunks to download, {} Files to patch, {} Files to delete", update_index.patch_chunks.len(), update_index.files_to_patch.len(), update_index.unused.Assets.len());
+        tracing::info!("{} Patch Chunks to download, {} Files to patch, {} Files to delete", update_index.patch_chunks.len(), update_index.total_files(), update_index.total_unused());
         let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(update_index.patch_chunks.keys().map(|id| (*id, ChunkState::default()))));
 
         (updater)(update_index.msg_deleted());
@@ -485,14 +485,17 @@ impl SophonPatcher {
                     // 3. Download a patch chunk.
                     'worker: loop {
                         if let Steal::Success(file_patch_task) = file_patch_queue.steal() {
+                            tracing::trace!("Patching file `{}`", file_patch_task.file_manifest.AssetName);
                             self.file_patch_handler(file_patch_task, &update_index, game_folder, &local_updater);
                             continue;
                         }
                         if let Steal::Success(download_check_task) = download_check_queue.steal() {
+                            tracing::trace!("Checking downloaded chunk `{}`", download_check_task.patch_chunk_manifest.PatchName);
                             self.download_check_handler(download_check_task, &chunk_states, &update_index, &local_updater, Some(&file_patch_queue), &download_queue);
                             continue;
                         }
                         if let Steal::Success(download_task) = download_queue.steal() {
+                            tracing::trace!("Downloading chunk `{}`", download_task.patch_chunk_manifest.PatchName);
                             self.download_handler(download_task, &chunk_states, &download_queue, &download_check_queue, &local_updater);
                             continue;
                         }
@@ -503,12 +506,14 @@ impl SophonPatcher {
                     }
                 });
             }
-            // Deleting unused files
-            for unused_asset in &update_index.unused.Assets {
-                // Ignore any I/O errors
-                let _ = std::fs::remove_file(game_folder.join(&unused_asset.FileName));
-                update_index.count_deleted(1);
-                (updater)(update_index.msg_deleted());
+            if let Some(unused) = &update_index.unused {
+                // Deleting unused files
+                for unused_asset in &unused.Assets {
+                    // Ignore any I/O errors
+                    let _ = std::fs::remove_file(game_folder.join(&unused_asset.FileName));
+                    update_index.count_deleted(1);
+                    (updater)(update_index.msg_deleted());
+                }
             }
         });
     }
@@ -670,7 +675,8 @@ impl SophonPatcher {
         tracing::trace!("File valid, replacing tmp file with it");
 
         std::fs::copy(&tmp_out_path, &tmp_file_path)?;
-        std::fs::remove_file(&tmp_file_path)?;
+        std::fs::remove_file(&tmp_out_path)?;
+        std::fs::remove_file(&extracted_patch_path)?;
 
         Ok(())
     }
