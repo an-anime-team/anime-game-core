@@ -291,16 +291,6 @@ impl VoicePackage {
         match &self {
             Self::NotInstalled { version, .. } => Ok(*version),
             Self::Installed { path, locale, game_edition } => {
-                let package_size = get_size(&path)?;
-
-                let game_branches = sophon::get_game_branches_info(
-                    reqwest_client.clone(),
-                    (*game_edition).into()
-                )?;
-
-                let game_branch_info = game_branches.get_game_latest_by_id(game_edition.game_id())
-                    .expect("Latest version should be available");
-
                 match std::fs::read(path.join(".version")) {
                     Ok(curr) => {
                         tracing::debug!("Found .version file: {}.{}.{}", curr[0], curr[1], curr[2]);
@@ -312,9 +302,32 @@ impl VoicePackage {
                     // actually know current version and just predict it
                     // This file will be properly created in the install method
                     Err(_) => {
+                        let package_size = get_size(&path)?;
+
+                        let game_branches = sophon::get_game_branches_info(
+                            reqwest_client.clone(),
+                            (*game_edition).into()
+                        )?;
+
+                        let game_branch_info = game_branches.get_game_latest_by_id(game_edition.game_id())
+                            .expect("Latest version should be available");
+                        
                         tracing::debug!(".version file wasn't found. Predict version. Package size: {package_size}");
 
                         let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
+
+                        // Get the latest game version's voice pack sizes from the API
+                        if !voice_packages_sizes.iter().any(|(tag, _)| *tag == game_branch_info.main.tag) {
+                            if let Some(api_size) = sophon::installer::get_game_download_sophon_info(reqwest_client.clone(), &game_branch_info.main, (*game_edition).into())?
+                                .manifests
+                                .iter().find(|di| di.matching_field == locale.to_code())
+                            {
+                                let size = api_size.stats.uncompressed_size.parse()?;
+                                // Inserting at `0` so that it gets picked up at the next bit of
+                                // code, doesn't have to predict.
+                                voice_packages_sizes.insert(0, (&game_branch_info.main.tag, size));
+                            }
+                        }
 
                         // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
                         // then we should predict their sizes
