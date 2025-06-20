@@ -20,6 +20,7 @@ use crate::genshin::version_diff::*;
 /// Format: `(version, english, japanese, korean, chinese)`
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English(US)   Japanese      Korean        Chinese
+    ("5.7.0",  19512988499,  22222747101,  16908205123,  17127113750),
     ("5.6.0",  18981328917,  21627518083,  16446002370,  16665257451),
     ("5.5.0",  18412510172,  20933946124,  15886079840,  16128960332),
 
