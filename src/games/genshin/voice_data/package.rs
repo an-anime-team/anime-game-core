@@ -349,7 +349,9 @@ impl VoicePackage {
                         }
 
                         // This *should* be unreachable
-                        unreachable!()
+                        // But is is very much reachable, as proven time and time again, so anyhow
+                        // it is.
+                        Err(anyhow::anyhow!("Failed to determine installed voice package version"))
                     }
                 }
             }
