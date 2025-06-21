@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, sync::mpsc};
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -423,6 +423,35 @@ impl VersionDiffExt for VersionDiff {
             // Can be installed but amogus
             //Self::NotInstalled { .. } => return Err(Self::Error::MultipleSegments),
             _ => Err(Self::Error::MultipleSegments)
+        }
+    }
+
+    // Reimplemented for the edge case of predownloading. Since self.file_name() returns None, the
+    // implementation provided in trait definition won't work.
+    //
+    // Implemented based on observation that the method is only called for predownloads in the
+    // launcher itself.
+    fn download_to(&mut self, folder: impl AsRef<Path>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), Self::Error> {
+        if matches!(self, Self::Predownload { .. }) {
+            // non-sync and non-clone progress callback was provided, so have to do stuff like this
+            let (sender, recver) = mpsc::channel();
+            let proxy_thread_handle = std::thread::spawn(move || {
+                while let Ok((downloaded, total)) = recver.recv() {
+                    (progress)(downloaded, total)
+                }
+            });
+            self.install_to(folder, move |msg| {
+                match msg {
+                    DiffUpdate::SophonPatcherUpdate(sophon::updater::Update::DownloadingProgressBytes { downloaded_bytes, total_bytes }) => { let _ = sender.send((downloaded_bytes, total_bytes)); },
+                    DiffUpdate::SophonInstallerUpdate(sophon::installer::Update::DownloadingProgressBytes { downloaded_bytes, total_bytes }) => { let _ = sender.send((downloaded_bytes, total_bytes)); },
+                    _ => {}
+                }
+            })?;
+            // the thread does not panic, safe to unwrap
+            proxy_thread_handle.join().unwrap();
+            Ok(())
+        } else {
+            Ok(())
         }
     }
 
