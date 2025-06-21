@@ -9,23 +9,18 @@ use crossbeam_deque::{Injector, Steal};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-// I ain't refactoring it.
+use super::api_schemas::game_branches::PackageInfo;
+use super::api_schemas::sophon_diff::{SophonDiff, SophonDiffs};
+use super::api_schemas::sophon_manifests::DownloadInfo;
+use super::protos::SophonPatch::{
+    SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetInfo
+};
 use super::{
-    add_user_write_permission_to_file, api_post_request,
-    api_schemas::{
-        game_branches::PackageInfo,
-        sophon_diff::{SophonDiff, SophonDiffs},
-        sophon_manifests::DownloadInfo
-    },
-    file_md5_hash_str, get_protobuf_from_url,
-    protos::SophonPatch::{
-        SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetInfo
-    },
-    GameEdition, SophonError
+    add_user_write_permission_to_file, api_post_request, check_file, file_md5_hash_str,
+    get_protobuf_from_url, ChunkState, GameEdition, SophonError
 };
 use crate::external::hpatchz;
 use crate::prelude::free_space;
-use crate::sophon::{check_file, ChunkState};
 use crate::version::Version;
 
 fn sophon_patch_info_url(package_info: &PackageInfo, edition: GameEdition) -> String {

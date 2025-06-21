@@ -9,21 +9,16 @@ use crossbeam_deque::{Injector, Steal};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-// I ain't refactoring all this.
+use super::api_schemas::game_branches::PackageInfo;
+use super::api_schemas::sophon_manifests::{DownloadInfo, SophonDownloadInfo, SophonDownloads};
+use super::protos::SophonManifest::{
+    SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto
+};
 use super::{
-    api_get_request,
-    api_schemas::{
-        game_branches::PackageInfo,
-        sophon_manifests::{DownloadInfo, SophonDownloadInfo, SophonDownloads}
-    },
-    check_file, ensure_parent, file_md5_hash_str, get_protobuf_from_url,
-    protos::SophonManifest::{
-        SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto
-    },
-    ChunkState, GameEdition, SophonError
+    api_get_request, check_file, ensure_parent, file_md5_hash_str, get_protobuf_from_url,
+    ChunkState, GameEdition, SophonError, DEFAULT_CHUNK_RETRIES
 };
 use crate::prelude::free_space;
-use crate::sophon::DEFAULT_CHUNK_RETRIES;
 
 fn sophon_download_info_url(package_info: &PackageInfo, edition: GameEdition) -> String {
     format!(
