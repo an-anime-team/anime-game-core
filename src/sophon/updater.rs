@@ -36,9 +36,9 @@ fn sophon_patch_info_url(
     )
 }
 
-#[inline(always)]
+#[inline]
 pub fn get_game_diffs_sophon_info(
-    client: Client,
+    client: &Client,
     package_info: &PackageInfo,
     edition: GameEdition
 ) -> Result<SophonDiffs, SophonError> {
@@ -51,18 +51,16 @@ pub fn get_game_diffs_sophon_info(
 }
 
 pub fn get_patch_manifest(
-    client: Client,
+    client: &Client,
     diff_info: &SophonDiff
 ) -> Result<SophonPatchProto, SophonError> {
     let url_prefix = &diff_info.manifest_download.url_prefix;
     let url_suffix = &diff_info.manifest_download.url_suffix;
     let manifest_id = &diff_info.manifest.id;
 
-    let download_url = format!("{}{}/{}", url_prefix, url_suffix, manifest_id);
-
     get_protobuf_from_url(
-        &download_url,
         client,
+        format!("{}{}/{}", url_prefix, url_suffix, manifest_id),
         diff_info.manifest_download.compression == 1
     )
 }
@@ -139,7 +137,7 @@ impl PatchingStats {
     }
 
     #[inline]
-    fn msg_bytes(&self) -> Update {
+    const fn msg_bytes(&self) -> Update {
         Update::DownloadingProgressBytes {
             downloaded_bytes: self.downloaded_bytes,
             total_bytes: self.total_bytes
@@ -147,7 +145,7 @@ impl PatchingStats {
     }
 
     #[inline]
-    fn msg_files(&self) -> Update {
+    const fn msg_files(&self) -> Update {
         Update::PatchingProgress {
             patched_files: self.patched_files,
             total_files: self.total_files
@@ -155,7 +153,7 @@ impl PatchingStats {
     }
 
     #[inline]
-    fn msg_deleted(&self) -> Update {
+    const fn msg_deleted(&self) -> Update {
         Update::DeletingProgress {
             deleted_files: self.deleted_files,
             total_unused: self.total_unused
@@ -173,12 +171,12 @@ impl PatchingStats {
 
 impl SophonPatcher {
     pub fn new(
-        diff: &SophonDiff,
         client: Client,
+        diff: &SophonDiff,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, SophonError> {
         Ok(Self {
-            patch_manifest: get_patch_manifest(client.clone(), diff)?,
+            patch_manifest: get_patch_manifest(&client, diff)?,
             client,
             diff_info: diff.clone(),
             check_free_space: true,
@@ -186,14 +184,14 @@ impl SophonPatcher {
         })
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn with_free_space_check(mut self, check: bool) -> Self {
         self.check_free_space = check;
 
         self
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn with_temp_folder(mut self, temp_folder: impl Into<PathBuf>) -> Self {
         self.temp_folder = temp_folder.into();
 
@@ -201,19 +199,19 @@ impl SophonPatcher {
     }
 
     /// Folder to temporarily store files being updated (patched, created, etc).
-    #[inline(always)]
+    #[inline]
     pub fn files_temp(&self) -> PathBuf {
         self.temp_folder.join("updating")
     }
 
     /// Folder to temporarily store hdiff files
-    #[inline(always)]
+    #[inline]
     fn patches_temp(&self) -> PathBuf {
         self.files_temp().join("patches")
     }
 
     /// Folder to temporarily store downloaded patch chunks
-    #[inline(always)]
+    #[inline]
     fn patch_chunk_temp_folder(&self) -> PathBuf {
         self.files_temp().join("patch_chunks")
     }

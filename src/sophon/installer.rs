@@ -32,33 +32,31 @@ fn sophon_download_info_url(
     )
 }
 
-#[inline(always)]
+#[inline]
 pub fn get_game_download_sophon_info(
-    client: Client,
+    client: &Client,
     package_info: &PackageInfo,
-    edition: GameEdition,
+    edition: GameEdition
 ) -> Result<SophonDownloads, SophonError> {
     let url = sophon_download_info_url(
         package_info,
         edition
     );
 
-    api_get_request(client, &url)
+    api_get_request(client, url)
 }
 
 pub fn get_download_manifest(
-    client: Client,
+    client: &Client,
     download_info: &SophonDownloadInfo
 ) -> Result<SophonManifestProto, SophonError> {
     let url_prefix = &download_info.manifest_download.url_prefix;
     let url_suffix = &download_info.manifest_download.url_suffix;
     let manifest_id = &download_info.manifest.id;
 
-    let download_url = format!("{}{}/{}", url_prefix, url_suffix, manifest_id);
-
     get_protobuf_from_url(
-        &download_url,
         client,
+        format!("{}{}/{}", url_prefix, url_suffix, manifest_id),
         download_info.manifest_download.compression == 1
     )
 }
@@ -140,11 +138,11 @@ pub struct SophonInstaller {
 
 impl SophonInstaller {
     pub fn new(
-        download_info: &SophonDownloadInfo,
         client: Client,
+        download_info: &SophonDownloadInfo,
         temp_dir: impl AsRef<Path>
     ) -> Result<Self, SophonError> {
-        let manifest = get_download_manifest(client.clone(), download_info)?;
+        let manifest = get_download_manifest(&client, download_info)?;
 
         Ok(Self {
             client,
@@ -155,14 +153,14 @@ impl SophonInstaller {
         })
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn with_free_space_check(mut self, check: bool) -> Self {
         self.check_free_space = check;
 
         self
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn with_temp_folder(mut self, temp_folder: PathBuf) -> Self {
         self.temp_folder = temp_folder;
 
@@ -170,13 +168,13 @@ impl SophonInstaller {
     }
 
     /// Folder to temporarily store files being downloaded
-    #[inline(always)]
+    #[inline]
     pub fn downloading_temp(&self) -> PathBuf {
         self.temp_folder.join("downloading")
     }
 
     /// Folder to temporarily store chunks
-    #[inline(always)]
+    #[inline]
     fn chunk_temp_folder(&self) -> PathBuf {
         self.downloading_temp().join("chunks")
     }

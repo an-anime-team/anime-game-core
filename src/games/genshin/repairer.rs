@@ -8,35 +8,48 @@ use crate::sophon;
 use super::consts::GameEdition;
 use super::voice_data::locale::VoiceLocale;
 
+// TODO: utilize the `timeout` variable!
+
 fn try_get_some_integrity_files(
     game_edition: GameEdition,
     matching_field: &str,
-    timeout: Option<u64>
+    _timeout: Option<u64>
 ) -> anyhow::Result<Vec<IntegrityFile>> {
     let client = reqwest::blocking::Client::new();
 
-    let game_branches = sophon::get_game_branches_info(client.clone(), game_edition.into())?;
+    let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
 
-    let latest_ver = game_branches.latest_version_by_id(game_edition.game_id()).unwrap();
-    let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_ver).unwrap();
+    let latest_version = game_branches.latest_version_by_id(game_edition.game_id())
+        .ok_or_else(|| {
+            anyhow::anyhow!("failed to find the latest game version")
+                .context(format!("game id: {}", game_edition.game_id()))
+        })?;
+
+    let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_version)
+        .ok_or_else(|| {
+            anyhow::anyhow!("failed to get the game version information")
+                .context(format!("game id: {}", game_edition.game_id()))
+                .context(format!("game version: {latest_version}"))
+        })?;
 
     let downloads = sophon::installer::get_game_download_sophon_info(
-        client.clone(),
+        &client,
         &game_branch_info.main,
         game_edition.into()
     )?;
 
-    let download_manifest = sophon::installer::get_download_manifest(
-        client.clone(),
-        downloads.manifests.iter()
-            .find(|sdi| sdi.matching_field == matching_field).unwrap()
-    )?;
+    let download_info = downloads.manifests.iter()
+        .find(|download_info| download_info.matching_field == matching_field)
+        .ok_or_else(|| {
+            anyhow::anyhow!("failed to find game download info")
+                .context("matching field: {matching_field}")
+        })?;
 
-    let mut files = Vec::new();
+    let download_manifest = sophon::installer::get_download_manifest(&client, download_info)?;
 
-    for asset_info in &download_manifest.Assets {
-        files.push(asset_info.into())
-    }
+    let files = download_manifest.Assets.iter()
+        .map(IntegrityFile::from)
+        .collect::<Vec<_>>();
 
     Ok(files)
 }

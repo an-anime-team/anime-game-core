@@ -73,30 +73,36 @@ fn get_game_branches_url(edition: GameEdition) -> String {
 
 #[inline(always)]
 pub fn get_game_branches_info(
-    client: Client,
+    client: &Client,
     edition: GameEdition
 ) -> Result<GameBranches, SophonError> {
-    api_get_request(client, &get_game_branches_url(edition))
+    api_get_request(client, get_game_branches_url(edition))
 }
 
-fn api_get_request<T: DeserializeOwned>(client: Client, url: &str) -> Result<T, SophonError> {
-    let response = client.get(url).send()?.error_for_status()?;
+fn api_get_request<T: DeserializeOwned>(client: &Client, url: impl AsRef<str>) -> Result<T, SophonError> {
+    let response = client.get(url.as_ref())
+        .send()?
+        .error_for_status()?;
 
     Ok(response.json::<ApiResponse<T>>()?.data)
 }
 
-fn api_post_request<T: DeserializeOwned>(client: Client, url: &str) -> Result<T, SophonError> {
-    let response = client.post(url).send()?.error_for_status()?;
+fn api_post_request<T: DeserializeOwned>(client: &Client, url: impl AsRef<str>) -> Result<T, SophonError> {
+    let response = client.post(url.as_ref())
+        .send()?
+        .error_for_status()?;
 
     Ok(response.json::<ApiResponse<T>>()?.data)
 }
 
 fn get_protobuf_from_url<T: Message>(
-    url: &str,
-    client: Client,
+    client: &Client,
+    url: impl AsRef<str>,
     compression: bool,
 ) -> Result<T, SophonError> {
-    let response = client.get(url).send()?.error_for_status()?;
+    let response = client.get(url.as_ref())
+        .send()?
+        .error_for_status()?;
 
     let compressed_manifest = response.bytes()?;
 

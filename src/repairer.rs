@@ -50,7 +50,7 @@ impl IntegrityFile {
             tracing::trace!("Comparing hashes");
 
             match std::fs::read(&file_path) {
-                Ok(hash) => format!("{:x}", Md5::digest(hash)).to_ascii_lowercase() == self.md5.to_ascii_lowercase(),
+                Ok(hash) => format!("{:x}", Md5::digest(hash)).eq_ignore_ascii_case(&self.md5),
                 Err(_) => false
             }
         }

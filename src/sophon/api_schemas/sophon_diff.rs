@@ -15,8 +15,7 @@ pub struct SophonDiffs {
 impl SophonDiffs {
     /// `matching_field` is usually either `game` or one of the voiceover language options
     pub fn get_manifests_for(&self, matching_field: &str) -> Option<&SophonDiff> {
-        self.manifests.iter()
-            .find(|man| man.matching_field == matching_field)
+        self.manifests.iter().find(|manifest| manifest.matching_field == matching_field)
     }
 }
 

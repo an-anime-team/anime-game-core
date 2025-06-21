@@ -15,7 +15,7 @@ impl VoiceLocale {
     }
 
     /// Convert enum value to its name
-    /// 
+    ///
     /// `VoiceLocale::English` -> `English`
     #[inline]
     pub fn to_name(&self) -> &str {
@@ -28,7 +28,7 @@ impl VoiceLocale {
     }
 
     /// Convert enum value to its code
-    /// 
+    ///
     /// `VoiceLocale::English` -> `en-us`
     #[inline]
     pub fn to_code(&self) -> &str {
@@ -40,10 +40,10 @@ impl VoiceLocale {
         }
     }
 
-    /// Convert enum value to its folder name
-    /// 
-    /// `VoiceLocale::English` -> `English(US)`
     #[inline]
+    /// Convert enum value to its folder name
+    ///
+    /// `VoiceLocale::English` -> `English(US)`
     pub fn to_folder(&self) -> &str {
         match self {
             Self::English  => "English(US)",
@@ -53,12 +53,12 @@ impl VoiceLocale {
         }
     }
 
+    #[inline]
     /// Try to convert string to enum
-    /// 
+    ///
     /// - `English` -> `VoiceLocale::English`
     /// - `English(US)` -> `VoiceLocale::English`
     /// - `en-us` -> `VoiceLocale::English`
-    #[inline]
     pub fn from_str<T: AsRef<str>>(str: T) -> Option<Self> {
         match str.as_ref() {
             // Locales names

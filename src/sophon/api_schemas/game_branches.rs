@@ -8,27 +8,34 @@ pub struct GameBranches {
 }
 
 impl GameBranches {
-    /// Get the latest version for the requested id
-    pub fn latest_version_by_id(&self, id: &str) -> Option<Version> {
+    /// Get the latest version for the requested id.
+    pub fn latest_version_by_id(&self, id: impl AsRef<str>) -> Option<Version> {
+        let id = id.as_ref();
+
         self.game_branches.iter()
-            .filter(|gbi| gbi.game.id == id)
-            .max_by_key(|gbi| &gbi.main.tag)
-            .map(|gbi| Version::from_str(&gbi.main.tag).unwrap())
+            .filter(|branch_info| branch_info.game.id == id)
+            .max_by_key(|branch_info| &branch_info.main.tag)
+            .and_then(|branch_info| Version::from_str(&branch_info.main.tag))
     }
 
-    /// Get `GameBranchInfo` of a specified id and game version
-    pub fn get_game_by_id(&self, id: &str, ver: Version) -> Option<&GameBranchInfo> {
-        let ver_str = ver.to_string();
+    /// Get `GameBranchInfo` of a specified id and game version.
+    pub fn get_game_by_id(&self, id: impl AsRef<str>, version: Version) -> Option<&GameBranchInfo> {
+        let id = id.as_ref();
+        let version = version.to_string();
 
         self.game_branches.iter()
-            .find(|gbi| gbi.game.id == id && gbi.main.tag == ver_str)
+            .find(|branch_info| {
+                branch_info.game.id == id && branch_info.main.tag == version
+            })
     }
 
-    /// Get latest version of specified game by id
-    pub fn get_game_latest_by_id(&self, id: &str) -> Option<&GameBranchInfo> {
+    /// Get latest version of specified game by id.
+    pub fn get_game_latest_by_id(&self, id: impl AsRef<str>) -> Option<&GameBranchInfo> {
+        let id = id.as_ref();
+
         self.game_branches.iter()
-            .filter(|gbi| gbi.game.id == id)
-            .max_by_key(|gbi| &gbi.main.tag)
+            .filter(|branch_info| branch_info.game.id == id)
+            .max_by_key(|branch_info| &branch_info.main.tag)
     }
 }
 
@@ -40,8 +47,8 @@ pub struct GameBranchInfo {
 }
 
 impl GameBranchInfo {
-    pub fn version(&self) -> Version {
-        Version::from_str(&self.main.tag).unwrap()
+    pub fn version(&self) -> Option<Version> {
+        Version::from_str(&self.main.tag)
     }
 }
 
@@ -62,8 +69,8 @@ pub struct PackageInfo {
 }
 
 impl PackageInfo {
-    pub fn version(&self) -> Version {
-        Version::from_str(&self.tag).unwrap()
+    pub fn version(&self) -> Option<Version> {
+        Version::from_str(&self.tag)
     }
 }
 
