@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-
 use sophon_diff::SophonDiff;
 use sophon_manifests::SophonDownloadInfo;
 

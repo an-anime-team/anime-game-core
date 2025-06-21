@@ -1,21 +1,19 @@
-use std::os::unix::fs::PermissionsExt;
-use std::io::{Read, Seek, SeekFrom};
 use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use api_schemas::game_branches::GameBranches;
+use api_schemas::ApiResponse;
 use md5::{Digest, Md5};
 use protobuf::Message;
 use reqwest::blocking::Client;
-use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-use api_schemas::ApiResponse;
-use api_schemas::game_branches::GameBranches;
 
 #[cfg(feature = "genshin")]
 use crate::genshin;
-
 use crate::prettify_bytes::prettify_bytes;
 
 pub mod api_schemas;
@@ -63,7 +61,9 @@ impl GameEdition {
     #[inline]
     pub fn branches_host(&self) -> &str {
         match self {
-            Self::Global => concat!("https://", "s", "g-hy", "p-api.", "h", "oy", "over", "se", ".com"),
+            Self::Global => {
+                concat!("https://", "s", "g-hy", "p-api.", "h", "oy", "over", "se", ".com")
+            }
             Self::China => concat!("https://", "hy", "p-api.", "mi", "h", "oyo", ".com")
         }
     }
@@ -71,7 +71,17 @@ impl GameEdition {
     #[inline]
     pub fn api_host(&self) -> &str {
         match self {
-            Self::Global => concat!("https://", "s", "g-pu", "blic-api.", "h", "oy", "over", "se", ".com"),
+            Self::Global => concat!(
+                "https://",
+                "s",
+                "g-pu",
+                "blic-api.",
+                "h",
+                "oy",
+                "over",
+                "se",
+                ".com"
+            ),
             Self::China => concat!("https://", "api-t", "ak", "umi.", "mi", "h", "oyo", ".com")
         }
     }
@@ -87,7 +97,11 @@ impl GameEdition {
 
 #[inline(always)]
 fn get_game_branches_url(edition: GameEdition) -> String {
-    format!("{}/hyp/hyp-connect/api/getGameBranches?launcher_id={}", edition.branches_host(), edition.launcher_id())
+    format!(
+        "{}/hyp/hyp-connect/api/getGameBranches?launcher_id={}",
+        edition.branches_host(),
+        edition.launcher_id()
+    )
 }
 
 #[inline(always)]
@@ -98,18 +112,20 @@ pub fn get_game_branches_info(
     api_get_request(client, get_game_branches_url(edition))
 }
 
-fn api_get_request<T: DeserializeOwned>(client: &Client, url: impl AsRef<str>) -> Result<T, SophonError> {
-    let response = client.get(url.as_ref())
-        .send()?
-        .error_for_status()?;
+fn api_get_request<T: DeserializeOwned>(
+    client: &Client,
+    url: impl AsRef<str>
+) -> Result<T, SophonError> {
+    let response = client.get(url.as_ref()).send()?.error_for_status()?;
 
     Ok(response.json::<ApiResponse<T>>()?.data)
 }
 
-fn api_post_request<T: DeserializeOwned>(client: &Client, url: impl AsRef<str>) -> Result<T, SophonError> {
-    let response = client.post(url.as_ref())
-        .send()?
-        .error_for_status()?;
+fn api_post_request<T: DeserializeOwned>(
+    client: &Client,
+    url: impl AsRef<str>
+) -> Result<T, SophonError> {
+    let response = client.post(url.as_ref()).send()?.error_for_status()?;
 
     Ok(response.json::<ApiResponse<T>>()?.data)
 }
@@ -117,17 +133,16 @@ fn api_post_request<T: DeserializeOwned>(client: &Client, url: impl AsRef<str>) 
 fn get_protobuf_from_url<T: Message>(
     client: &Client,
     url: impl AsRef<str>,
-    compression: bool,
+    compression: bool
 ) -> Result<T, SophonError> {
-    let response = client.get(url.as_ref())
-        .send()?
-        .error_for_status()?;
+    let response = client.get(url.as_ref()).send()?.error_for_status()?;
 
     let compressed_manifest = response.bytes()?;
 
     let protobuf_bytes = if compression {
         zstd::decode_all(&*compressed_manifest).unwrap()
-    } else {
+    }
+    else {
         compressed_manifest.into()
     };
 
@@ -191,8 +206,7 @@ fn add_user_write_permission_to_file(path: impl AsRef<Path>) -> std::io::Result<
         return Ok(());
     }
 
-    let mut permissions = std::fs::metadata(&path)?
-        .permissions();
+    let mut permissions = std::fs::metadata(&path)?.permissions();
 
     if permissions.readonly() {
         let perm_mode = permissions.mode();
@@ -230,41 +244,29 @@ pub enum SophonError {
     NoSpaceAvailable {
         path: PathBuf,
         required: u64,
-        available: u64,
+        available: u64
     },
 
     /// Failed to create or open output file
     #[error("Failed to create output file {path:?}: {message}")]
-    OutputFileError {
-        path: PathBuf,
-        message: String
-    },
+    OutputFileError { path: PathBuf, message: String },
 
     /// Failed to create or open temporary output file
     #[error("Failed to create temporary output file {path:?}: {message}")]
-    TempFileError {
-        path: PathBuf,
-        message: String
-    },
+    TempFileError { path: PathBuf, message: String },
 
     /// Couldn't get metadata of existing output file
     ///
     /// This metadata supposed to be used to continue downloading of the file
     #[error("Failed to read metadata of the output file {path:?}: {message}")]
-    OutputFileMetadataError {
-        path: PathBuf,
-        message: String
-    },
+    OutputFileMetadataError { path: PathBuf, message: String },
 
     /// reqwest error
     #[error("reqwest error: {0}")]
     Reqwest(String),
 
     #[error("Chunk hash mismatch: expected `{expected}`, got `{got}`")]
-    ChunkHashMismatch {
-        expected: String,
-        got: String
-    },
+    ChunkHashMismatch { expected: String, got: String },
 
     #[error("File {path:?} hash mismatch: expected `{expected}`, got `{got}`")]
     FileHashMismatch {

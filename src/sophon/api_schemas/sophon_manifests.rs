@@ -10,7 +10,9 @@ pub struct SophonDownloads {
 impl SophonDownloads {
     /// `matching_field` is usually either `game` or one of the voiceover language options
     pub fn get_manifests_for(&self, matching_field: &str) -> Option<&SophonDownloadInfo> {
-        self.manifests.iter().find(|manifest| manifest.matching_field == matching_field)
+        self.manifests
+            .iter()
+            .find(|manifest| manifest.matching_field == matching_field)
     }
 }
 

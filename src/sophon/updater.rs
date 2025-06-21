@@ -1,33 +1,34 @@
-use std::{collections::HashMap, sync::{atomic::AtomicU64, Mutex}};
-use std::io::{Read, Seek, Take};
+use std::collections::HashMap;
 use std::fs::File;
+use std::io::{Read, Seek, Take};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
+use std::sync::Mutex;
 
 use crossbeam_deque::{Injector, Steal};
-use serde::{Serialize, Deserialize};
 use reqwest::blocking::Client;
-
-use crate::{
-    external::hpatchz,
-    prelude::free_space,
-    sophon::{check_file, ChunkState},
-    version::Version,
-};
+use serde::{Deserialize, Serialize};
 
 // I ain't refactoring it.
 use super::{
-    add_user_write_permission_to_file, api_post_request, api_schemas::{
+    add_user_write_permission_to_file, api_post_request,
+    api_schemas::{
         game_branches::PackageInfo,
-        sophon_diff::{SophonDiff, SophonDiffs}, sophon_manifests::DownloadInfo,
-    }, file_md5_hash_str, get_protobuf_from_url, protos::SophonPatch::{
+        sophon_diff::{SophonDiff, SophonDiffs},
+        sophon_manifests::DownloadInfo
+    },
+    file_md5_hash_str, get_protobuf_from_url,
+    protos::SophonPatch::{
         SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetInfo
-    }, GameEdition, SophonError
+    },
+    GameEdition, SophonError
 };
+use crate::external::hpatchz;
+use crate::prelude::free_space;
+use crate::sophon::{check_file, ChunkState};
+use crate::version::Version;
 
-fn sophon_patch_info_url(
-    package_info: &PackageInfo,
-    edition: GameEdition
-) -> String {
+fn sophon_patch_info_url(package_info: &PackageInfo, edition: GameEdition) -> String {
     format!(
         "{}/downloader/sophon_chunk/api/getPatchBuild?branch={}&password={}&package_id={}",
         edition.api_host(),
@@ -43,10 +44,7 @@ pub fn get_game_diffs_sophon_info(
     package_info: &PackageInfo,
     edition: GameEdition
 ) -> Result<SophonDiffs, SophonError> {
-    let url = sophon_patch_info_url(
-        package_info,
-        edition
-    );
+    let url = sophon_patch_info_url(package_info, edition);
 
     api_post_request(client, &url)
 }
@@ -74,7 +72,7 @@ pub enum Update {
 
     DeletingProgress {
         deleted_files: u64,
-        total_unused: u64,
+        total_unused: u64
     },
 
     DeletingFinished,
@@ -84,7 +82,7 @@ pub enum Update {
 
     DownloadingProgressBytes {
         downloaded_bytes: u64,
-        total_bytes: u64,
+        total_bytes: u64
     },
 
     DownloadingFinished,
@@ -93,7 +91,7 @@ pub enum Update {
 
     PatchingProgress {
         patched_files: u64,
-        total_files: u64,
+        total_files: u64
     },
 
     PatchingFinished,
@@ -117,24 +115,29 @@ impl PatchChunkInfo<'_> {
     }
 
     fn download_url(&self) -> String {
-        self.download_info.download_url(&self.patch_chunk_manifest.PatchName)
+        self.download_info
+            .download_url(&self.patch_chunk_manifest.PatchName)
     }
 }
 
 struct FilePatchInfo<'a> {
     file_manifest: &'a SophonPatchAssetProperty,
-    patch_chunk: Option<&'a SophonPatchAssetChunk>,
+    patch_chunk: Option<&'a SophonPatchAssetChunk>
 }
 
 impl FilePatchInfo<'_> {
     /// Path to temporary file to store before patching or as a result of a copy from patch chunk
     fn temp_file_path(&self, temp_dir: impl AsRef<Path>) -> PathBuf {
-        temp_dir.as_ref().join(format!("{}.tmp", &self.file_manifest.AssetHashMd5))
+        temp_dir
+            .as_ref()
+            .join(format!("{}.tmp", &self.file_manifest.AssetHashMd5))
     }
-    
+
     /// Path to a temporary file to store patchign output to
     fn temp_file_out_path(&self, temp_dir: impl AsRef<Path>) -> PathBuf {
-        temp_dir.as_ref().join(format!("{}.out.tmp", &self.file_manifest.AssetHashMd5))
+        temp_dir
+            .as_ref()
+            .join(format!("{}.out.tmp", &self.file_manifest.AssetHashMd5))
     }
 
     /// Path to a target file on filesystem
@@ -149,7 +152,10 @@ impl FilePatchInfo<'_> {
 
     /// Path to the temporary location the patch is stored at
     fn patch_tmp_path(&self, tmpdir: impl AsRef<Path>) -> Option<PathBuf> {
-        Some(tmpdir.as_ref().join(format!("{}-{}.hdiff", self.patch_chunk?.PatchName, self.file_manifest.AssetHashMd5)))
+        Some(tmpdir.as_ref().join(format!(
+            "{}-{}.hdiff",
+            self.patch_chunk?.PatchName, self.file_manifest.AssetHashMd5
+        )))
     }
 }
 
@@ -160,39 +166,53 @@ struct UpdateIndex<'a> {
     total_bytes: u64,
     downloaded_bytes: AtomicU64,
     files_to_patch: HashMap<&'a String, FilePatchInfo<'a>>,
-    files_patched: AtomicU64,
+    files_patched: AtomicU64
 }
 
 impl<'a> UpdateIndex<'a> {
-    fn new(update_manifest: &'a SophonPatchProto, patch_chunk_download_info: &'a DownloadInfo, from: Version) -> Self {
-        let files_to_patch = update_manifest.PatchAssets.iter()
+    fn new(
+        update_manifest: &'a SophonPatchProto,
+        patch_chunk_download_info: &'a DownloadInfo,
+        from: Version
+    ) -> Self {
+        let files_to_patch = update_manifest
+            .PatchAssets
+            .iter()
             .map(|spap| {
                 (
                     &spap.AssetName,
                     FilePatchInfo {
                         file_manifest: spap,
-                        patch_chunk: spap.AssetPatchChunks.iter().find_map(|(fromver, pchunk)| (*fromver == from).then_some(pchunk))
+                        patch_chunk: spap
+                            .AssetPatchChunks
+                            .iter()
+                            .find_map(|(fromver, pchunk)| (*fromver == from).then_some(pchunk))
                     }
                 )
-            }).collect::<HashMap<_, _>>();
+            })
+            .collect::<HashMap<_, _>>();
         let mut patch_chunks = HashMap::new();
         for file_patch_info in files_to_patch.values() {
             if let Some(patch_info) = &file_patch_info.patch_chunk {
-                let patch_chunk_index = patch_chunks
-                    .entry(&patch_info.PatchName)
-                    .or_insert(PatchChunkInfo {
-                        patch_chunk_manifest: patch_info,
-                        download_info: patch_chunk_download_info,
-                        used_in_files: vec![]
-                    });
-                patch_chunk_index.used_in_files.push(&file_patch_info.file_manifest.AssetName);
+                let patch_chunk_index =
+                    patch_chunks
+                        .entry(&patch_info.PatchName)
+                        .or_insert(PatchChunkInfo {
+                            patch_chunk_manifest: patch_info,
+                            download_info: patch_chunk_download_info,
+                            used_in_files: vec![]
+                        });
+                patch_chunk_index
+                    .used_in_files
+                    .push(&file_patch_info.file_manifest.AssetName);
             }
         }
 
         let total_bytes = Self::total_bytes_calculate(&patch_chunks);
 
         Self {
-            unused: update_manifest.UnusedAssets
+            unused: update_manifest
+                .UnusedAssets
                 .iter()
                 .find_map(|(fromver, unused)| (*fromver == from).then_some(unused)),
             unused_deleted: AtomicU64::new(0),
@@ -200,29 +220,38 @@ impl<'a> UpdateIndex<'a> {
             total_bytes,
             downloaded_bytes: AtomicU64::new(0),
             files_to_patch,
-            files_patched: AtomicU64::new(0),
+            files_patched: AtomicU64::new(0)
         }
     }
 
     // Only build an index of chunks for downlaoding
-    fn new_download_only(update_manifest: &'a SophonPatchProto, patch_chunk_download_info: &'a DownloadInfo, from: Version) -> Self {
-        let files_to_patch = update_manifest.PatchAssets.iter()
-            .map(|spap| {
-                    FilePatchInfo {
-                        file_manifest: spap,
-                        patch_chunk: spap.AssetPatchChunks.iter().find_map(|(fromver, pchunk)| (*fromver == from).then_some(pchunk))
-                    }
-            }).collect::<Vec<_>>();
+    fn new_download_only(
+        update_manifest: &'a SophonPatchProto,
+        patch_chunk_download_info: &'a DownloadInfo,
+        from: Version
+    ) -> Self {
+        let files_to_patch = update_manifest
+            .PatchAssets
+            .iter()
+            .map(|spap| FilePatchInfo {
+                file_manifest: spap,
+                patch_chunk: spap
+                    .AssetPatchChunks
+                    .iter()
+                    .find_map(|(fromver, pchunk)| (*fromver == from).then_some(pchunk))
+            })
+            .collect::<Vec<_>>();
         let mut patch_chunks = HashMap::new();
         for file_patch_info in files_to_patch.iter() {
             if let Some(patch_info) = &file_patch_info.patch_chunk {
-                let _patch_chunk_index = patch_chunks
-                    .entry(&patch_info.PatchName)
-                    .or_insert(PatchChunkInfo {
-                        patch_chunk_manifest: patch_info,
-                        download_info: patch_chunk_download_info,
-                        used_in_files: vec![]
-                    });
+                let _patch_chunk_index =
+                    patch_chunks
+                        .entry(&patch_info.PatchName)
+                        .or_insert(PatchChunkInfo {
+                            patch_chunk_manifest: patch_info,
+                            download_info: patch_chunk_download_info,
+                            used_in_files: vec![]
+                        });
                 //patch_chunk_index.used_in_files.push(&file_patch_info.file_manifest.AssetName);
             }
         }
@@ -230,7 +259,8 @@ impl<'a> UpdateIndex<'a> {
         let total_bytes = Self::total_bytes_calculate(&patch_chunks);
 
         Self {
-            unused: update_manifest.UnusedAssets
+            unused: update_manifest
+                .UnusedAssets
                 .iter()
                 .find_map(|(fromver, unused)| (*fromver == from).then_some(unused)),
             unused_deleted: AtomicU64::new(0),
@@ -238,13 +268,15 @@ impl<'a> UpdateIndex<'a> {
             total_bytes,
             downloaded_bytes: AtomicU64::new(0),
             files_to_patch: HashMap::new(),
-            files_patched: AtomicU64::new(0),
+            files_patched: AtomicU64::new(0)
         }
-
     }
 
     fn total_bytes_calculate(patch_chunks: &HashMap<&'a String, PatchChunkInfo<'a>>) -> u64 {
-        patch_chunks.values().map(|pci| pci.patch_chunk_manifest.PatchSize).sum()
+        patch_chunks
+            .values()
+            .map(|pci| pci.patch_chunk_manifest.PatchSize)
+            .sum()
     }
 
     #[inline]
@@ -260,7 +292,9 @@ impl<'a> UpdateIndex<'a> {
     #[inline]
     fn msg_bytes(&self) -> Update {
         Update::DownloadingProgressBytes {
-            downloaded_bytes: self.downloaded_bytes.load(std::sync::atomic::Ordering::Acquire),
+            downloaded_bytes: self
+                .downloaded_bytes
+                .load(std::sync::atomic::Ordering::Acquire),
             total_bytes: self.total_bytes
         }
     }
@@ -268,7 +302,9 @@ impl<'a> UpdateIndex<'a> {
     #[inline]
     fn msg_patched(&self) -> Update {
         Update::PatchingProgress {
-            patched_files: self.files_patched.load(std::sync::atomic::Ordering::Acquire),
+            patched_files: self
+                .files_patched
+                .load(std::sync::atomic::Ordering::Acquire),
             total_files: self.total_files()
         }
     }
@@ -276,21 +312,26 @@ impl<'a> UpdateIndex<'a> {
     #[inline]
     fn msg_deleted(&self) -> Update {
         Update::DeletingProgress {
-            deleted_files: self.unused_deleted.load(std::sync::atomic::Ordering::Acquire),
+            deleted_files: self
+                .unused_deleted
+                .load(std::sync::atomic::Ordering::Acquire),
             total_unused: self.total_unused()
         }
     }
 
     fn count_downloaded(&self, amount: u64) {
-        self.downloaded_bytes.fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+        self.downloaded_bytes
+            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
     }
 
     fn count_deleted(&self, amount: u64) {
-        self.unused_deleted.fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+        self.unused_deleted
+            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
     }
 
     fn count_patched(&self, amount: u64) {
-        self.files_patched.fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+        self.files_patched
+            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -300,14 +341,14 @@ pub struct SophonPatcher {
     pub patch_manifest: SophonPatchProto,
     pub diff_info: SophonDiff,
     pub check_free_space: bool,
-    pub temp_folder: PathBuf,
+    pub temp_folder: PathBuf
 }
 
 impl SophonPatcher {
     pub fn new(
         client: Client,
         diff: &SophonDiff,
-        temp_dir: impl AsRef<Path>,
+        temp_dir: impl AsRef<Path>
     ) -> Result<Self, SophonError> {
         Ok(Self {
             patch_manifest: get_patch_manifest(&client, diff)?,
@@ -391,12 +432,29 @@ impl SophonPatcher {
         }
     }
 
-    fn predownload_multithreaded(&self, thread_count: usize, from: Version, updater: impl Fn(Update) + Clone + Send + 'static) {
+    fn predownload_multithreaded(
+        &self,
+        thread_count: usize,
+        from: Version,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) {
         tracing::debug!("Starting multithreaded update predownload process");
 
-        let update_index = UpdateIndex::new_download_only(&self.patch_manifest, &self.diff_info.diff_download, from);
-        tracing::info!("{} Patch Chunks to download", update_index.patch_chunks.len());
-        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(update_index.patch_chunks.keys().map(|id| (*id, ChunkState::default()))));
+        let update_index = UpdateIndex::new_download_only(
+            &self.patch_manifest,
+            &self.diff_info.diff_download,
+            from
+        );
+        tracing::info!(
+            "{} Patch Chunks to download",
+            update_index.patch_chunks.len()
+        );
+        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(
+            update_index
+                .patch_chunks
+                .keys()
+                .map(|id| (*id, ChunkState::default()))
+        ));
 
         (updater)(update_index.msg_bytes());
 
@@ -425,11 +483,24 @@ impl SophonPatcher {
                     // 3. Download a patch chunk.
                     'worker: loop {
                         if let Steal::Success(download_check_task) = download_check_queue.steal() {
-                            self.download_check_handler(download_check_task, &chunk_states, &update_index, &local_updater, None, &download_queue);
+                            self.download_check_handler(
+                                download_check_task,
+                                &chunk_states,
+                                &update_index,
+                                &local_updater,
+                                None,
+                                &download_queue
+                            );
                             continue;
                         }
                         if let Steal::Success(download_task) = download_queue.steal() {
-                            self.download_handler(download_task, &chunk_states, &download_queue, &download_check_queue, &local_updater);
+                            self.download_handler(
+                                download_task,
+                                &chunk_states,
+                                &download_queue,
+                                &download_check_queue,
+                                &local_updater
+                            );
                             continue;
                         }
                         if download_check_queue.is_empty() && download_queue.is_empty() {
@@ -440,15 +511,31 @@ impl SophonPatcher {
                 });
             }
         });
-
     }
 
-    fn update_multithreaded(&self, thread_count: usize, game_folder: impl AsRef<Path>, from: Version, updater: impl Fn(Update) + Clone + Send + 'static) {
+    fn update_multithreaded(
+        &self,
+        thread_count: usize,
+        game_folder: impl AsRef<Path>,
+        from: Version,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) {
         tracing::debug!("Starting multithreaded download and update process");
 
-        let update_index = UpdateIndex::new(&self.patch_manifest, &self.diff_info.diff_download, from);
-        tracing::info!("{} Patch Chunks to download, {} Files to patch, {} Files to delete", update_index.patch_chunks.len(), update_index.total_files(), update_index.total_unused());
-        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(update_index.patch_chunks.keys().map(|id| (*id, ChunkState::default()))));
+        let update_index =
+            UpdateIndex::new(&self.patch_manifest, &self.diff_info.diff_download, from);
+        tracing::info!(
+            "{} Patch Chunks to download, {} Files to patch, {} Files to delete",
+            update_index.patch_chunks.len(),
+            update_index.total_files(),
+            update_index.total_unused()
+        );
+        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(
+            update_index
+                .patch_chunks
+                .keys()
+                .map(|id| (*id, ChunkState::default()))
+        ));
 
         (updater)(update_index.msg_deleted());
         (updater)(update_index.msg_patched());
@@ -485,21 +572,51 @@ impl SophonPatcher {
                     // 3. Download a patch chunk.
                     'worker: loop {
                         if let Steal::Success(file_patch_task) = file_patch_queue.steal() {
-                            tracing::trace!("Patching file `{}`", file_patch_task.file_manifest.AssetName);
-                            self.file_patch_handler(file_patch_task, &update_index, game_folder, &local_updater);
+                            tracing::trace!(
+                                "Patching file `{}`",
+                                file_patch_task.file_manifest.AssetName
+                            );
+                            self.file_patch_handler(
+                                file_patch_task,
+                                &update_index,
+                                game_folder,
+                                &local_updater
+                            );
                             continue;
                         }
                         if let Steal::Success(download_check_task) = download_check_queue.steal() {
-                            tracing::trace!("Checking downloaded chunk `{}`", download_check_task.patch_chunk_manifest.PatchName);
-                            self.download_check_handler(download_check_task, &chunk_states, &update_index, &local_updater, Some(&file_patch_queue), &download_queue);
+                            tracing::trace!(
+                                "Checking downloaded chunk `{}`",
+                                download_check_task.patch_chunk_manifest.PatchName
+                            );
+                            self.download_check_handler(
+                                download_check_task,
+                                &chunk_states,
+                                &update_index,
+                                &local_updater,
+                                Some(&file_patch_queue),
+                                &download_queue
+                            );
                             continue;
                         }
                         if let Steal::Success(download_task) = download_queue.steal() {
-                            tracing::trace!("Downloading chunk `{}`", download_task.patch_chunk_manifest.PatchName);
-                            self.download_handler(download_task, &chunk_states, &download_queue, &download_check_queue, &local_updater);
+                            tracing::trace!(
+                                "Downloading chunk `{}`",
+                                download_task.patch_chunk_manifest.PatchName
+                            );
+                            self.download_handler(
+                                download_task,
+                                &chunk_states,
+                                &download_queue,
+                                &download_check_queue,
+                                &local_updater
+                            );
                             continue;
                         }
-                        if file_patch_queue.is_empty() && download_check_queue.is_empty() && download_queue.is_empty() {
+                        if file_patch_queue.is_empty()
+                            && download_check_queue.is_empty()
+                            && download_queue.is_empty()
+                        {
                             tracing::debug!("All queues are empty, thread exiting");
                             break 'worker;
                         }
@@ -537,7 +654,9 @@ impl SophonPatcher {
                 let src_file_path = game_folder.join(&patch_info.OriginalFileName);
                 if let Err(e) = std::fs::copy(&src_file_path, &tmp_file_path) {
                     tracing::error!("Failed to copy file for patching: {e}");
-                    (updater)(Update::PatchingError(format!("Failed to create temporary copy of a file: {e}")));
+                    (updater)(Update::PatchingError(format!(
+                        "Failed to create temporary copy of a file: {e}"
+                    )));
                     return;
                 }
             }
@@ -547,7 +666,10 @@ impl SophonPatcher {
 
         match res {
             Ok(()) => {
-                tracing::debug!("Successfully patched `{}`", file_patch_task.file_manifest.AssetName);
+                tracing::debug!(
+                    "Successfully patched `{}`",
+                    file_patch_task.file_manifest.AssetName
+                );
                 if let Err(e) = self.move_patched_file(&tmp_file_path, &target_file_path) {
                     tracing::error!("Failed to move patched file into final destination: {e}");
                 }
@@ -555,20 +677,31 @@ impl SophonPatcher {
                 (updater)(update_index.msg_patched())
             }
             Err(e) => {
-                tracing::error!("Patching for file `{}` failed: {e}", file_patch_task.file_manifest.AssetName);
+                tracing::error!(
+                    "Patching for file `{}` failed: {e}",
+                    file_patch_task.file_manifest.AssetName
+                );
                 (updater)(Update::PatchingError(e.to_string()));
                 let _ = std::fs::remove_file(&tmp_file_path);
             }
         }
     }
 
-    fn move_patched_file(&self, tmp_file_path: impl AsRef<Path>, target_file_path: impl AsRef<Path>) -> Result<(), SophonError> {
+    fn move_patched_file(
+        &self,
+        tmp_file_path: impl AsRef<Path>,
+        target_file_path: impl AsRef<Path>
+    ) -> Result<(), SophonError> {
         std::fs::copy(&tmp_file_path, &target_file_path)?;
         std::fs::remove_file(&tmp_file_path)?;
         Ok(())
     }
 
-    fn file_patch(&self, file_patch_task: &FilePatchInfo, tmp_file_path: impl AsRef<Path>) -> Result<(), SophonError> {
+    fn file_patch(
+        &self,
+        file_patch_task: &FilePatchInfo,
+        tmp_file_path: impl AsRef<Path>
+    ) -> Result<(), SophonError> {
         tracing::trace!("Handling file {}", file_patch_task.file_manifest.AssetName);
 
         //let target_file_path = target_dir.as_ref().join(&file_patch_task.file_manifest.AssetName);
@@ -576,13 +709,14 @@ impl SophonPatcher {
 
         if let Some(patch_chunk) = patch_chunk_opt {
             if patch_chunk.OriginalFileName.is_empty() {
-                tracing::trace!("Copying new file `{}`", file_patch_task.file_manifest.AssetName);
+                tracing::trace!(
+                    "Copying new file `{}`",
+                    file_patch_task.file_manifest.AssetName
+                );
 
-                self.copy_over_file_temp(
-                    patch_chunk,
-                    &tmp_file_path
-                )?;
-            } else {
+                self.copy_over_file_temp(patch_chunk, &tmp_file_path)?;
+            }
+            else {
                 tracing::trace!("Patching `{}`", file_patch_task.file_manifest.AssetName);
 
                 self.apply_file_patch(&tmp_file_path, patch_chunk, file_patch_task)?;
@@ -624,32 +758,53 @@ impl SophonPatcher {
         Ok(())
     }
 
-    fn copy_over_file_temp(&self, patch_chunk: &SophonPatchAssetChunk, tmp_file_path: impl AsRef<Path>) -> std::io::Result<()> {
+    fn copy_over_file_temp(
+        &self,
+        patch_chunk: &SophonPatchAssetChunk,
+        tmp_file_path: impl AsRef<Path>
+    ) -> std::io::Result<()> {
         let patch_chunk_path = self.patch_chunk_temp_folder().join(&patch_chunk.PatchName);
         extract_patch_chunk_region_to_file(patch_chunk_path, tmp_file_path, patch_chunk)
     }
 
-    fn apply_file_patch(&self, tmp_file_path: impl AsRef<Path>, patch_chunk_info: &SophonPatchAssetChunk, file_info: &FilePatchInfo) -> Result<(), SophonError> {
-        let is_src_valid = check_file(&tmp_file_path, patch_chunk_info.OriginalFileLength, &patch_chunk_info.OriginalFileMd5)?;
+    fn apply_file_patch(
+        &self,
+        tmp_file_path: impl AsRef<Path>,
+        patch_chunk_info: &SophonPatchAssetChunk,
+        file_info: &FilePatchInfo
+    ) -> Result<(), SophonError> {
+        let is_src_valid = check_file(
+            &tmp_file_path,
+            patch_chunk_info.OriginalFileLength,
+            &patch_chunk_info.OriginalFileMd5
+        )?;
 
         if !is_src_valid {
             let invalid_file_md5 = file_md5_hash_str(&tmp_file_path)?;
             return Err(SophonError::FileHashMismatch {
                 path: tmp_file_path.as_ref().to_owned(),
                 expected: patch_chunk_info.OriginalFileMd5.clone(),
-                got: invalid_file_md5,
+                got: invalid_file_md5
             });
         }
 
         // Safe to unwrap, guaranteed to return `Some` here
         let extracted_patch_path = file_info.patch_tmp_path(self.patches_temp()).unwrap();
-        let patch_chunk_file = file_info.patch_chunk_path(self.patch_chunk_temp_folder()).unwrap();
+        let patch_chunk_file = file_info
+            .patch_chunk_path(self.patch_chunk_temp_folder())
+            .unwrap();
 
-        extract_patch_chunk_region_to_file(&patch_chunk_file, &extracted_patch_path, patch_chunk_info)?;
+        extract_patch_chunk_region_to_file(
+            &patch_chunk_file,
+            &extracted_patch_path,
+            patch_chunk_info
+        )?;
 
         let tmp_out_path = file_info.temp_file_out_path(self.files_temp());
 
-        if let Err(err) = hpatchz::patch(tmp_file_path.as_ref(), &extracted_patch_path, &tmp_out_path) {
+        if let Err(err) =
+            hpatchz::patch(tmp_file_path.as_ref(), &extracted_patch_path, &tmp_out_path)
+        {
             tracing::error!("Patching error: {err}");
             return Err(SophonError::PatchingError(err.to_string()));
         }
@@ -688,15 +843,20 @@ impl SophonPatcher {
         update_index: &'a UpdateIndex<'a>,
         updater: impl Fn(Update) + 'b,
         file_patch_queue: Option<&'b Injector<&'a FilePatchInfo<'a>>>,
-        download_queue: &'b Injector<&'a PatchChunkInfo<'a>>)
-    {
+        download_queue: &'b Injector<&'a PatchChunkInfo<'a>>
+    ) {
         let res = self.check_downloaded_chunk(download_check_task);
         match res {
             Ok(true) => {
-                tracing::trace!("Successfully downloaded chunk `{}`", download_check_task.patch_chunk_manifest.PatchName);
+                tracing::trace!(
+                    "Successfully downloaded chunk `{}`",
+                    download_check_task.patch_chunk_manifest.PatchName
+                );
                 {
                     let mut states_lock = chunk_states.lock().unwrap();
-                    let chunk_state = states_lock.get_mut(&download_check_task.patch_chunk_manifest.PatchName).unwrap();
+                    let chunk_state = states_lock
+                        .get_mut(&download_check_task.patch_chunk_manifest.PatchName)
+                        .unwrap();
                     *chunk_state = ChunkState::Downloaded;
                 }
                 update_index.count_downloaded(download_check_task.patch_chunk_manifest.PatchSize);
@@ -704,18 +864,27 @@ impl SophonPatcher {
                 if let Some(file_patch_queue) = file_patch_queue {
                     for file_name in &download_check_task.used_in_files {
                         if let Some(file_info) = update_index.files_to_patch.get(*file_name) {
-                            tracing::trace!("File `{}` is ready to patch, pushing to queue", file_name);
+                            tracing::trace!(
+                                "File `{}` is ready to patch, pushing to queue",
+                                file_name
+                            );
                             file_patch_queue.push(file_info);
                         }
                     }
                 }
-            },
+            }
             Ok(false) => {
-                tracing::trace!("Chunk `{}` failed size+hash check", download_check_task.patch_chunk_manifest.PatchName);
+                tracing::trace!(
+                    "Chunk `{}` failed size+hash check",
+                    download_check_task.patch_chunk_manifest.PatchName
+                );
                 self.fail_chunk(download_check_task, chunk_states, download_queue, updater);
-            },
+            }
             Err(err) => {
-                tracing::error!("I/O error checking chunk `{}`: {err}", download_check_task.patch_chunk_manifest.PatchName);
+                tracing::error!(
+                    "I/O error checking chunk `{}`: {err}",
+                    download_check_task.patch_chunk_manifest.PatchName
+                );
                 (updater)(Update::DownloadingError(err.into()));
                 self.fail_chunk(download_check_task, chunk_states, download_queue, updater);
             }
@@ -724,28 +893,44 @@ impl SophonPatcher {
 
     fn check_downloaded_chunk(&self, chunk_info: &PatchChunkInfo) -> std::io::Result<bool> {
         let chunk_path = chunk_info.chunk_path(self.patch_chunk_temp_folder());
-        check_file(&chunk_path, chunk_info.patch_chunk_manifest.PatchSize, &chunk_info.patch_chunk_manifest.PatchMd5)
+        check_file(
+            &chunk_path,
+            chunk_info.patch_chunk_manifest.PatchSize,
+            &chunk_info.patch_chunk_manifest.PatchMd5
+        )
     }
 
-    fn fail_chunk<'a>(&self, chunk_info: &'a PatchChunkInfo<'a>, states: &Mutex<HashMap<&'a String, ChunkState>>, download_queue: &Injector<&'a PatchChunkInfo<'a>>, updater: impl Fn(Update)) {
+    fn fail_chunk<'a>(
+        &self,
+        chunk_info: &'a PatchChunkInfo<'a>,
+        states: &Mutex<HashMap<&'a String, ChunkState>>,
+        download_queue: &Injector<&'a PatchChunkInfo<'a>>,
+        updater: impl Fn(Update)
+    ) {
         // Check/download failed, file corrupt, so try to delete it.
         let chunk_path = chunk_info.chunk_path(self.patch_chunk_temp_folder());
         let _ = std::fs::remove_file(&chunk_path);
         {
             let mut states_lock = states.lock().unwrap();
-            let chunk_state = states_lock.get_mut(&chunk_info.patch_chunk_manifest.PatchName).unwrap();
+            let chunk_state = states_lock
+                .get_mut(&chunk_info.patch_chunk_manifest.PatchName)
+                .unwrap();
             match chunk_state {
                 ChunkState::Downloading(0) => {
                     *chunk_state = ChunkState::Failed;
-                    (updater)(Update::DownloadingError(SophonError::ChunkDownloadFailed(chunk_info.patch_chunk_manifest.PatchName.clone())))
-                },
+                    (updater)(Update::DownloadingError(SophonError::ChunkDownloadFailed(
+                        chunk_info.patch_chunk_manifest.PatchName.clone()
+                    )))
+                }
                 ChunkState::Downloading(n) => {
                     *n -= 1;
                     download_queue.push(chunk_info);
-                },
+                }
                 // Why is chunk being checked if it's not being
                 // downloaded?
-                _ => { unreachable!() }
+                _ => {
+                    unreachable!()
+                }
             }
         }
     }
@@ -762,26 +947,35 @@ impl SophonPatcher {
         match res {
             Ok(()) => {
                 download_check_queue.push(download_task);
-            },
+            }
             Err(err) => {
-                tracing::error!("Error downloading patch chunk `{}`: {err}", download_task.patch_chunk_manifest.PatchName);
+                tracing::error!(
+                    "Error downloading patch chunk `{}`: {err}",
+                    download_task.patch_chunk_manifest.PatchName
+                );
                 (updater)(Update::DownloadingError(err));
                 self.fail_chunk(download_task, chunk_states, download_queue, updater);
             }
         }
     }
 
-    fn download_patch_chunk_nocheck(&self, download_task: &PatchChunkInfo) -> Result<(), SophonError> {
+    fn download_patch_chunk_nocheck(
+        &self,
+        download_task: &PatchChunkInfo
+    ) -> Result<(), SophonError> {
         let chunk_path = download_task.chunk_path(self.patch_chunk_temp_folder());
 
-        if check_file(&chunk_path, download_task.patch_chunk_manifest.PatchSize, &download_task.patch_chunk_manifest.PatchMd5)? {
+        if check_file(
+            &chunk_path,
+            download_task.patch_chunk_manifest.PatchSize,
+            &download_task.patch_chunk_manifest.PatchMd5
+        )? {
             Ok(())
-        } else {
+        }
+        else {
             let chunk_url = download_task.download_url();
 
-            let response = self.client.get(&chunk_url)
-                .send()?
-                .error_for_status()?;
+            let response = self.client.get(&chunk_url).send()?.error_for_status()?;
 
             let chunk_bytes = response.bytes()?;
 
@@ -789,7 +983,6 @@ impl SophonPatcher {
 
             Ok(())
         }
-
     }
 
     pub fn pre_download(
@@ -798,10 +991,15 @@ impl SophonPatcher {
         thread_count: usize,
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
-
         if self.check_free_space {
-            let download_bytes = self.diff_info.stats.get(&from.to_string()).unwrap()
-                .compressed_size.parse().unwrap();
+            let download_bytes = self
+                .diff_info
+                .stats
+                .get(&from.to_string())
+                .unwrap()
+                .compressed_size
+                .parse()
+                .unwrap();
 
             Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
         }
@@ -825,8 +1023,14 @@ impl SophonPatcher {
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         if self.check_free_space {
-            let download_bytes = self.diff_info.stats.get(&from.to_string()).unwrap()
-                .compressed_size.parse().unwrap();
+            let download_bytes = self
+                .diff_info
+                .stats
+                .get(&from.to_string())
+                .unwrap()
+                .compressed_size
+                .parse()
+                .unwrap();
 
             Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
         }
@@ -863,7 +1067,7 @@ fn extract_patch_chunk_region_to_file(
     let mut patch_data = extract_patch_chunk_region(
         patch_chunk_file,
         patch_chunk.PatchOffset,
-        patch_chunk.PatchLength,
+        patch_chunk.PatchLength
     )?;
 
     let mut patch_file = File::create(out_path)?;

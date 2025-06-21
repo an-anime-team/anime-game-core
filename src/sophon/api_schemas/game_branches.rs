@@ -12,7 +12,8 @@ impl GameBranches {
     pub fn latest_version_by_id(&self, id: impl AsRef<str>) -> Option<Version> {
         let id = id.as_ref();
 
-        self.game_branches.iter()
+        self.game_branches
+            .iter()
             .filter(|branch_info| branch_info.game.id == id)
             .max_by_key(|branch_info| &branch_info.main.tag)
             .and_then(|branch_info| Version::from_str(&branch_info.main.tag))
@@ -23,17 +24,17 @@ impl GameBranches {
         let id = id.as_ref();
         let version = version.to_string();
 
-        self.game_branches.iter()
-            .find(|branch_info| {
-                branch_info.game.id == id && branch_info.main.tag == version
-            })
+        self.game_branches
+            .iter()
+            .find(|branch_info| branch_info.game.id == id && branch_info.main.tag == version)
     }
 
     /// Get latest version of specified game by id.
     pub fn get_game_latest_by_id(&self, id: impl AsRef<str>) -> Option<&GameBranchInfo> {
         let id = id.as_ref();
 
-        self.game_branches.iter()
+        self.game_branches
+            .iter()
             .filter(|branch_info| branch_info.game.id == id)
             .max_by_key(|branch_info| &branch_info.main.tag)
     }
