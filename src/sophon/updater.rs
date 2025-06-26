@@ -539,7 +539,7 @@ impl SophonPatcher {
 
         let game_folder = game_folder.as_ref();
 
-        let worker_queues = iter::repeat_with(|| Worker::new_fifo())
+        let worker_queues = iter::repeat_with(Worker::new_fifo)
             .take(thread_count)
             .collect::<Vec<_>>();
         let stealers = worker_queues
@@ -553,10 +553,13 @@ impl SophonPatcher {
         std::thread::scope(|scope| {
             // downlaoder thread
             let updater_clone = updater.clone();
+            let download_queue = DownloadQueue {
+                tasks_iter: update_index.files_to_patch.values().peekable(),
+                retries_queue: &retries_queue
+            };
             scope.spawn(|| {
                 self.artifact_download_loop(
-                    update_index.files_to_patch.values(),
-                    &retries_queue,
+                    download_queue,
                     &file_patch_queue,
                     &update_index,
                     updater_clone
@@ -652,10 +655,13 @@ impl SophonPatcher {
 
         std::thread::scope(|scope| {
             let updater_clone = updater.clone();
+            let download_queue = DownloadQueue {
+                tasks_iter: update_index.files_to_patch.values().peekable(),
+                retries_queue: &retries_queue
+            };
             scope.spawn(|| {
                 self.artifact_download_loop(
-                    update_index.files_to_patch.values(),
-                    &retries_queue,
+                    download_queue,
                     &patch_queue,
                     &update_index,
                     updater_clone
@@ -685,18 +691,13 @@ impl SophonPatcher {
     /// if the download succeedes. If both the tasks iterator and the retries queue are empty,
     /// checks if they are empty and then checks if there are any unfinished patches and waits
     /// for either all patches to finish applying or a new retry being pushed onto the queue.
-    fn artifact_download_loop<'a>(
+    fn artifact_download_loop<'a, 'b, I: Iterator<Item = &'a FilePatchInfo<'a>> + 'b>(
         &self,
-        iter: impl Iterator<Item = &'a FilePatchInfo<'a>>,
-        retries_queue: &Injector<&'a FilePatchInfo<'a>>,
-        patch_queue: &Injector<&'a FilePatchInfo<'a>>,
-        update_index: &UpdateIndex<'a>,
-        updater: impl Fn(Update)
+        mut task_queue: DownloadQueue<'a, 'b, I>,
+        patch_queue: &'b Injector<&'a FilePatchInfo<'a>>,
+        update_index: &'b UpdateIndex<'a>,
+        updater: impl Fn(Update) + 'b
     ) {
-        let mut task_queue = DownloadQueue {
-            tasks_iter: iter.peekable(),
-            retries_queue
-        };
         loop {
             if let Some(task) = task_queue.next() {
                 // Check if the file already exists on disk and if it does, skip re-downloading it
@@ -717,7 +718,11 @@ impl SophonPatcher {
                             "Failed to download patch",
                         );
                         (updater)(Update::DownloadingError(err));
-                        update_index.process_download_fail(task, retries_queue, &updater);
+                        update_index.process_download_fail(
+                            task,
+                            task_queue.retries_queue,
+                            &updater
+                        );
                     }
                 }
             }
@@ -729,6 +734,7 @@ impl SophonPatcher {
         update_index.download_states_notifier.notify_all();
     }
 
+    // instrumenting to maybe try and see how much time it takes to download, hash check, and apply
     #[tracing::instrument(level = "trace", ret, skip(self))]
     fn download_artifact(&self, task: &FilePatchInfo) -> Result<(), SophonError> {
         let download_url = task.download_url();
@@ -742,7 +748,9 @@ impl SophonPatcher {
             .send()?
             .error_for_status()?;
 
-        // Don't have a hash for the patch, can't check it here, check the hash before using.
+        // Don't have a hash for the patch, can't check it here, check the hash before using
+        // (or just check the resulting file, copy-over will hash mismatch, patching will likely
+        // just fail, less likely succeed and produce wrong file)
         if let Some(length) = resp.content_length() {
             assert_eq!(length, task.patch_chunk.PatchLength)
         }
@@ -771,6 +779,48 @@ impl SophonPatcher {
             }
             else if !update_index.wait_downloading() {
                 break;
+            }
+        }
+    }
+
+    fn file_patch_handler<'a, 'b>(
+        &self,
+        file_patch_task: &'a FilePatchInfo<'a>,
+        update_index: &'b UpdateIndex<'a>,
+        game_folder: &'b Path,
+        retries_queue: &'b Injector<&'a FilePatchInfo<'a>>,
+        updater: impl Fn(Update) + 'b
+    ) {
+        let res = if let Some(orig_file_path) = file_patch_task.orig_file_path(game_folder) {
+            self.file_patch(&orig_file_path, file_patch_task, game_folder)
+        }
+        else {
+            self.file_copy_over(file_patch_task, game_folder)
+        };
+
+        match res {
+            Ok(()) => {
+                tracing::debug!(
+                    "Successfully patched `{}`",
+                    file_patch_task.file_manifest.AssetName
+                );
+                update_index.artifact_success(&file_patch_task.file_manifest.AssetName);
+                update_index.download_states_notifier.notify_all();
+                update_index.count_patched(1);
+                update_index.count_downloaded(file_patch_task.patch_chunk.PatchLength);
+                (updater)(update_index.msg_patched());
+                (updater)(update_index.msg_bytes());
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = ?e,
+                    file = file_patch_task.file_manifest.AssetName,
+                    "Patching failed",
+                );
+                (updater)(Update::PatchingError(e.to_string()));
+                self.cleanup_on_fail(file_patch_task);
+                update_index.process_download_fail(file_patch_task, retries_queue, updater);
+                update_index.download_states_notifier.notify_all();
             }
         }
     }
@@ -819,61 +869,22 @@ impl SophonPatcher {
         Ok(())
     }
 
-    fn file_patch_handler<'a, 'b>(
-        &self,
-        file_patch_task: &'a FilePatchInfo<'a>,
-        update_index: &'b UpdateIndex<'a>,
-        game_folder: &'b Path,
-        retries_queue: &'b Injector<&'a FilePatchInfo<'a>>,
-        updater: impl Fn(Update) + 'b
-    ) {
-        let res = if let Some(orig_file_path) = file_patch_task.orig_file_path(game_folder) {
-            self.file_patch(&orig_file_path, file_patch_task, game_folder)
-        }
-        else {
-            self.file_copy_over(file_patch_task, game_folder)
-        };
-
-        match res {
-            Ok(()) => {
-                tracing::debug!(
-                    "Successfully patched `{}`",
-                    file_patch_task.file_manifest.AssetName
-                );
-                update_index.artifact_success(&file_patch_task.file_manifest.AssetName);
-                update_index.download_states_notifier.notify_all();
-                update_index.count_patched(1);
-                update_index.count_downloaded(file_patch_task.patch_chunk.PatchLength);
-                (updater)(update_index.msg_patched());
-                (updater)(update_index.msg_bytes());
-            }
-            Err(e) => {
-                tracing::error!(
-                    error = ?e,
-                    file = file_patch_task.file_manifest.AssetName,
-                    "Patching failed",
-                );
-                (updater)(Update::PatchingError(e.to_string()));
-                self.cleanup_on_fail(file_patch_task);
-                update_index.process_download_fail(file_patch_task, retries_queue, updater);
-                update_index.download_states_notifier.notify_all();
-            }
-        }
-    }
-
     fn finalize_patch(
         file: &Path,
         target: &Path,
         size: u64,
         hash: &str
     ) -> Result<(), SophonError> {
-        if check_file(&file, size, hash)? {
+        if check_file(file, size, hash)? {
             tracing::debug!(
                 result = ?file,
                 destination = ?target,
                 "File hash check passed, copying into final destination"
             );
             ensure_parent(target)?;
+            if target.exists() {
+                let _ = add_user_write_permission_to_file(target);
+            }
             std::fs::copy(file, target)?;
             Ok(())
         }
