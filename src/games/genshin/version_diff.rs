@@ -308,7 +308,7 @@ impl VersionDiff {
 
         let patcher = SophonPatcher::new(client, diff, self.temp_folder())?;
 
-        patcher.sophon_apply_patches(&path, from, thread_count, move |msg | {
+        patcher.update(&path, from, thread_count, move |msg | {
             (updater)(msg.into());
         })?;
 
