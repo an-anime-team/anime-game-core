@@ -16,7 +16,7 @@ use super::protos::SophonManifest::{
 };
 use super::{
     api_get_request, check_file, ensure_parent, file_md5_hash_str, get_protobuf_from_url,
-    ChunkState, GameEdition, SophonError, DEFAULT_CHUNK_RETRIES
+    ArtifactDownloadState, GameEdition, SophonError, DEFAULT_CHUNK_RETRIES
 };
 use crate::prelude::free_space;
 
@@ -126,14 +126,14 @@ struct FileInfo<'a> {
 }
 
 impl FileInfo<'_> {
-    fn is_file_ready(&self, states: &Mutex<HashMap<&String, ChunkState>>) -> bool {
+    fn is_file_ready(&self, states: &Mutex<HashMap<&String, ArtifactDownloadState>>) -> bool {
         let states_lock = states.lock().unwrap();
         for chunk_id in &self.chunks {
             match states_lock.get(*chunk_id) {
-                Some(ChunkState::Failed) | Some(ChunkState::Downloading(_)) => {
+                Some(ArtifactDownloadState::Failed) | Some(ArtifactDownloadState::Downloading(_)) => {
                     return false;
                 }
-                None | Some(ChunkState::Downloaded) => {}
+                None | Some(ArtifactDownloadState::Downloaded) => {}
             }
         }
         true
@@ -325,7 +325,7 @@ impl SophonInstaller {
     fn fail_chunk<'a>(
         &self,
         chunk_info: &'a ChunkInfo<'a>,
-        states: &Mutex<HashMap<&'a String, ChunkState>>,
+        states: &Mutex<HashMap<&'a String, ArtifactDownloadState>>,
         download_queue: &Injector<&'a ChunkInfo<'a>>,
         updater: impl Fn(Update)
     ) {
@@ -338,13 +338,13 @@ impl SophonInstaller {
                 .get_mut(&chunk_info.chunk_manifest.ChunkName)
                 .unwrap();
             match chunk_state {
-                ChunkState::Downloading(0) => {
-                    *chunk_state = ChunkState::Failed;
+                ArtifactDownloadState::Downloading(0) => {
+                    *chunk_state = ArtifactDownloadState::Failed;
                     (updater)(Update::DownloadingError(SophonError::ChunkDownloadFailed(
                         chunk_info.chunk_manifest.ChunkName.clone()
                     )))
                 }
-                ChunkState::Downloading(n) => {
+                ArtifactDownloadState::Downloading(n) => {
                     *n -= 1;
                     download_queue.push(chunk_info);
                 }
@@ -367,11 +367,11 @@ impl SophonInstaller {
         let downloading_index =
             DownloadingIndex::new_chunks_only(&self.download_info, &self.manifest);
         tracing::info!("{} Chunks to download", downloading_index.chunks.len());
-        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(
+        let chunk_states: Mutex<HashMap<&String, ArtifactDownloadState>> = Mutex::new(HashMap::from_iter(
             downloading_index
                 .chunks
                 .keys()
-                .map(|id| (*id, ChunkState::Downloading(DEFAULT_CHUNK_RETRIES)))
+                .map(|id| (*id, ArtifactDownloadState::Downloading(DEFAULT_CHUNK_RETRIES)))
         ));
 
         (updater)(downloading_index.msg_files());
@@ -448,11 +448,11 @@ impl SophonInstaller {
             downloading_index.chunks.len(),
             downloading_index.files.len()
         );
-        let chunk_states: Mutex<HashMap<&String, ChunkState>> = Mutex::new(HashMap::from_iter(
+        let chunk_states: Mutex<HashMap<&String, ArtifactDownloadState>> = Mutex::new(HashMap::from_iter(
             downloading_index
                 .chunks
                 .keys()
-                .map(|id| (*id, ChunkState::default()))
+                .map(|id| (*id, ArtifactDownloadState::default()))
         ));
 
         (updater)(downloading_index.msg_files());
@@ -562,7 +562,7 @@ impl SophonInstaller {
     fn chunk_check_handler<'a>(
         &self,
         chunk_check_task: &'a ChunkInfo<'a>,
-        chunk_states: &Mutex<HashMap<&'a String, ChunkState>>,
+        chunk_states: &Mutex<HashMap<&'a String, ArtifactDownloadState>>,
         downloading_index: &'a DownloadingIndex<'a>,
         local_updater: impl Fn(Update),
         file_queue: Option<&Injector<&'a FileInfo<'a>>>,
@@ -580,7 +580,7 @@ impl SophonInstaller {
                     let chunk_state = states_lock
                         .get_mut(&chunk_check_task.chunk_manifest.ChunkName)
                         .unwrap();
-                    *chunk_state = ChunkState::Downloaded;
+                    *chunk_state = ArtifactDownloadState::Downloaded;
                 }
                 if let Some(file_queue) = file_queue {
                     for file_name in &chunk_check_task.used_in_files {
@@ -628,7 +628,7 @@ impl SophonInstaller {
     fn chunk_download_handler<'a>(
         &self,
         chunk_download_task: &'a ChunkInfo<'a>,
-        chunk_states: &Mutex<HashMap<&'a String, ChunkState>>,
+        chunk_states: &Mutex<HashMap<&'a String, ArtifactDownloadState>>,
         download_queue: &Injector<&'a ChunkInfo<'a>>,
         chunk_check_queue: &Injector<&'a ChunkInfo<'a>>,
         local_updater: impl Fn(Update)

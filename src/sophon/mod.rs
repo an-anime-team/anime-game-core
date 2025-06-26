@@ -25,7 +25,7 @@ pub mod updater;
 const DEFAULT_CHUNK_RETRIES: u8 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum ChunkState {
+enum ArtifactDownloadState {
     // Chunk successfully downloaded
     Downloaded,
     // Download failed, run out of retries
@@ -34,7 +34,7 @@ enum ChunkState {
     Downloading(u8)
 }
 
-impl Default for ChunkState {
+impl Default for ArtifactDownloadState {
     #[inline(always)]
     fn default() -> Self {
         Self::Downloading(DEFAULT_CHUNK_RETRIES)
