@@ -502,7 +502,7 @@ impl SophonPatcher {
 
         self.create_temp_dirs()?;
 
-        (updater)(Update::PatchingStarted);
+        (updater)(Update::DownloadingStarted(self.temp_folder.clone()));
 
         self.update_multithreaded(thread_count, target_dir, from, updater.clone());
 
