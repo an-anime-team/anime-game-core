@@ -554,6 +554,7 @@ impl SophonPatcher {
                 retries_queue: &retries_queue
             };
             scope.spawn(|| {
+                let _span = tracing::trace_span!("Download thread").entered();
                 (updater_clone)(Update::DownloadingStarted(self.temp_folder.clone()));
                 self.artifact_download_loop(
                     download_queue,
@@ -564,7 +565,8 @@ impl SophonPatcher {
             });
 
             // Patching threads
-            for worker_queue in worker_queues {
+            for (i, worker_queue) in worker_queues.into_iter().enumerate() {
+                let _span = tracing::debug_span!("Patching thread", id = i).entered();
                 let updater_clone = updater.clone();
                 let thread_queue = ThreadQueue {
                     global: &file_patch_queue,
@@ -586,6 +588,9 @@ impl SophonPatcher {
 
             // Unused file deletion - in main thread
             if let Some(unused) = &update_index.unused {
+                let deleting_unused_span =
+                    tracing::trace_span!("Deleting unused", amount = unused.Assets.len()).entered();
+
                 // Deleting unused files
                 for unused_asset in &unused.Assets {
                     // Ignore any I/O errors
@@ -593,9 +598,10 @@ impl SophonPatcher {
                     update_index.count_deleted(1);
                     (updater)(update_index.msg_deleted());
                 }
-            }
 
-            (updater)(Update::DeletingFinished);
+                (updater)(Update::DeletingFinished);
+                deleting_unused_span.exit();
+            }
         });
 
         (updater)(Update::PatchingFinished);
@@ -657,6 +663,7 @@ impl SophonPatcher {
                 retries_queue: &retries_queue
             };
             scope.spawn(|| {
+                let _span = tracing::trace_span!("Download thread").entered();
                 (updater_clone)(Update::DownloadingStarted(self.temp_folder.clone()));
                 self.artifact_download_loop(
                     download_queue,
@@ -668,6 +675,7 @@ impl SophonPatcher {
             // no reason to spawn multiple of this, teh downloader itself is basically
             // single-threaded too
             scope.spawn(|| {
+                let _span = tracing::trace_span!("Verification thread").entered();
                 'worker: loop {
                     if let Some(task) = patch_queue.steal().success() {
                         // This is predownload, assume the files are downlaoded successfully, no
@@ -725,6 +733,7 @@ impl SophonPatcher {
                         );
                     }
                 }
+                update_index.download_states_notifier.notify_all();
             }
             else if task_queue.is_empty() && !update_index.wait_downloading() {
                 break;
@@ -735,7 +744,7 @@ impl SophonPatcher {
     }
 
     // instrumenting to maybe try and see how much time it takes to download, hash check, and apply
-    #[tracing::instrument(level = "trace", ret, skip(self))]
+    #[tracing::instrument(level = "trace", ret, skip(self, task), fields(file = task.file_manifest.AssetName, patch_chunk = task.patch_chunk.PatchName))]
     fn download_artifact(&self, task: &FilePatchInfo) -> Result<(), SophonError> {
         let download_url = task.download_url();
         let download_range_val = task.download_range();
