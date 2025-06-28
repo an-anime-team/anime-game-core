@@ -784,13 +784,21 @@ impl SophonPatcher {
         retries_queue: &'b Injector<&'a FilePatchInfo<'a>>,
         queue: ThreadQueue<'b, &'a FilePatchInfo<'a>>
     ) {
+        let mut do_this_task_last = None;
         loop {
             if let Some(task) = queue.next_job() {
+                if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
+                    do_this_task_last = Some(task);
+                    continue;
+                }
                 self.file_patch_handler(task, update_index, game_folder, retries_queue, &updater);
             }
             else if !update_index.wait_downloading() {
                 break;
             }
+        }
+        if let Some(last_task) = do_this_task_last {
+            self.file_patch_handler(last_task, update_index, game_folder, retries_queue, updater);
         }
     }
 
