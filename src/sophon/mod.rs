@@ -231,6 +231,12 @@ fn file_region_hash_md5(file: &mut File, offset: u64, length: u64) -> std::io::R
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+// TODO:
+// - Cull some variants of SophonError, especially those that are unused
+// - Make some better variants describign where the error happened, perhaps steal anyhow's context
+//   idea but simpler, especially useful for I/O errors.
+// - Cull unused installer/update messages
+
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SophonError {
     /// Specified downloading path is not available in system
