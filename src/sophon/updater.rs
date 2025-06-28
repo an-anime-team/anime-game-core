@@ -709,7 +709,9 @@ impl SophonPatcher {
         loop {
             if let Some(task) = task_queue.next() {
                 // Check if the file already exists on disk and if it does, skip re-downloading it
-                if self.tmp_artifact_file_path(task).exists() {
+                let artifact_path = self.tmp_artifact_file_path(task);
+                if artifact_path.exists() {
+                    tracing::debug!(artifact = ?artifact_path, "Artifact already exists, skipping download");
                     patch_queue.push(task);
                     continue;
                 }
@@ -800,11 +802,23 @@ impl SophonPatcher {
         retries_queue: &'b Injector<&'a FilePatchInfo<'a>>,
         updater: impl Fn(Update) + 'b
     ) {
-        let res = if let Some(orig_file_path) = file_patch_task.orig_file_path(game_folder) {
-            self.file_patch(&orig_file_path, file_patch_task, game_folder)
-        }
-        else {
-            self.file_copy_over(file_patch_task, game_folder)
+        let res = {
+            let target_path = file_patch_task.target_file_path(game_folder);
+
+            if let Ok(true) = check_file(
+                &target_path,
+                file_patch_task.file_manifest.AssetSize,
+                &file_patch_task.file_manifest.AssetHashMd5
+            ) {
+                tracing::debug!(file = ?target_path, "File appears to be already patched, marking as success");
+                Ok(())
+            }
+            else if let Some(orig_file_path) = file_patch_task.orig_file_path(game_folder) {
+                self.file_patch(&orig_file_path, file_patch_task, game_folder)
+            }
+            else {
+                self.file_copy_over(file_patch_task, game_folder)
+            }
         };
 
         match res {
@@ -839,8 +853,16 @@ impl SophonPatcher {
         file_patch_task: &FilePatchInfo,
         game_folder: &Path
     ) -> Result<(), SophonError> {
-        let artifact_path = self.tmp_artifact_file_path(file_patch_task);
         let target_path = file_patch_task.target_file_path(game_folder);
+        if let Ok(true) = check_file(
+            &target_path,
+            file_patch_task.file_manifest.AssetSize,
+            &file_patch_task.file_manifest.AssetHashMd5
+        ) {
+            tracing::debug!(file = ?target_path, "File appears to be already patched, marking as success");
+            return Ok(());
+        }
+        let artifact_path = self.tmp_artifact_file_path(file_patch_task);
         Self::finalize_patch(
             &artifact_path,
             &target_path,
@@ -855,6 +877,22 @@ impl SophonPatcher {
         file_patch_task: &FilePatchInfo,
         game_folder: &Path
     ) -> Result<(), SophonError> {
+        if !check_file(
+            orig_file_path,
+            file_patch_task.patch_chunk.OriginalFileLength,
+            &file_patch_task.patch_chunk.OriginalFileMd5
+        )? {
+            // A better way would be to mark the download as failed right away instead of having
+            // this repeat all the retries. But it's easier to handle this rare faulty edge case
+            // this way.
+            tracing::error!(file = ?orig_file_path, "Original file doesn't pass hash check, cannot patch file");
+            return Err(SophonError::FileHashMismatch {
+                path: orig_file_path.to_owned(),
+                expected: file_patch_task.patch_chunk.OriginalFileMd5.clone(),
+                got: file_md5_hash_str(orig_file_path)?
+            });
+        }
+
         let tmp_src_path = self.tmp_src_file_path(file_patch_task);
         let tmp_out_path = self.tmp_out_file_path(file_patch_task);
         let artifact = self.tmp_artifact_file_path(file_patch_task);
