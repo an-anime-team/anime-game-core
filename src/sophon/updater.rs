@@ -58,7 +58,7 @@ pub fn get_patch_manifest(
 
     get_protobuf_from_url(
         client,
-        format!("{}{}/{}", url_prefix, url_suffix, manifest_id),
+        format!("{url_prefix}{url_suffix}/{manifest_id}"),
         diff_info.manifest_download.compression == 1
     )
 }
@@ -502,11 +502,7 @@ impl SophonPatcher {
 
         self.create_temp_dirs()?;
 
-        (updater)(Update::DownloadingStarted(self.temp_folder.clone()));
-
         self.update_multithreaded(thread_count, target_dir, from, updater.clone());
-
-        (updater)(Update::PatchingFinished);
 
         Ok(())
     }
@@ -558,6 +554,7 @@ impl SophonPatcher {
                 retries_queue: &retries_queue
             };
             scope.spawn(|| {
+                (updater_clone)(Update::DownloadingStarted(self.temp_folder.clone()));
                 self.artifact_download_loop(
                     download_queue,
                     &file_patch_queue,
@@ -597,7 +594,11 @@ impl SophonPatcher {
                     (updater)(update_index.msg_deleted());
                 }
             }
+
+            (updater)(Update::DeletingFinished);
         });
+
+        (updater)(Update::PatchingFinished);
     }
 
     pub fn pre_download(
@@ -621,11 +622,7 @@ impl SophonPatcher {
 
         self.create_temp_dirs()?;
 
-        (updater)(Update::DownloadingStarted(self.temp_folder.clone()));
-
         self.predownload_multithreaded(thread_count, from, updater.clone());
-
-        (updater)(Update::DownloadingFinished);
 
         Ok(())
     }
@@ -660,6 +657,7 @@ impl SophonPatcher {
                 retries_queue: &retries_queue
             };
             scope.spawn(|| {
+                (updater_clone)(Update::DownloadingStarted(self.temp_folder.clone()));
                 self.artifact_download_loop(
                     download_queue,
                     &patch_queue,
@@ -685,6 +683,8 @@ impl SophonPatcher {
                 }
             });
         });
+
+        (updater)(Update::DownloadingFinished);
     }
 
     /// Loops over the tasks and retries and tries to download them, pushing onto the patch queue
