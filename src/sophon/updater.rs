@@ -727,6 +727,7 @@ impl SophonPatcher {
                             ?err,
                             "Failed to download patch",
                         );
+                        let _ = std::fs::remove_file(&artifact_path);
                         (updater)(Update::DownloadingError(err));
                         update_index.process_download_fail(
                             task,
@@ -763,15 +764,24 @@ impl SophonPatcher {
         // (or just check the resulting file, copy-over will hash mismatch, patching will likely
         // just fail, less likely succeed and produce wrong file)
         if let Some(length) = resp.content_length() {
-            assert_eq!(length, task.patch_chunk.PatchLength)
+            if length != task.patch_chunk.PatchLength {
+                return Err(SophonError::IoError(format!(
+                    "Content length mismatch: expected {}, got {length}",
+                    task.patch_chunk.PatchLength
+                )));
+            }
         }
 
         let mut out_file = BufWriter::new(File::create(out_filename)?);
         let written = resp.copy_to(&mut out_file)?;
         out_file.flush()?;
 
-        // checks to catch off-by-one errors early in dev process, probably remove later
-        assert_eq!(written, task.patch_chunk.PatchLength);
+        if written != task.patch_chunk.PatchLength {
+            return Err(SophonError::IoError(format!(
+                "Written data length mistamch, expected {}, got {written}",
+                task.patch_chunk.PatchLength
+            )));
+        }
 
         Ok(())
     }
