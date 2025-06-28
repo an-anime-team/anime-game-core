@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, Take, Write};
 use std::iter;
-use std::iter::{repeat_with, Peekable};
+use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Condvar, Mutex, MutexGuard};
