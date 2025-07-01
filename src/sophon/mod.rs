@@ -1,10 +1,12 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::iter::Peekable;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use api_schemas::game_branches::GameBranches;
 use api_schemas::ApiResponse;
+use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use md5::{Digest, Md5};
 use protobuf::Message;
 use reqwest::blocking::Client;
@@ -92,6 +94,57 @@ impl GameEdition {
             Self::Global => "VYTpXlbWo8",
             Self::China => "jGHBHlcOq1"
         }
+    }
+}
+
+struct ThreadQueue<'a, T> {
+    global: &'a Injector<T>,
+    local: Worker<T>,
+    stealers: &'a [Stealer<T>]
+}
+
+impl<'a, T> ThreadQueue<'a, T> {
+    /// based on the example from crossbeam deque
+    fn next_job(&self) -> Option<T> {
+        self.local.pop().or_else(|| {
+            std::iter::repeat_with(|| {
+                self.global
+                    .steal_batch_and_pop(&self.local)
+                    .or_else(|| self.stealers.iter().map(|s| s.steal()).collect())
+            })
+            .find(|s| !s.is_retry())
+            .and_then(Steal::success)
+        })
+    }
+}
+
+#[derive(Debug)]
+struct DownloadQueue<'b, T, I: Iterator<Item = T> + 'b> {
+    tasks_iter: Peekable<I>,
+    retries_queue: &'b Injector<T>
+}
+
+impl<'b, I, T> DownloadQueue<'b, T, I>
+where
+    I: Iterator<Item = T> + 'b
+{
+    fn is_empty(&mut self) -> bool {
+        self.tasks_iter.peek().is_none() && self.retries_queue.is_empty()
+    }
+}
+
+impl<'b, I, T> Iterator for DownloadQueue<'b, T, I>
+where
+    I: Iterator<Item = T> + 'b
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tasks_iter.next().or_else(|| {
+            std::iter::repeat_with(|| self.retries_queue.steal())
+                .find(|s| !s.is_retry())
+                .and_then(Steal::success)
+        })
     }
 }
 

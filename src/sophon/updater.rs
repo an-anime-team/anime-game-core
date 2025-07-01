@@ -2,12 +2,11 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, Take, Write};
 use std::iter;
-use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Condvar, Mutex, MutexGuard};
 
-use crossbeam_deque::{Injector, Steal, Stealer, Worker};
+use crossbeam_deque::{Injector, Worker};
 use reqwest::blocking::Client;
 use reqwest::header::RANGE;
 use serde::{Deserialize, Serialize};
@@ -19,12 +18,12 @@ use super::protos::SophonPatch::{
     SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetInfo
 };
 use super::{
-    add_user_write_permission_to_file, api_post_request, check_file, file_md5_hash_str,
-    get_protobuf_from_url, ArtifactDownloadState, GameEdition, SophonError, DEFAULT_CHUNK_RETRIES
+    add_user_write_permission_to_file, api_post_request, check_file, ensure_parent,
+    file_md5_hash_str, get_protobuf_from_url, ArtifactDownloadState, DownloadQueue, GameEdition,
+    SophonError, ThreadQueue, DEFAULT_CHUNK_RETRIES
 };
 use crate::external::hpatchz;
 use crate::prelude::{free_space, prettify_bytes};
-use crate::sophon::ensure_parent;
 use crate::version::Version;
 
 fn sophon_patch_info_url(package_info: &PackageInfo, edition: GameEdition) -> String {
@@ -391,56 +390,7 @@ impl<'a> UpdateIndex<'a> {
     }
 }
 
-#[derive(Debug)]
-struct DownloadQueue<'a, 'b, I: Iterator<Item = &'a FilePatchInfo<'a>>> {
-    tasks_iter: Peekable<I>,
-    retries_queue: &'b Injector<&'a FilePatchInfo<'a>>
-}
-
-impl<'a, 'b, I> DownloadQueue<'a, 'b, I>
-where
-    I: Iterator<Item = &'a FilePatchInfo<'a>> + 'b
-{
-    fn is_empty(&mut self) -> bool {
-        self.tasks_iter.peek().is_none() && self.retries_queue.is_empty()
-    }
-}
-
-impl<'a, 'b, I> Iterator for DownloadQueue<'a, 'b, I>
-where
-    I: Iterator<Item = &'a FilePatchInfo<'a>> + 'b
-{
-    type Item = &'a FilePatchInfo<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.tasks_iter.next().or_else(|| {
-            iter::repeat_with(|| self.retries_queue.steal())
-                .find(|s| !s.is_retry())
-                .and_then(Steal::success)
-        })
-    }
-}
-
-struct ThreadQueue<'a, T> {
-    global: &'a Injector<T>,
-    local: Worker<T>,
-    stealers: &'a [Stealer<T>]
-}
-
-impl<'a, T> ThreadQueue<'a, T> {
-    /// based on the example from crossbeam deque
-    fn next_job(&self) -> Option<T> {
-        self.local.pop().or_else(|| {
-            iter::repeat_with(|| {
-                self.global
-                    .steal_batch_and_pop(&self.local)
-                    .or_else(|| self.stealers.iter().map(|s| s.steal()).collect())
-            })
-            .find(|s| !s.is_retry())
-            .and_then(Steal::success)
-        })
-    }
-}
+type DownloadPatchQueue<'a, 'b, I> = DownloadQueue<'b, &'a FilePatchInfo<'a>, I>;
 
 #[derive(Debug)]
 pub struct SophonPatcher {
@@ -701,7 +651,7 @@ impl SophonPatcher {
     /// for either all patches to finish applying or a new retry being pushed onto the queue.
     fn artifact_download_loop<'a, 'b, I: Iterator<Item = &'a FilePatchInfo<'a>> + 'b>(
         &self,
-        mut task_queue: DownloadQueue<'a, 'b, I>,
+        mut task_queue: DownloadPatchQueue<'a, 'b, I>,
         patch_queue: &'b Injector<&'a FilePatchInfo<'a>>,
         update_index: &'b UpdateIndex<'a>,
         updater: impl Fn(Update) + 'b
