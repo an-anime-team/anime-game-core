@@ -127,7 +127,7 @@ impl FilePatchInfo<'_> {
         format!("{}.tmp", &self.file_manifest.AssetHashMd5)
     }
 
-    /// Path to a temporary file to store patchign output to
+    /// Path to a temporary file to store patching output to
     fn tmp_out_filename(&self) -> String {
         format!("{}.tmp.out", &self.file_manifest.AssetHashMd5)
     }
@@ -516,7 +516,6 @@ impl SophonPatcher {
 
             // Patching threads
             for (i, worker_queue) in worker_queues.into_iter().enumerate() {
-                let _span = tracing::debug_span!("Patching thread", id = i).entered();
                 let updater_clone = updater.clone();
                 let thread_queue = ThreadQueue {
                     global: &file_patch_queue,
@@ -526,6 +525,7 @@ impl SophonPatcher {
                 let index_ref = &update_index;
                 let retries_ref = &retries_queue;
                 scope.spawn(move || {
+                    let _span = tracing::debug_span!("Patching thread", thread_id = i).entered();
                     self.file_patch_loop(
                         game_folder,
                         updater_clone,
@@ -538,7 +538,7 @@ impl SophonPatcher {
 
             // Unused file deletion - in main thread
             if let Some(unused) = &update_index.unused {
-                let deleting_unused_span =
+                let _deleting_unused_span =
                     tracing::trace_span!("Deleting unused", amount = unused.Assets.len()).entered();
 
                 // Deleting unused files
@@ -550,7 +550,6 @@ impl SophonPatcher {
                 }
 
                 (updater)(Update::DeletingFinished);
-                deleting_unused_span.exit();
             }
         });
 
@@ -646,7 +645,7 @@ impl SophonPatcher {
     }
 
     /// Loops over the tasks and retries and tries to download them, pushing onto the patch queue
-    /// if the download succeedes. If both the tasks iterator and the retries queue are empty,
+    /// if the download succeedes. If both the tasks iterator and the retries queues return nothing,
     /// checks if they are empty and then checks if there are any unfinished patches and waits
     /// for either all patches to finish applying or a new retry being pushed onto the queue.
     fn artifact_download_loop<'a, 'b, I: Iterator<Item = &'a FilePatchInfo<'a>> + 'b>(
@@ -660,13 +659,15 @@ impl SophonPatcher {
             if let Some(task) = task_queue.next() {
                 // Check if the file already exists on disk and if it does, skip re-downloading it
                 let artifact_path = self.tmp_artifact_file_path(task);
-                if artifact_path.exists() {
-                    tracing::debug!(artifact = ?artifact_path, "Artifact already exists, skipping download");
-                    patch_queue.push(task);
-                    continue;
-                }
 
-                let res = self.download_artifact(task);
+                let res = if artifact_path.exists() {
+                    tracing::debug!(artifact = ?artifact_path, "Artifact already exists, skipping download");
+                    Ok(())
+                }
+                else {
+                    self.download_artifact(task)
+                };
+
                 match res {
                     Ok(()) => {
                         patch_queue.push(task);
@@ -806,7 +807,7 @@ impl SophonPatcher {
                 tracing::error!(
                     error = ?e,
                     file = file_patch_task.file_manifest.AssetName,
-                    "Patching failed",
+                    "Patching failed"
                 );
                 (updater)(Update::PatchingError(e.to_string()));
                 self.cleanup_on_fail(file_patch_task);
@@ -877,7 +878,7 @@ impl SophonPatcher {
             &file_patch_task.file_manifest.AssetHashMd5
         )?;
 
-        // Clean up after patching a bit
+        // Clean up a bit after patching
         let _ = std::fs::remove_file(&tmp_src_path);
         let _ = std::fs::remove_file(&tmp_out_path);
 
@@ -897,9 +898,7 @@ impl SophonPatcher {
                 "File hash check passed, copying into final destination"
             );
             ensure_parent(target)?;
-            if target.exists() {
-                let _ = add_user_write_permission_to_file(target);
-            }
+            add_user_write_permission_to_file(target)?;
             std::fs::copy(file, target)?;
             Ok(())
         }
