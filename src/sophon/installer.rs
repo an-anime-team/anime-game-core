@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Condvar, Mutex, MutexGuard};
@@ -15,9 +15,9 @@ use super::protos::SophonManifest::{
     SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto
 };
 use super::{
-    add_user_write_permission_to_file, api_get_request, check_file, file_md5_hash_str,
-    get_protobuf_from_url, ArtifactDownloadState, DownloadQueue, GameEdition, SophonError,
-    ThreadQueue
+    add_user_write_permission_to_file, api_get_request, check_file, ensure_parent,
+    file_md5_hash_str, get_protobuf_from_url, ArtifactDownloadState, DownloadQueue, GameEdition,
+    SophonError, ThreadQueue
 };
 use crate::prelude::{free_space, prettify_bytes};
 
@@ -359,14 +359,13 @@ impl<'a> DownloadIndex<'a> {
             .lock()
             .expect("Something poisoned the mutex");
         if Self::any_downloading(&guard) {
-            tracing::debug!(
-                "Some artifacts still being downloaded or checked, waiting for updates"
-            );
+            // This message is printed way too often
+            //tracing::debug!("Some artifacts still being downloaded or checked, waiting for updates");
             // unlocks the mutex during wait, see [`Condvar::wait`]
             guard = self
                 .download_states_notifier
                 .wait(guard)
-                .expect("Something poisoned teh mutex");
+                .expect("Something poisoned the mutex");
             Self::any_downloading(&guard)
         }
         else {
@@ -488,7 +487,17 @@ impl SophonInstaller {
         std::thread::scope(|scope| {
             let updater_clone = updater.clone();
             let download_queue = DownloadQueue {
-                tasks_iter: download_index.chunks.values().peekable(),
+                tasks_iter: download_index
+                    .files
+                    .values()
+                    .flat_map(|file_info| file_info.chunks.iter())
+                    .map(|chunk_id| {
+                        download_index
+                            .chunks
+                            .get(chunk_id)
+                            .expect("Missing chunk in index")
+                    })
+                    .peekable(),
                 retries_queue: &retries_queue
             };
             scope.spawn(|| {
@@ -622,6 +631,7 @@ impl SophonInstaller {
                                 }
                             }
                         }
+                        download_index.download_states_notifier.notify_all();
                     }
                     Err(err) => {
                         tracing::error!(
@@ -652,16 +662,13 @@ impl SophonInstaller {
     #[tracing::instrument(level = "trace", ret, skip(self, task), fields(chunk = task.chunk_manifest.ChunkName))]
     fn download_artifact(&self, task: &ChunkInfo) -> Result<(), SophonError> {
         let download_url = task.download_url();
-        let out_filename = self.tmp_artifact_file_path(task);
+        let out_file_path = self.tmp_artifact_file_path(task);
 
-        //let (chunk_size, _) = task.chunk_file_info();
+        let (chunk_size, chunk_hash) = task.chunk_file_info();
 
         let mut resp = self.client.get(download_url).send()?.error_for_status()?;
 
         // In theory, can catch the size mismatch before writing to the disk?
-        // Commented out because I don't think it's necessary and the error case might not help
-        // that much
-        /*
         if let Some(length) = resp.content_length() {
             if length != chunk_size {
                 return Err(SophonError::IoError(format!(
@@ -669,19 +676,25 @@ impl SophonInstaller {
                 )));
             }
         }
-        */
 
-        let mut out_file = BufWriter::new(File::create(out_filename)?);
-        let _written = resp.copy_to(&mut out_file)?;
+        let mut out_file = BufWriter::new(File::create(&out_file_path)?);
+        let written = resp.copy_to(&mut out_file)?;
         out_file.flush()?;
 
-        /*
+        drop(out_file);
+
         if written != chunk_size {
             return Err(SophonError::IoError(format!(
-                "Written data length mistamch, expected {chunk_size}, got {written}"
+                "Written data length mismatch, expected {chunk_size}, got {written}"
             )));
         }
-        */
+
+        if !check_file(&out_file_path, chunk_size, chunk_hash)? {
+            return Err(SophonError::ChunkHashMismatch {
+                expected: chunk_hash.to_owned(),
+                got: file_md5_hash_str(&out_file_path)?
+            });
+        }
 
         Ok(())
     }
@@ -775,22 +788,72 @@ impl SophonInstaller {
             .collect::<Vec<_>>();
         chunks.sort_by_key(|chunk_info| &chunk_info.chunk_manifest.ChunkOnFileOffset);
 
-        let output_file = File::create(tmp_file)?;
+        let output_file = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .read(true)
+            .write(true)
+            .open(tmp_file)?;
         output_file.set_len(task.file_manifest.AssetSize)?;
         let mut output_file = BufWriter::new(output_file);
 
-        for chunk_info in chunks {
-            self.write_chunk_to_file(chunk_info, &mut output_file)?;
+        let mut total_written = 0;
+
+        for chunk_info in &chunks {
+            let chunk_written = self.write_chunk_to_file(chunk_info, &mut output_file)?;
+            total_written += chunk_written;
+            if chunk_written != chunk_info.chunk_manifest.ChunkSizeDecompressed {
+                tracing::error!("Chunk written size mismatch");
+                return Err(SophonError::OutputFileError {
+                    path: tmp_file.to_owned(),
+                    message: "Chunk written size mismatch".to_owned()
+                });
+            }
         }
 
-        output_file.flush()?;
+        if total_written != task.file_manifest.AssetSize {
+            tracing::error!(
+                "Total written size mismatch, expected {}, got {total_written}",
+                task.file_manifest.AssetSize
+            );
+        }
+
+        output_file
+            .flush()
+            .inspect_err(|err| tracing::error!(?err, "flush failed"))?;
+
         drop(output_file);
+
+        let out_len = std::fs::metadata(tmp_file)?.len();
+        if out_len != task.file_manifest.AssetSize {
+            tracing::error!("The final file doesn't have the correct SIZE");
+        }
 
         if !check_file(
             tmp_file,
             task.file_manifest.AssetSize,
             &task.file_manifest.AssetHashMd5
         )? {
+            tracing::error!("The final file doesn't have the correct hash");
+            /*
+            tracing::debug!("Doing deeper analysis");
+
+            let mut file = File::open(tmp_file)?;
+
+            let total_chunks = chunks.len();
+            for (i, chunk) in chunks.into_iter().enumerate() {
+                if !self.check_file_chunk_region(&mut file, chunk)? {
+                    tracing::debug!(
+                        total = total_chunks,
+                        chunk_num = i,
+                        chunk_offset = chunk.chunk_manifest.ChunkOnFileOffset,
+                        chunk_size = chunk.chunk_manifest.ChunkSizeDecompressed,
+                        "File region failed check"
+                    );
+                }
+            }
+            */
+
             return Err(SophonError::FileHashMismatch {
                 path: tmp_file.to_owned(),
                 expected: task.file_manifest.AssetHashMd5.clone(),
@@ -798,19 +861,52 @@ impl SophonInstaller {
             });
         }
 
+        ensure_parent(target_path)?;
         add_user_write_permission_to_file(target_path)?;
+        if !tmp_file.exists() {
+            tracing::error!("TMP FILE LOST?????????");
+        }
         std::fs::copy(tmp_file, target_path)?;
-        std::fs::remove_file(tmp_file)?;
+        let _ = std::fs::remove_file(tmp_file);
 
         Ok(())
     }
 
-    fn write_chunk_to_file<W: Write>(
+    /*
+    fn check_file_chunk_region(
+        &self,
+        file: &mut File,
+        chunk_info: &ChunkInfo
+    ) -> std::io::Result<bool> {
+        let mut hasher = Md5::new();
+        file.seek(std::io::SeekFrom::Start(
+            chunk_info.chunk_manifest.ChunkOnFileOffset
+        ))?;
+        let mut file_portion = (file).take(chunk_info.chunk_manifest.ChunkSizeDecompressed);
+        std::io::copy(&mut file_portion, &mut hasher)?;
+        let computed_hash = format!("{:x}", hasher.finalize());
+        Ok(computed_hash == chunk_info.chunk_manifest.ChunkDecompressedHashMd5)
+    }
+    */
+
+    fn write_chunk_to_file<W: Write + Seek>(
         &self,
         chunk_info: &ChunkInfo,
         dest_file: &mut W
     ) -> std::io::Result<u64> {
         let chunk_path = self.tmp_artifact_file_path(chunk_info);
+        if !check_file(
+            &chunk_path,
+            chunk_info.chunk_manifest.ChunkSize,
+            &chunk_info.chunk_manifest.ChunkCompressedHashMd5
+        )? {
+            return Err(std::io::Error::other(
+                "Chunk hash mismatch when trying to apply"
+            ));
+        }
+        dest_file.seek(std::io::SeekFrom::Start(
+            chunk_info.chunk_manifest.ChunkOnFileOffset
+        ))?;
         if chunk_info.is_compressed() {
             Self::write_artifact_to_file_zstd(dest_file, &chunk_path)
         }
