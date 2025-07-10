@@ -239,11 +239,12 @@ fn check_file(
     expected_size: u64,
     expected_md5: &str
 ) -> std::io::Result<bool> {
-    if !std::fs::exists(&file_path)? {
+    let Ok(fs_metadata) = std::fs::metadata(&file_path)
+    else {
         return Ok(false);
-    }
+    };
 
-    let file_size = std::fs::metadata(&file_path)?.len();
+    let file_size = fs_metadata.len();
 
     if file_size != expected_size {
         return Ok(false);
