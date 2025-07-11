@@ -1,32 +1,32 @@
-use std::collections::{HashMap, HashSet};
-use std::io::{Read, Seek, Take};
+use std::collections::HashMap;
 use std::fs::File;
+use std::io::{BufWriter, Read, Seek, Take, Write};
+use std::iter;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
+use std::sync::{Condvar, Mutex, MutexGuard};
 
-use serde::{Serialize, Deserialize};
+use crossbeam_deque::{Injector, Worker};
 use reqwest::blocking::Client;
+use reqwest::header::RANGE;
+use serde::{Deserialize, Serialize};
 
-use crate::{
-    external::hpatchz,
-    prelude::free_space,
-    sophon::{add_user_write_permission_to_file, bytes_check_md5, check_file},
-    version::Version,
+use super::api_schemas::game_branches::PackageInfo;
+use super::api_schemas::sophon_diff::{SophonDiff, SophonDiffs};
+use super::api_schemas::sophon_manifests::DownloadInfo;
+use super::protos::SophonPatch::{
+    SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetInfo
 };
-
-// I ain't refactoring it.
 use super::{
-    api_post_request, api_schemas::{
-        game_branches::PackageInfo,
-        sophon_diff::{SophonDiff, SophonDiffs},
-    }, file_md5_hash_str, get_protobuf_from_url, md5_hash_str, protos::SophonPatch::{
-        SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetFile
-    }, GameEdition, SophonError
+    add_user_write_permission_to_file, api_post_request, check_file, ensure_parent,
+    file_md5_hash_str, get_protobuf_from_url, ArtifactDownloadState, DownloadQueue, GameEdition,
+    SophonError, ThreadQueue, DEFAULT_CHUNK_RETRIES
 };
+use crate::external::hpatchz;
+use crate::prelude::{free_space, prettify_bytes};
+use crate::version::Version;
 
-fn sophon_patch_info_url(
-    package_info: &PackageInfo,
-    edition: GameEdition
-) -> String {
+fn sophon_patch_info_url(package_info: &PackageInfo, edition: GameEdition) -> String {
     format!(
         "{}/downloader/sophon_chunk/api/getPatchBuild?branch={}&password={}&package_id={}",
         edition.api_host(),
@@ -42,10 +42,7 @@ pub fn get_game_diffs_sophon_info(
     package_info: &PackageInfo,
     edition: GameEdition
 ) -> Result<SophonDiffs, SophonError> {
-    let url = sophon_patch_info_url(
-        package_info,
-        edition
-    );
+    let url = sophon_patch_info_url(package_info, edition);
 
     api_post_request(client, &url)
 }
@@ -60,7 +57,7 @@ pub fn get_patch_manifest(
 
     get_protobuf_from_url(
         client,
-        format!("{}{}/{}", url_prefix, url_suffix, manifest_id),
+        format!("{url_prefix}{url_suffix}/{manifest_id}"),
         diff_info.manifest_download.compression == 1
     )
 }
@@ -73,7 +70,7 @@ pub enum Update {
 
     DeletingProgress {
         deleted_files: u64,
-        total_unused: u64,
+        total_unused: u64
     },
 
     DeletingFinished,
@@ -83,7 +80,7 @@ pub enum Update {
 
     DownloadingProgressBytes {
         downloaded_bytes: u64,
-        total_bytes: u64,
+        total_bytes: u64
     },
 
     DownloadingFinished,
@@ -92,7 +89,7 @@ pub enum Update {
 
     PatchingProgress {
         patched_files: u64,
-        total_files: u64,
+        total_files: u64
     },
 
     PatchingFinished,
@@ -104,6 +101,298 @@ pub enum Update {
 }
 
 #[derive(Debug)]
+struct FilePatchInfo<'a> {
+    file_manifest: &'a SophonPatchAssetProperty,
+    patch_chunk: &'a SophonPatchAssetChunk,
+    patch_chunk_download_info: &'a DownloadInfo
+}
+
+impl FilePatchInfo<'_> {
+    /// Path to a target file on filesystem
+    fn target_file_path(&self, game_dir: impl AsRef<Path>) -> PathBuf {
+        game_dir.as_ref().join(&self.file_manifest.AssetName)
+    }
+
+    fn orig_file_path(&self, game_dir: impl AsRef<Path>) -> Option<PathBuf> {
+        if !self.is_patch() {
+            None
+        }
+        else {
+            Some(game_dir.as_ref().join(&self.patch_chunk.OriginalFileName))
+        }
+    }
+
+    /// Path to temporary file to store before patching or as a result of a copy from patch chunk
+    fn tmp_src_filename(&self) -> String {
+        format!("{}.tmp", &self.file_manifest.AssetHashMd5)
+    }
+
+    /// Path to a temporary file to store patching output to
+    fn tmp_out_filename(&self) -> String {
+        format!("{}.tmp.out", &self.file_manifest.AssetHashMd5)
+    }
+
+    fn chunk_filename(&self) -> String {
+        format!("{}.pchunk", self.patch_chunk.PatchName)
+    }
+
+    /// Get filename for whatever artifact is needed to patch this file.
+    /// it's either an hdiff patch file or a plain blob that needs to be copied as the entire
+    /// contents of the new file.
+    fn artifact_filename(&self) -> String {
+        if self.is_patch() {
+            format!(
+                "{}-{}.hdiff",
+                self.patch_chunk.PatchName, self.file_manifest.AssetHashMd5
+            )
+        }
+        else {
+            format!("{}.bin", self.file_manifest.AssetHashMd5)
+        }
+    }
+
+    /// Returns true if the file is updated by patching.
+    /// Returns false if the file is simply copied from the chunk.
+    const fn is_patch(&self) -> bool {
+        !self.patch_chunk.OriginalFileName.is_empty()
+    }
+
+    /// Value for a Range header for downloading the file
+    fn download_range(&self) -> String {
+        format!(
+            "bytes={}-{}",
+            self.patch_chunk.PatchOffset,
+            self.patch_chunk.PatchOffset + self.patch_chunk.PatchLength - 1
+        )
+    }
+
+    fn download_url(&self) -> String {
+        self.patch_chunk_download_info
+            .download_url(&self.patch_chunk.PatchName)
+    }
+}
+
+#[derive(Debug)]
+struct UpdateIndex<'a> {
+    unused: Option<&'a SophonUnusedAssetInfo>,
+    unused_deleted: AtomicU64,
+    total_bytes: u64,
+    downloaded_bytes: AtomicU64,
+    files_to_patch: HashMap<&'a String, FilePatchInfo<'a>>,
+    files_patched: AtomicU64,
+    download_states: Mutex<HashMap<&'a String, ArtifactDownloadState>>,
+    download_states_notifier: Condvar
+}
+
+impl<'a> UpdateIndex<'a> {
+    fn new(
+        update_manifest: &'a SophonPatchProto,
+        patch_chunk_download_info: &'a DownloadInfo,
+        from: Version
+    ) -> Self {
+        let files_to_patch = update_manifest
+            .PatchAssets
+            .iter()
+            .filter_map(|spap| {
+                Some((
+                    &spap.AssetName,
+                    FilePatchInfo {
+                        file_manifest: spap,
+                        patch_chunk_download_info,
+                        patch_chunk: spap
+                            .AssetPatchChunks
+                            .iter()
+                            .find_map(|(fromver, pchunk)| (*fromver == from).then_some(pchunk))?
+                    }
+                ))
+            })
+            .collect::<HashMap<_, _>>();
+
+        // use hashmap to deduplicate the chunks
+        let mut patch_chunks_map = HashMap::new();
+        for file_info in files_to_patch.values() {
+            if !patch_chunks_map.contains_key(&file_info.patch_chunk.PatchName) {
+                patch_chunks_map.insert(
+                    &file_info.patch_chunk.PatchName,
+                    file_info.patch_chunk.PatchSize
+                );
+            }
+        }
+        let total_bytes = patch_chunks_map.values().sum();
+
+        Self {
+            download_states: Mutex::new(
+                files_to_patch
+                    .keys()
+                    .map(|asset_name| {
+                        (
+                            *asset_name,
+                            ArtifactDownloadState::Downloading(DEFAULT_CHUNK_RETRIES)
+                        )
+                    })
+                    .collect()
+            ),
+            download_states_notifier: Condvar::new(),
+            unused: update_manifest
+                .UnusedAssets
+                .iter()
+                .find_map(|(fromver, unused)| (*fromver == from).then_some(unused)),
+            unused_deleted: AtomicU64::new(0),
+            total_bytes,
+            downloaded_bytes: AtomicU64::new(0),
+            files_to_patch,
+            files_patched: AtomicU64::new(0)
+        }
+    }
+
+    #[inline]
+    fn total_files(&self) -> u64 {
+        self.files_to_patch.len() as u64
+    }
+
+    #[inline]
+    fn total_unused(&self) -> u64 {
+        self.unused.map(|una| una.Assets.len()).unwrap_or(0) as u64
+    }
+
+    #[inline]
+    fn msg_bytes(&self) -> Update {
+        Update::DownloadingProgressBytes {
+            downloaded_bytes: self
+                .downloaded_bytes
+                .load(std::sync::atomic::Ordering::Acquire),
+            total_bytes: self.total_bytes
+        }
+    }
+
+    #[inline]
+    fn msg_patched(&self) -> Update {
+        Update::PatchingProgress {
+            patched_files: self
+                .files_patched
+                .load(std::sync::atomic::Ordering::Acquire),
+            total_files: self.total_files()
+        }
+    }
+
+    #[inline]
+    fn msg_deleted(&self) -> Update {
+        Update::DeletingProgress {
+            deleted_files: self
+                .unused_deleted
+                .load(std::sync::atomic::Ordering::Acquire),
+            total_unused: self.total_unused()
+        }
+    }
+
+    fn count_downloaded(&self, amount: u64) {
+        self.downloaded_bytes
+            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn count_deleted(&self, amount: u64) {
+        self.unused_deleted
+            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn count_patched(&self, amount: u64) {
+        self.files_patched
+            .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Process chunk download failure. Either pushes the chunk onto the retries queue or sends the
+    /// chunk download fail update message using the updater. Refer to [Self::count_chunk_fail] for
+    /// more info.
+    fn process_download_fail<'b>(
+        &self,
+        file: &'a FilePatchInfo<'a>,
+        retries_queue: &'b Injector<&'a FilePatchInfo<'a>>,
+        updater: impl Fn(Update) + 'b
+    ) {
+        match self.count_download_fail(&file.file_manifest.AssetName) {
+            Ok(()) => retries_queue.push(file),
+            Err(msg) => (updater)(msg)
+        }
+    }
+
+    /// A download attempt or check failed, decrement the retry count or report the chunk as
+    /// completely failed.
+    /// The error type is a message to emit in case of a completely faield chunk download.
+    /// If this returns Ok, push the chunk on the retries queue.
+    /// If this returns Err, emit the fail message for this chunk and stop retrying.
+    fn count_download_fail(&self, artifact_name: &'a String) -> Result<(), Update> {
+        let mut states_lock = self
+            .download_states
+            .lock()
+            .expect("Something poisoned the lock");
+        let chunk_state = states_lock
+            .get_mut(artifact_name)
+            .expect("Attempt to count fail of an artifact that was not in the states map");
+        match chunk_state {
+            ArtifactDownloadState::Downloading(0) => {
+                *chunk_state = ArtifactDownloadState::Failed;
+                Err(Update::DownloadingError(SophonError::ChunkDownloadFailed(
+                    artifact_name.clone()
+                )))
+            }
+            ArtifactDownloadState::Downloading(n) => {
+                *n -= 1;
+                Ok(())
+            }
+            _ => {
+                unreachable!(
+                    "The artifact download can't fail after the artifact is already downloaded or failed"
+                )
+            }
+        }
+    }
+
+    fn artifact_success(&self, artifact_name: &'a String) {
+        let mut guard = self
+            .download_states
+            .lock()
+            .expect("Something poisoned the lock");
+        *guard
+            .get_mut(artifact_name)
+            .expect("All artifacts must be added to the state tracker") =
+            ArtifactDownloadState::Downloaded;
+    }
+
+    /// Returns true to continue downloading, false to exit the loop.
+    /// if anything is still downloading, uses the [`Condvar`] to wait until the states are updated
+    /// by patching/checking threads and checks again.
+    fn wait_downloading(&self) -> bool {
+        let mut guard = self
+            .download_states
+            .lock()
+            .expect("Something poisoned the mutex");
+        if Self::any_downloading(&guard) {
+            tracing::debug!(
+                "Some artifacts still being downloaded or checked, waiting for updates"
+            );
+            // unlocks the mutex during wait, see [`Condvar::wait`]
+            guard = self
+                .download_states_notifier
+                .wait(guard)
+                .expect("Something poisoned teh mutex");
+            Self::any_downloading(&guard)
+        }
+        else {
+            tracing::debug!("All artifacts marked as downloaded or failed, breaking the loop");
+            false
+        }
+    }
+
+    fn any_downloading(guard: &MutexGuard<HashMap<&'a String, ArtifactDownloadState>>) -> bool {
+        guard
+            .values()
+            .any(|state| matches!(state, ArtifactDownloadState::Downloading(_)))
+    }
+}
+
+type DownloadPatchQueue<'a, 'b, I> = DownloadQueue<'b, &'a FilePatchInfo<'a>, I>;
+
+#[derive(Debug)]
 pub struct SophonPatcher {
     pub client: Client,
     pub patch_manifest: SophonPatchProto,
@@ -112,68 +401,11 @@ pub struct SophonPatcher {
     pub temp_folder: PathBuf
 }
 
-#[derive(Debug, Clone)]
-struct PatchingStats {
-    total_bytes: u64,
-    downloaded_bytes: u64,
-    total_files: u64,
-    patched_files: u64,
-    total_unused: u64,
-    deleted_files: u64,
-    downloaded_patch_chunks: HashSet<String>
-}
-
-impl PatchingStats {
-    fn new(total_bytes: u64, total_files: u64, total_unused: u64, total_patch_chunks: usize) -> Self {
-        Self {
-            total_bytes,
-            total_files,
-            total_unused,
-            downloaded_bytes: 0,
-            patched_files: 0,
-            deleted_files: 0,
-            downloaded_patch_chunks: HashSet::with_capacity(total_patch_chunks)
-        }
-    }
-
-    #[inline]
-    const fn msg_bytes(&self) -> Update {
-        Update::DownloadingProgressBytes {
-            downloaded_bytes: self.downloaded_bytes,
-            total_bytes: self.total_bytes
-        }
-    }
-
-    #[inline]
-    const fn msg_files(&self) -> Update {
-        Update::PatchingProgress {
-            patched_files: self.patched_files,
-            total_files: self.total_files
-        }
-    }
-
-    #[inline]
-    const fn msg_deleted(&self) -> Update {
-        Update::DeletingProgress {
-            deleted_files: self.deleted_files,
-            total_unused: self.total_unused
-        }
-    }
-
-    fn count_patch_chunk(&mut self, patch_chunk_info: &SophonPatchAssetChunk) {
-        if !self.downloaded_patch_chunks.contains(&patch_chunk_info.PatchName) {
-            self.downloaded_bytes += patch_chunk_info.PatchSize;
-
-            self.downloaded_patch_chunks.insert(patch_chunk_info.PatchName.clone());
-        }
-    }
-}
-
 impl SophonPatcher {
     pub fn new(
         client: Client,
         diff: &SophonDiff,
-        temp_dir: impl AsRef<Path>,
+        temp_dir: impl AsRef<Path>
     ) -> Result<Self, SophonError> {
         Ok(Self {
             patch_manifest: get_patch_manifest(&client, diff)?,
@@ -198,10 +430,511 @@ impl SophonPatcher {
         self
     }
 
+    pub fn update(
+        &self,
+        target_dir: impl AsRef<Path>,
+        from: Version,
+        thread_count: usize,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) -> Result<(), SophonError> {
+        if self.check_free_space {
+            let download_bytes = self
+                .diff_info
+                .stats
+                .get(&from.to_string())
+                .unwrap()
+                .compressed_size
+                .parse()
+                .unwrap();
+
+            Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
+        }
+
+        self.create_temp_dirs()?;
+
+        self.update_multithreaded(thread_count, target_dir, from, updater.clone());
+
+        Ok(())
+    }
+
+    fn update_multithreaded(
+        &self,
+        thread_count: usize,
+        game_folder: impl AsRef<Path>,
+        from: Version,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) {
+        tracing::debug!("Starting multithreaded download and update process");
+
+        let update_index =
+            UpdateIndex::new(&self.patch_manifest, &self.diff_info.diff_download, from);
+        tracing::info!(
+            "{} to download, {} Files to patch, {} Files to delete",
+            prettify_bytes(update_index.total_bytes),
+            update_index.total_files(),
+            update_index.total_unused()
+        );
+
+        (updater)(update_index.msg_deleted());
+        (updater)(update_index.msg_patched());
+        (updater)(update_index.msg_bytes());
+
+        let retries_queue = Injector::<&FilePatchInfo>::new();
+
+        let file_patch_queue = Injector::<&FilePatchInfo>::new();
+
+        let game_folder = game_folder.as_ref();
+
+        let worker_queues = iter::repeat_with(Worker::new_fifo)
+            .take(thread_count)
+            .collect::<Vec<_>>();
+        let stealers = worker_queues
+            .iter()
+            .map(|w| w.stealer())
+            .collect::<Vec<_>>();
+
+        tracing::debug!("Spawning worker threads");
+        // Same as download/install, but the deleted files are going to be deleted in the main
+        // thread.
+        std::thread::scope(|scope| {
+            // downlaoder thread
+            let updater_clone = updater.clone();
+            let download_queue = DownloadQueue {
+                tasks_iter: update_index.files_to_patch.values().peekable(),
+                retries_queue: &retries_queue
+            };
+            scope.spawn(|| {
+                let _span = tracing::trace_span!("Download thread").entered();
+                (updater_clone)(Update::DownloadingStarted(self.temp_folder.clone()));
+                self.artifact_download_loop(
+                    download_queue,
+                    &file_patch_queue,
+                    &update_index,
+                    updater_clone
+                );
+            });
+
+            // Patching threads
+            for (i, worker_queue) in worker_queues.into_iter().enumerate() {
+                let updater_clone = updater.clone();
+                let thread_queue = ThreadQueue {
+                    global: &file_patch_queue,
+                    local: worker_queue,
+                    stealers: &stealers
+                };
+                let index_ref = &update_index;
+                let retries_ref = &retries_queue;
+                scope.spawn(move || {
+                    let _span = tracing::debug_span!("Patching thread", thread_id = i).entered();
+                    self.file_patch_loop(
+                        game_folder,
+                        updater_clone,
+                        index_ref,
+                        retries_ref,
+                        thread_queue
+                    );
+                });
+            }
+
+            // Unused file deletion - in main thread
+            if let Some(unused) = &update_index.unused {
+                let _deleting_unused_span =
+                    tracing::trace_span!("Deleting unused", amount = unused.Assets.len()).entered();
+
+                // Deleting unused files
+                for unused_asset in &unused.Assets {
+                    // Ignore any I/O errors
+                    let _ = std::fs::remove_file(game_folder.join(&unused_asset.FileName));
+                    update_index.count_deleted(1);
+                    (updater)(update_index.msg_deleted());
+                }
+
+                (updater)(Update::DeletingFinished);
+            }
+        });
+
+        (updater)(Update::PatchingFinished);
+    }
+
+    pub fn pre_download(
+        &self,
+        from: Version,
+        thread_count: usize,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) -> Result<(), SophonError> {
+        if self.check_free_space {
+            let download_bytes = self
+                .diff_info
+                .stats
+                .get(&from.to_string())
+                .unwrap()
+                .compressed_size
+                .parse()
+                .unwrap();
+
+            Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
+        }
+
+        self.create_temp_dirs()?;
+
+        self.predownload_multithreaded(thread_count, from, updater.clone());
+
+        Ok(())
+    }
+
+    fn predownload_multithreaded(
+        &self,
+        _thread_count: usize,
+        from: Version,
+        updater: impl Fn(Update) + Clone + Send + 'static
+    ) {
+        tracing::debug!("Starting multithreaded update predownload process");
+
+        let update_index =
+            UpdateIndex::new(&self.patch_manifest, &self.diff_info.diff_download, from);
+        tracing::info!(
+            "{} files to download, {} download total",
+            update_index.files_to_patch.len(),
+            prettify_bytes(update_index.total_bytes)
+        );
+
+        (updater)(update_index.msg_bytes());
+
+        let retries_queue = Injector::<&FilePatchInfo>::new();
+        let patch_queue = Injector::<&FilePatchInfo>::new();
+
+        tracing::debug!("Starting download");
+
+        std::thread::scope(|scope| {
+            let updater_clone = updater.clone();
+            let download_queue = DownloadQueue {
+                tasks_iter: update_index.files_to_patch.values().peekable(),
+                retries_queue: &retries_queue
+            };
+            scope.spawn(|| {
+                let _span = tracing::trace_span!("Download thread").entered();
+                (updater_clone)(Update::DownloadingStarted(self.temp_folder.clone()));
+                self.artifact_download_loop(
+                    download_queue,
+                    &patch_queue,
+                    &update_index,
+                    updater_clone
+                );
+            });
+            // no reason to spawn multiple of this, teh downloader itself is basically
+            // single-threaded too
+            scope.spawn(|| {
+                let _span = tracing::trace_span!("Verification thread").entered();
+                'worker: loop {
+                    if let Some(task) = patch_queue.steal().success() {
+                        // This is predownload, assume the files are downlaoded successfully, no
+                        // checks done other than those in the download handler. The full update
+                        // process will redownload files that are broken.
+                        update_index.artifact_success(&task.file_manifest.AssetName);
+                        update_index.count_downloaded(task.patch_chunk.PatchLength);
+                        update_index.download_states_notifier.notify_all();
+                    }
+                    else if patch_queue.is_empty() && !update_index.wait_downloading() {
+                        break 'worker;
+                    }
+                }
+            });
+        });
+
+        (updater)(Update::DownloadingFinished);
+    }
+
+    /// Loops over the tasks and retries and tries to download them, pushing onto the patch queue
+    /// if the download succeedes. If both the tasks iterator and the retries queues return nothing,
+    /// checks if they are empty and then checks if there are any unfinished patches and waits
+    /// for either all patches to finish applying or a new retry being pushed onto the queue.
+    fn artifact_download_loop<'a, 'b, I: Iterator<Item = &'a FilePatchInfo<'a>> + 'b>(
+        &self,
+        mut task_queue: DownloadPatchQueue<'a, 'b, I>,
+        patch_queue: &'b Injector<&'a FilePatchInfo<'a>>,
+        update_index: &'b UpdateIndex<'a>,
+        updater: impl Fn(Update) + 'b
+    ) {
+        loop {
+            if let Some(task) = task_queue.next() {
+                // Check if the file already exists on disk and if it does, skip re-downloading it
+                let artifact_path = self.tmp_artifact_file_path(task);
+
+                let res = if artifact_path.exists() {
+                    tracing::debug!(artifact = ?artifact_path, "Artifact already exists, skipping download");
+                    Ok(())
+                }
+                else {
+                    self.download_artifact(task)
+                };
+
+                match res {
+                    Ok(()) => {
+                        patch_queue.push(task);
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            patch_name = task.patch_chunk.PatchName,
+                            ?err,
+                            "Failed to download patch",
+                        );
+                        let _ = std::fs::remove_file(&artifact_path);
+                        (updater)(Update::DownloadingError(err));
+                        update_index.process_download_fail(
+                            task,
+                            task_queue.retries_queue,
+                            &updater
+                        );
+                    }
+                }
+                update_index.download_states_notifier.notify_all();
+            }
+            else if task_queue.is_empty() && !update_index.wait_downloading() {
+                break;
+            }
+        }
+        // Wake up any threads that might still be waiting
+        update_index.download_states_notifier.notify_all();
+    }
+
+    // instrumenting to maybe try and see how much time it takes to download, hash check, and apply
+    #[tracing::instrument(level = "trace", ret, skip(self, task), fields(file = task.file_manifest.AssetName, patch_chunk = task.patch_chunk.PatchName))]
+    fn download_artifact(&self, task: &FilePatchInfo) -> Result<(), SophonError> {
+        let download_url = task.download_url();
+        let download_range_val = task.download_range();
+        let out_filename = self.tmp_artifact_file_path(task);
+
+        let mut resp = self
+            .client
+            .get(download_url)
+            .header(RANGE, download_range_val)
+            .send()?
+            .error_for_status()?;
+
+        // Don't have a hash for the patch, can't check it here, check the hash before using
+        // (or just check the resulting file, copy-over will hash mismatch, patching will likely
+        // just fail, less likely succeed and produce wrong file)
+        if let Some(length) = resp.content_length() {
+            if length != task.patch_chunk.PatchLength {
+                return Err(SophonError::IoError(format!(
+                    "Content length mismatch: expected {}, got {length}",
+                    task.patch_chunk.PatchLength
+                )));
+            }
+        }
+
+        let mut out_file = BufWriter::new(File::create(out_filename)?);
+        let written = resp.copy_to(&mut out_file)?;
+        out_file.flush()?;
+
+        if written != task.patch_chunk.PatchLength {
+            return Err(SophonError::IoError(format!(
+                "Written data length mistamch, expected {}, got {written}",
+                task.patch_chunk.PatchLength
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn file_patch_loop<'a, 'b>(
+        &self,
+        game_folder: &'b Path,
+        updater: impl Fn(Update) + 'b,
+        update_index: &'b UpdateIndex<'a>,
+        retries_queue: &'b Injector<&'a FilePatchInfo<'a>>,
+        queue: ThreadQueue<'b, &'a FilePatchInfo<'a>>
+    ) {
+        let mut do_this_task_last = None;
+        loop {
+            if let Some(task) = queue.next_job() {
+                if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
+                    do_this_task_last = Some(task);
+                    continue;
+                }
+                self.file_patch_handler(task, update_index, game_folder, retries_queue, &updater);
+            }
+            else if !update_index.wait_downloading() {
+                break;
+            }
+        }
+        if let Some(last_task) = do_this_task_last {
+            self.file_patch_handler(last_task, update_index, game_folder, retries_queue, updater);
+        }
+    }
+
+    fn file_patch_handler<'a, 'b>(
+        &self,
+        file_patch_task: &'a FilePatchInfo<'a>,
+        update_index: &'b UpdateIndex<'a>,
+        game_folder: &'b Path,
+        retries_queue: &'b Injector<&'a FilePatchInfo<'a>>,
+        updater: impl Fn(Update) + 'b
+    ) {
+        let res = {
+            let target_path = file_patch_task.target_file_path(game_folder);
+
+            if let Ok(true) = check_file(
+                &target_path,
+                file_patch_task.file_manifest.AssetSize,
+                &file_patch_task.file_manifest.AssetHashMd5
+            ) {
+                tracing::debug!(file = ?target_path, "File appears to be already patched, marking as success");
+                Ok(())
+            }
+            else if let Some(orig_file_path) = file_patch_task.orig_file_path(game_folder) {
+                self.file_patch(&orig_file_path, file_patch_task, game_folder)
+            }
+            else {
+                self.file_copy_over(file_patch_task, game_folder)
+            }
+        };
+
+        match res {
+            Ok(()) => {
+                tracing::debug!(
+                    "Successfully patched `{}`",
+                    file_patch_task.file_manifest.AssetName
+                );
+                update_index.artifact_success(&file_patch_task.file_manifest.AssetName);
+                update_index.download_states_notifier.notify_all();
+                update_index.count_patched(1);
+                update_index.count_downloaded(file_patch_task.patch_chunk.PatchLength);
+                (updater)(update_index.msg_patched());
+                (updater)(update_index.msg_bytes());
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = ?e,
+                    file = file_patch_task.file_manifest.AssetName,
+                    "Patching failed"
+                );
+                (updater)(Update::PatchingError(e.to_string()));
+                self.cleanup_on_fail(file_patch_task);
+                update_index.process_download_fail(file_patch_task, retries_queue, updater);
+                update_index.download_states_notifier.notify_all();
+            }
+        }
+    }
+
+    fn file_copy_over(
+        &self,
+        file_patch_task: &FilePatchInfo,
+        game_folder: &Path
+    ) -> Result<(), SophonError> {
+        let target_path = file_patch_task.target_file_path(game_folder);
+        if let Ok(true) = check_file(
+            &target_path,
+            file_patch_task.file_manifest.AssetSize,
+            &file_patch_task.file_manifest.AssetHashMd5
+        ) {
+            tracing::debug!(file = ?target_path, "File appears to be already patched, marking as success");
+            return Ok(());
+        }
+        let artifact_path = self.tmp_artifact_file_path(file_patch_task);
+        Self::finalize_patch(
+            &artifact_path,
+            &target_path,
+            file_patch_task.file_manifest.AssetSize,
+            &file_patch_task.file_manifest.AssetHashMd5
+        )
+    }
+
+    fn file_patch(
+        &self,
+        orig_file_path: &Path,
+        file_patch_task: &FilePatchInfo,
+        game_folder: &Path
+    ) -> Result<(), SophonError> {
+        if !check_file(
+            orig_file_path,
+            file_patch_task.patch_chunk.OriginalFileLength,
+            &file_patch_task.patch_chunk.OriginalFileMd5
+        )? {
+            // A better way would be to mark the download as failed right away instead of having
+            // this repeat all the retries. But it's easier to handle this rare faulty edge case
+            // this way.
+            tracing::error!(file = ?orig_file_path, "Original file doesn't pass hash check, cannot patch file");
+            return Err(SophonError::FileHashMismatch {
+                path: orig_file_path.to_owned(),
+                expected: file_patch_task.patch_chunk.OriginalFileMd5.clone(),
+                got: file_md5_hash_str(orig_file_path)?
+            });
+        }
+
+        let tmp_src_path = self.tmp_src_file_path(file_patch_task);
+        let tmp_out_path = self.tmp_out_file_path(file_patch_task);
+        let artifact = self.tmp_artifact_file_path(file_patch_task);
+
+        std::fs::copy(orig_file_path, &tmp_src_path)?;
+
+        hpatchz::patch(&tmp_src_path, &artifact, &tmp_out_path)?;
+
+        let target = file_patch_task.target_file_path(game_folder);
+        Self::finalize_patch(
+            &tmp_out_path,
+            &target,
+            file_patch_task.file_manifest.AssetSize,
+            &file_patch_task.file_manifest.AssetHashMd5
+        )?;
+
+        // Clean up a bit after patching
+        let _ = std::fs::remove_file(&tmp_src_path);
+        let _ = std::fs::remove_file(&tmp_out_path);
+
+        Ok(())
+    }
+
+    fn finalize_patch(
+        file: &Path,
+        target: &Path,
+        size: u64,
+        hash: &str
+    ) -> Result<(), SophonError> {
+        if check_file(file, size, hash)? {
+            tracing::debug!(
+                result = ?file,
+                destination = ?target,
+                "File hash check passed, copying into final destination"
+            );
+            ensure_parent(target)?;
+            add_user_write_permission_to_file(target)?;
+            std::fs::copy(file, target)?;
+            Ok(())
+        }
+        else {
+            Err(SophonError::FileHashMismatch {
+                path: file.to_owned(),
+                expected: hash.to_owned(),
+                got: file_md5_hash_str(file)?
+            })
+        }
+    }
+
+    /// Remove all the files that might have been created. Temporary files, downloads, etc to
+    /// prepare for a clean re-downlaod of the artifact and attempting to patch again
+    fn cleanup_on_fail(&self, file_info: &FilePatchInfo) {
+        let tmp_src = self.tmp_src_file_path(file_info);
+        let tmp_out = self.tmp_out_file_path(file_info);
+        let artifact = self.tmp_artifact_file_path(file_info);
+        for path in [tmp_src, tmp_out, artifact] {
+            // Ignore errors (missing file, permissions, etc)
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
     /// Folder to temporarily store files being updated (patched, created, etc).
     #[inline]
     pub fn files_temp(&self) -> PathBuf {
         self.temp_folder.join("updating")
+    }
+
+    fn tmp_src_file_path(&self, file_info: &FilePatchInfo) -> PathBuf {
+        self.files_temp().join(file_info.tmp_src_filename())
+    }
+
+    fn tmp_out_file_path(&self, file_info: &FilePatchInfo) -> PathBuf {
+        self.files_temp().join(file_info.tmp_out_filename())
     }
 
     /// Folder to temporarily store hdiff files
@@ -210,10 +943,19 @@ impl SophonPatcher {
         self.files_temp().join("patches")
     }
 
+    fn tmp_artifact_file_path(&self, file_info: &FilePatchInfo) -> PathBuf {
+        self.patches_temp().join(file_info.artifact_filename())
+    }
+
     /// Folder to temporarily store downloaded patch chunks
     #[inline]
     fn patch_chunk_temp_folder(&self) -> PathBuf {
         self.files_temp().join("patch_chunks")
+    }
+
+    fn tmp_patch_chunk_file_path(&self, file_info: &FilePatchInfo) -> PathBuf {
+        self.patch_chunk_temp_folder()
+            .join(file_info.chunk_filename())
     }
 
     /// Create all needed sub-directories in the temp folder
@@ -256,451 +998,6 @@ impl SophonPatcher {
             }
         }
     }
-
-    pub fn pre_download(
-        &self,
-        from: Version,
-        updater: impl Fn(Update) + Clone + Send + 'static
-    ) -> Result<(), SophonError> {
-        // deduplicated list of all patch chunks. Important because a lot of files share patch
-        // chunks, using only a portion of the file.
-        let patch_chunks: HashMap<&String, &SophonPatchAssetChunk> = self.patch_manifest.PatchAssets.iter()
-            .flat_map(|patch_asset| {
-                patch_asset.AssetPatchChunks.iter()
-                    .filter_map(|(tag, patch_chunk)| {
-                        (*tag == from).then_some((&patch_chunk.PatchName, patch_chunk))
-                    })
-            })
-            .collect();
-
-        let total_bytes = patch_chunks.values()
-            .map(|patch_chunk| patch_chunk.PatchSize)
-            .sum();
-
-        let mut progress = PatchingStats::new(total_bytes, 0, 0, patch_chunks.values().count());
-
-        if self.check_free_space {
-            let download_bytes = self.diff_info.stats.get(&from.to_string()).unwrap()
-                .compressed_size.parse().unwrap();
-
-            Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
-        }
-
-        self.create_temp_dirs()?;
-
-        (updater)(Update::DownloadingStarted(self.temp_folder.clone()));
-
-        (updater)(progress.msg_bytes());
-
-        for (_name, patch_chunk) in patch_chunks {
-            if let Err(err) = self.download_patch_chunk(patch_chunk, &mut progress, updater.clone()) {
-                (updater)(Update::DownloadingError(err));
-            }
-        }
-
-        (updater)(Update::DownloadingFinished);
-
-        Ok(())
-    }
-
-    pub fn sophon_apply_patches(
-        &self,
-        target_dir: impl AsRef<Path>,
-        from: Version,
-        updater: impl Fn(Update) + Clone + Send + 'static
-    ) -> Result<(), SophonError> {
-        let unused_assets_for_ver = self.patch_manifest.UnusedAssets.iter()
-            .find(|(version, _unused_asset)| **version == from);
-
-        let patch_chunks: HashMap<&String, &SophonPatchAssetChunk> = self.patch_manifest.PatchAssets.iter()
-            .flat_map(|patch_asset| {
-                patch_asset.AssetPatchChunks.iter()
-                    .filter_map(|(tag, patch_chunk)| {
-                        (*tag == from).then_some((&patch_chunk.PatchName, patch_chunk))
-                    })
-            })
-            .collect();
-
-        let total_bytes = patch_chunks.values()
-            .map(|patch_chunk| patch_chunk.PatchSize)
-            .sum();
-
-        let total_files = self.patch_manifest.PatchAssets.len() as u64;
-
-        let total_unused = unused_assets_for_ver.map(|(_, assets_info)| assets_info.Assets.len() as u64);
-
-        let mut progress = PatchingStats::new(total_bytes, total_files, total_unused.unwrap_or(0), patch_chunks.values().count());
-
-        if self.check_free_space {
-            let download_bytes = self.diff_info.stats.get(&from.to_string()).unwrap()
-                .compressed_size.parse().unwrap();
-
-            Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
-        }
-
-        self.create_temp_dirs()?;
-
-        (updater)(Update::DeletingStarted);
-        (updater)(progress.msg_deleted());
-
-        if let Some((_unused_ver, unused_assets)) = unused_assets_for_ver {
-            let result = self.remove_unused_files(
-                &unused_assets.Assets,
-                &target_dir,
-                &mut progress,
-                updater.clone()
-            );
-
-            if let Err(err) = result {
-                (updater)(Update::DownloadingError(err));
-            }
-        }
-
-        (updater)(Update::DeletingFinished);
-
-        (updater)(Update::DownloadingStarted(target_dir.as_ref().to_owned()));
-        (updater)(progress.msg_bytes());
-
-        for (_name, patch_chunk) in patch_chunks {
-            if let Err(err) = self.download_patch_chunk(patch_chunk, &mut progress, updater.clone()) {
-                (updater)(Update::DownloadingError(err));
-            }
-        }
-
-        (updater)(Update::DownloadingFinished);
-
-        (updater)(Update::PatchingStarted);
-        (updater)(progress.msg_files());
-
-        for file_patch_info in &self.patch_manifest.PatchAssets {
-            if file_patch_info.AssetName.ends_with("globalgamemanagers") {
-                continue;
-            }
-
-            self.patch_file_updater_handler(
-                file_patch_info,
-                &target_dir,
-                from,
-                &mut progress,
-                updater.clone()
-            );
-        }
-
-        if let Some(file_patch_info) = self.patch_manifest.PatchAssets.iter().find(|passet| passet.AssetName.ends_with("globalgamemanagers")) {
-            self.patch_file_updater_handler(
-                file_patch_info,
-                target_dir,
-                from,
-                &mut progress,
-                updater.clone()
-            );
-        }
-
-        (updater)(Update::PatchingFinished);
-
-        Ok(())
-    }
-
-    fn patch_file_updater_handler(
-        &self,
-        file_patch_info: &SophonPatchAssetProperty,
-        target_dir: impl AsRef<Path>,
-        installed_ver: Version,
-        progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Clone + Send + 'static
-    ) {
-        let result = self.sophon_patch_file(
-            file_patch_info,
-            &target_dir,
-            installed_ver,
-            progress,
-            updater.clone()
-        );
-
-        if let Err(err) = result {
-            tracing::error!("Error {err:?} with `{}`", file_patch_info.AssetName);
-
-            (updater)(Update::DownloadingError(err));
-
-            tracing::trace!("the asset patching info: {file_patch_info:?}");
-        }
-
-        else {
-            progress.patched_files += 1;
-
-            (updater)(progress.msg_files());
-        }
-    }
-
-    fn sophon_patch_file(
-        &self,
-        patch_info: &SophonPatchAssetProperty,
-        target_dir: impl AsRef<Path>,
-        installed_ver: Version,
-        progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Clone + Send + 'static
-    ) -> Result<(), SophonError> {
-        tracing::trace!("Handling file {}", patch_info.AssetName);
-
-        let target_file_path = target_dir.as_ref().join(&patch_info.AssetName);
-        let asset_info = patch_info.AssetPatchChunks.get(&installed_ver.to_string());
-
-        if let Some(patch_chunk) = asset_info {
-            if patch_chunk.OriginalFileName.is_empty() {
-                tracing::trace!("Copying new file `{}`", patch_info.AssetName);
-
-                self.copy_over_file(
-                    target_file_path,
-                    patch_chunk,
-                    patch_info.AssetSize,
-                    &patch_info.AssetHashMd5,
-                    progress,
-                    updater.clone()
-                )?;
-            }
-
-            else {
-                let source_file_path = target_dir.as_ref().join(&patch_chunk.OriginalFileName);
-
-                if source_file_path == target_file_path {
-                    tracing::trace!("Patching `{}`", target_file_path.display());
-                }
-
-                else {
-                    tracing::trace!(
-                        "Patching `{}` => `{}`",
-                        source_file_path.display(),
-                        target_file_path.display()
-                    )
-                }
-
-                self.actually_patch_file(
-                    target_file_path,
-                    source_file_path,
-                    patch_info,
-                    patch_chunk,
-                    progress,
-                    updater.clone()
-                )?;
-            }
-        }
-
-        else {
-            tracing::trace!("Just checking file `{}`", target_file_path.display());
-            let valid_file = check_file(
-                &target_file_path,
-                patch_info.AssetSize,
-                &patch_info.AssetHashMd5
-            )?;
-
-            if !valid_file {
-                (updater)(Update::FileHashCheckFailed(target_file_path));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn actually_patch_file(
-        &self,
-        to: impl AsRef<Path>,
-        from: impl AsRef<Path>,
-        asset_info: &SophonPatchAssetProperty,
-        patch_chunk: &SophonPatchAssetChunk,
-        progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Clone + Send + 'static
-    ) -> Result<(), SophonError> {
-        let valid_file = check_file(
-            &from,
-            patch_chunk.OriginalFileLength,
-            &patch_chunk.OriginalFileMd5,
-        )?;
-
-        if !valid_file {
-            (updater)(Update::FileHashCheckFailed(from.as_ref().to_owned()));
-        }
-
-        let patch_chunk_file = self.download_patch_chunk(patch_chunk, progress, updater.clone())?;
-
-        let patch_path_tmp = self.patches_temp().join(
-            format!("{}-{}.hdiff",patch_chunk.OriginalFileMd5, asset_info.AssetHashMd5)
-        );
-
-        extract_patch_chunk_region_to_file(patch_chunk_file, &patch_path_tmp, patch_chunk)?;
-
-        let tmp_out_file_path = self.files_temp()
-            .join(format!("{}.tmp", &asset_info.AssetHashMd5));
-
-        if let Err(err) = hpatchz::patch(from.as_ref(), &patch_path_tmp, &tmp_out_file_path) {
-            (updater)(Update::PatchingError(err.to_string()));
-
-            return Ok(());
-        }
-
-        tracing::trace!("Checking post-patch");
-
-        let valid_file = check_file(
-            &tmp_out_file_path,
-            asset_info.AssetSize,
-            &asset_info.AssetHashMd5
-        )?;
-
-        if !valid_file {
-            (updater)(Update::FileHashCheckFailed(tmp_out_file_path.clone()));
-
-            let file_hash = file_md5_hash_str(&tmp_out_file_path)?;
-
-            return Err(SophonError::FileHashMismatch {
-                path: tmp_out_file_path,
-                expected: asset_info.AssetHashMd5.clone(),
-                got: file_hash
-            });
-        }
-
-        // Delete original if patching is also a move
-        if asset_info.AssetName != patch_chunk.OriginalFileName {
-            tracing::trace!("Pactching is a move, deleting original");
-
-            std::fs::remove_file(from)?;
-        }
-
-        tracing::trace!("Tweaking permissions for copy");
-
-        add_user_write_permission_to_file(&to)?;
-
-        tracing::trace!("Copying `{tmp_out_file_path:?}` to `{:?}`", to.as_ref());
-
-        std::fs::copy(&tmp_out_file_path, &to)?;
-
-        // tmp file was checked, doesn't need to be checked after copy
-        tracing::trace!("Removing tmp output {tmp_out_file_path:?}");
-
-        std::fs::remove_file(&tmp_out_file_path)?;
-
-        tracing::trace!("Removing tmp patch {patch_path_tmp:?}");
-
-        std::fs::remove_file(&patch_path_tmp)?;
-
-        Ok(())
-    }
-
-    fn copy_over_file(
-        &self,
-        out_file_path: impl AsRef<Path>,
-        patch_chunk: &SophonPatchAssetChunk,
-        expected_size: u64,
-        expected_md5: &str,
-        progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Clone + Send + 'static
-    ) -> Result<(), SophonError> {
-        let patch_chunk_path = self.download_patch_chunk(patch_chunk, progress, updater.clone())?;
-
-        let tmp_file_path = self.files_temp().join(format!("{}.tmp", expected_md5));
-
-        extract_patch_chunk_region_to_file(&patch_chunk_path, &tmp_file_path, patch_chunk)?;
-
-        if !check_file(&tmp_file_path, expected_size, expected_md5)? {
-            (updater)(Update::FileHashCheckFailed(tmp_file_path.clone()));
-
-            let file_hash = file_md5_hash_str(&tmp_file_path)?;
-
-            Err(SophonError::FileHashMismatch {
-                path: tmp_file_path,
-                expected: expected_md5.to_owned(),
-                got: file_hash
-            })
-        }
-
-        else {
-            std::fs::copy(&tmp_file_path, &out_file_path)?;
-            std::fs::remove_file(tmp_file_path)?;
-
-            Ok(())
-        }
-    }
-
-    fn remove_unused_files(
-        &self,
-        unused_assets: &[SophonUnusedAssetFile],
-        target_dir: impl AsRef<Path>,
-        progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Send + 'static
-    ) -> Result<(), SophonError> {
-        for unused in unused_assets {
-            tracing::trace!("Unused file `{}`", &unused.FileName);
-
-            let file_path = target_dir.as_ref().join(&unused.FileName);
-
-            if check_file(&file_path, unused.FileSize, &unused.FileMd5)? && std::fs::exists(&file_path)? {
-                let _ = std::fs::remove_file(file_path);
-            }
-
-            progress.deleted_files += 1;
-
-            (updater)(progress.msg_deleted());
-        }
-
-        Ok(())
-    }
-
-    #[inline]
-    fn patch_chunk_download_url(&self, patch_chunk_id: &str) -> String {
-        format!("{}{}/{patch_chunk_id}",self.diff_info.diff_download.url_prefix, self.diff_info.diff_download.url_suffix)
-    }
-
-    // Assumes patch chunks are not compressed, ignores the `compression` field.
-    // As such, no split is needed. Just download the patch.
-    // Checks teh temp dir for an already downloaded patch chunk and returns that path if it passes
-    // the checks.
-    fn download_patch_chunk(
-        &self,
-        patch_chunk_info: &SophonPatchAssetChunk,
-        progress: &mut PatchingStats,
-        updater: impl Fn(Update) + Send + 'static,
-    ) -> Result<PathBuf, SophonError> {
-        let patch_path = self.patch_chunk_temp_folder().join(format!("{}.patch_chunk", patch_chunk_info.PatchName));
-
-        let valid_file = check_file(
-            &patch_path,
-            patch_chunk_info.PatchSize,
-            &patch_chunk_info.PatchMd5,
-        )?;
-
-        if valid_file {
-            progress.count_patch_chunk(patch_chunk_info);
-
-            (updater)(progress.msg_bytes());
-
-            Ok(patch_path)
-        }
-
-        else {
-            let patch_chunk_url = self.patch_chunk_download_url(&patch_chunk_info.PatchName);
-
-            let response = self.client.get(&patch_chunk_url)
-                .send()?
-                .error_for_status()?;
-
-            let patch_chunk_bytes = response.bytes()?;
-
-            if patch_chunk_bytes.len() as u64 == patch_chunk_info.PatchSize && bytes_check_md5(&patch_chunk_bytes, &patch_chunk_info.PatchMd5) {
-                std::fs::write(&patch_path, &patch_chunk_bytes)?;
-
-                progress.count_patch_chunk(patch_chunk_info);
-
-                (updater)(progress.msg_bytes());
-
-                Ok(patch_path)
-            }
-
-            else {
-                Err(SophonError::ChunkHashMismatch {
-                    expected: patch_chunk_info.PatchMd5.clone(),
-                    got: md5_hash_str(&patch_chunk_bytes),
-                })
-            }
-        }
-    }
 }
 
 fn extract_patch_chunk_region(
@@ -723,7 +1020,7 @@ fn extract_patch_chunk_region_to_file(
     let mut patch_data = extract_patch_chunk_region(
         patch_chunk_file,
         patch_chunk.PatchOffset,
-        patch_chunk.PatchLength,
+        patch_chunk.PatchLength
     )?;
 
     let mut patch_file = File::create(out_path)?;
