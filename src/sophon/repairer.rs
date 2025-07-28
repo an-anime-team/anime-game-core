@@ -14,8 +14,8 @@ use super::protos::SophonManifest::{
     SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto
 };
 use super::{
-    bytes_check_md5, check_file, ensure_parent, file_md5_hash_str, file_region_hash_md5,
-    md5_hash_str, SophonError
+    SophonError, bytes_check_md5, check_file, ensure_parent, file_md5_hash_str,
+    file_region_hash_md5, md5_hash_str
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,7 +168,10 @@ impl SophonRepairer {
 
         let total = all_files.len() as u64;
 
-        (updater)(Update::VerifyingProgress { total, checked: 0 });
+        (updater)(Update::VerifyingProgress {
+            total,
+            checked: 0
+        });
 
         let files_to_check_pool = Mutex::new(all_files);
         let verified_atomic = AtomicU64::new(0);
@@ -186,48 +189,50 @@ impl SophonRepairer {
                 let sender_clone = sender.clone();
                 let updater_clone = updater.clone();
 
-                scope.spawn(move || 'check: loop {
-                    let (download_info, next_file) = {
-                        let mut pool_lock = pool
-                            .lock()
-                            .expect("failed to lock files repairing pool mutex");
+                scope.spawn(move || {
+                    'check: loop {
+                        let (download_info, next_file) = {
+                            let mut pool_lock = pool
+                                .lock()
+                                .expect("failed to lock files repairing pool mutex");
 
-                        let Some(next) = pool_lock.pop()
-                        else {
-                            break 'check;
+                            let Some(next) = pool_lock.pop()
+                            else {
+                                break 'check;
+                            };
+
+                            next
                         };
 
-                        next
-                    };
+                        tracing::trace!(file_name = next_file.AssetName, "Checking file");
 
-                    tracing::trace!(file_name = next_file.AssetName, "Checking file");
+                        let result = check_file(
+                            game_dir.join(&next_file.AssetName),
+                            next_file.AssetSize,
+                            &next_file.AssetHashMd5
+                        );
 
-                    let result = check_file(
-                        game_dir.join(&next_file.AssetName),
-                        next_file.AssetSize,
-                        &next_file.AssetHashMd5
-                    );
+                        match result {
+                            Err(err) => tracing::error!(
+                                ?err,
+                                file_name = next_file.AssetName,
+                                "Failed to check file"
+                            ),
 
-                    match result {
-                        Err(err) => tracing::error!(
-                            ?err,
-                            file_name = next_file.AssetName,
-                            "Failed to check file"
-                        ),
+                            Ok(false) => {
+                                let _ = sender_clone.send((download_info, next_file));
+                            }
 
-                        Ok(false) => {
-                            let _ = sender_clone.send((download_info, next_file));
-                        }
+                            Ok(true) => ()
+                        };
 
-                        Ok(true) => ()
-                    };
+                        tracing::trace!(file_name = next_file.AssetName, "Check completed");
 
-                    tracing::trace!(file_name = next_file.AssetName, "Check completed");
-
-                    (updater_clone)(Update::VerifyingProgress {
-                        total,
-                        checked: verified.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
-                    });
+                        (updater_clone)(Update::VerifyingProgress {
+                            total,
+                            checked: verified.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+                        });
+                    }
                 });
             }
 
@@ -319,9 +324,10 @@ impl SophonRepairer {
 
             file.write_all_at(&buf, chunk_info.ChunkOnFileOffset)?;
 
-            // Chunks downloaded with compression, and the compressed version si likely cached on
-            // disk. An uncompressed version just been used, remove it to not duplicate.
-            // If the chunk was downlaoded uncompressed - don't remove it
+            // Chunks downloaded with compression, and the compressed version si likely
+            // cached on disk. An uncompressed version just been used, remove it
+            // to not duplicate. If the chunk was downlaoded uncompressed -
+            // don't remove it
             if download_info.compression == 1 {
                 let uncompressed_chunk_path = self
                     .chunk_temp_folder()
@@ -366,11 +372,11 @@ impl SophonRepairer {
         }
     }
 
-    /// Download the chunk is the raw-est state and save to the temp folder, returning the
-    /// path is is saved at. If the chunk is compressed, it is saved as `ChunkName.chunk.zstd`,
-    /// otehrwise it's saved without `.zstd` file extension.
-    /// If the chunk file already exists, checks it and returns the path to it if length and hash
-    /// match.
+    /// Download the chunk is the raw-est state and save to the temp folder,
+    /// returning the path is is saved at. If the chunk is compressed, it is
+    /// saved as `ChunkName.chunk.zstd`, otehrwise it's saved without
+    /// `.zstd` file extension. If the chunk file already exists, checks it
+    /// and returns the path to it if length and hash match.
     fn download_chunk_raw(
         &self,
         download_info: &DownloadInfo,
@@ -417,10 +423,11 @@ impl SophonRepairer {
         }
     }
 
-    /// Download the chunk and if it is compressed, decompress it. If a compressed chunk is
-    /// downloaded already, it checks that file and uses it to produce a decompressed chunk.
-    /// If a decompressed chunk already exists, checks it and returns its File without
-    /// redownloading on successfull check.
+    /// Download the chunk and if it is compressed, decompress it. If a
+    /// compressed chunk is downloaded already, it checks that file and uses
+    /// it to produce a decompressed chunk. If a decompressed chunk already
+    /// exists, checks it and returns its File without redownloading on
+    /// successfull check.
     fn download_chunk_uncompressed(
         &self,
         download_info: &DownloadInfo,
