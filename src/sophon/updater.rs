@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::iter;
@@ -370,11 +371,13 @@ impl<'a> UpdateIndex<'a> {
 
         tracing::debug!("Some artifacts still being downloaded or checked, waiting for updates");
 
-        // unlocks the mutex during wait, see [`Condvar::wait`]
+        // unlocks the mutex during wait, see [`Condvar::wait_timeout`]
+        // timeout 10s
         guard = self
             .download_states_notifier
-            .wait(guard)
-            .expect("Something poisoned teh mutex");
+            .wait_timeout(guard, Duration::from_secs(10))
+            .expect("Something poisoned the mutex")
+            .0;
 
         Self::any_downloading(&guard)
     }
@@ -636,7 +639,9 @@ impl SophonPatcher {
 
             // no reason to spawn multiple of this, teh downloader itself is
             // basically single-threaded too
+            let updater_clone = updater.clone();
             scope.spawn(|| {
+                let local_updater = updater_clone;
                 let _span = tracing::trace_span!("Verification thread").entered();
 
                 'worker: loop {
@@ -646,6 +651,7 @@ impl SophonPatcher {
                         // process will redownload files that are broken.
                         update_index.artifact_success(&task.file_manifest.AssetName);
                         update_index.count_downloaded(task.patch_chunk.PatchLength);
+                        (local_updater)(update_index.msg_bytes());
 
                         update_index.download_states_notifier.notify_all();
                     }
@@ -653,6 +659,8 @@ impl SophonPatcher {
                         break 'worker;
                     }
                 }
+
+                update_index.download_states_notifier.notify_all();
             });
         });
 

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, Write};
 use std::path::{Path, PathBuf};
@@ -324,14 +325,13 @@ impl<'a> DownloadIndex<'a> {
             .lock()
             .expect("Something poisoned the mutex");
         if Self::any_downloading(&guard) {
-            // This message is printed way too often
-            // tracing::debug!("Some artifacts still being downloaded or checked, waiting
-            // for updates"); unlocks the mutex during wait, see
-            // [`Condvar::wait`]
+            // unlocks the mutex during wait, see [`Condvar::wait_timeout`]
+            // timeout 10s
             guard = self
                 .download_states_notifier
-                .wait(guard)
-                .expect("Something poisoned the mutex");
+                .wait_timeout(guard, Duration::from_secs(10))
+                .expect("Something poisoned the mutex")
+                .0;
             Self::any_downloading(&guard)
         }
         else {
