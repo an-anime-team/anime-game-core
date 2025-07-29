@@ -509,6 +509,9 @@ impl SophonInstaller {
 
         self.predownload_multithreaded(thread_count, updater);
 
+        let marker_file_path = self.downloading_temp().join(".predownloadcomplete");
+        File::create(marker_file_path)?;
+
         Ok(())
     }
 
@@ -896,7 +899,8 @@ impl SophonInstaller {
     /// Folder to temporarily store files being downloaded
     #[inline]
     pub fn downloading_temp(&self) -> PathBuf {
-        self.temp_folder.join("downloading")
+        self.temp_folder
+            .join(format!("downloading-{}", self.download_info.matching_field))
     }
 
     fn tmp_downloading_file_path(&self, file_info: &FileInfo) -> PathBuf {

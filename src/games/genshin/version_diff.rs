@@ -398,6 +398,35 @@ impl VersionDiff {
 
         Ok(())
     }
+
+    /// Get the matching field value for this diff. Returns none in case of
+    /// [`VersionDiff::Latest`] or [`VersionDiff::Outdated`]
+    pub fn matching_field(&self) -> Option<&str> {
+        match self {
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
+            Self::Predownload {
+                download_info, ..
+            } => match download_info {
+                DownloadOrDiff::Patch(SophonDiff {
+                    matching_field, ..
+                })
+                | DownloadOrDiff::Download(SophonDownloadInfo {
+                    matching_field, ..
+                }) => Some(matching_field)
+            },
+            Self::Diff {
+                diff, ..
+            } => Some(&diff.matching_field),
+            Self::NotInstalled {
+                download_info, ..
+            } => Some(&download_info.matching_field)
+        }
+    }
 }
 
 impl VersionDiffExt for VersionDiff {

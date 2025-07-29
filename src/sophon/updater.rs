@@ -369,8 +369,6 @@ impl<'a> UpdateIndex<'a> {
             return false;
         }
 
-        tracing::debug!("Some artifacts still being downloaded or checked, waiting for updates");
-
         // unlocks the mutex during wait, see [`Condvar::wait_timeout`]
         // timeout 10s
         guard = self
@@ -588,6 +586,9 @@ impl SophonPatcher {
         self.create_temp_dirs()?;
 
         self.predownload_multithreaded(thread_count, from, updater.clone());
+
+        let marker_file_path = self.files_temp().join(".predownloadcomplete");
+        File::create(marker_file_path)?;
 
         Ok(())
     }
@@ -996,7 +997,8 @@ impl SophonPatcher {
     /// Folder to temporarily store files being updated (patched, created, etc).
     #[inline]
     pub fn files_temp(&self) -> PathBuf {
-        self.temp_folder.join("updating")
+        self.temp_folder
+            .join(format!("updating-{}", self.diff_info.matching_field))
     }
 
     fn tmp_src_file_path(&self, file_info: &FilePatchInfo) -> PathBuf {
