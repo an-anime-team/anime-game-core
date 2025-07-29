@@ -1,24 +1,19 @@
 use std::path::{Path, PathBuf};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::version::Version;
 use crate::sophon::SophonError;
-use crate::sophon::api_schemas::{
-    sophon_diff::SophonDiff,
-    sophon_manifests::SophonDownloadInfo,
-    DownloadOrDiff
-};
+use crate::sophon::api_schemas::DownloadOrDiff;
+use crate::sophon::api_schemas::sophon_diff::SophonDiff;
+use crate::sophon::api_schemas::sophon_manifests::SophonDownloadInfo;
 use crate::sophon::installer::SophonInstaller;
 use crate::sophon::updater::SophonPatcher;
 use crate::sophon;
-
 use crate::traits::version_diff::VersionDiffExt;
-
 #[cfg(feature = "install")]
 use crate::installer::installer::Update as InstallerUpdate;
-
 use super::consts::GameEdition;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,9 +113,11 @@ pub enum VersionDiff {
         downloaded_size: u64,
         unpacked_size: u64,
 
-        /// Path to the folder this difference should be installed by the `install` method
+        /// Path to the folder this difference should be installed by the
+        /// `install` method
         ///
-        /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
+        /// This value can be `None`, so `install` will return
+        /// `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
@@ -141,9 +138,11 @@ pub enum VersionDiff {
         downloaded_size: u64,
         unpacked_size: u64,
 
-        /// Path to the folder this difference should be installed by the `install` method
+        /// Path to the folder this difference should be installed by the
+        /// `install` method
         ///
-        /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
+        /// This value can be `None`, so `install` will return
+        /// `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
@@ -170,9 +169,11 @@ pub enum VersionDiff {
         downloaded_size: u64,
         unpacked_size: u64,
 
-        /// Path to the folder this difference should be installed by the `install` method
+        /// Path to the folder this difference should be installed by the
+        /// `install` method
         ///
-        /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
+        /// This value can be `None`, so `install` will return
+        /// `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
@@ -188,13 +189,23 @@ impl VersionDiff {
     pub fn version_file_path(&self) -> Option<PathBuf> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { version_file_path, .. } |
-            Self::Diff { version_file_path, .. } |
-            Self::NotInstalled { version_file_path, .. } => version_file_path.to_owned()
+            Self::Predownload {
+                version_file_path, ..
+            }
+            | Self::Diff {
+                version_file_path, ..
+            }
+            | Self::NotInstalled {
+                version_file_path, ..
+            } => version_file_path.to_owned()
         }
     }
 
@@ -204,13 +215,23 @@ impl VersionDiff {
     pub fn temp_folder(&self) -> PathBuf {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => std::env::temp_dir(),
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => std::env::temp_dir(),
 
             // Can be installed
-            Self::Predownload { temp_folder, .. } |
-            Self::Diff { temp_folder, .. } |
-            Self::NotInstalled { temp_folder, .. } => match temp_folder {
+            Self::Predownload {
+                temp_folder, ..
+            }
+            | Self::Diff {
+                temp_folder, ..
+            }
+            | Self::NotInstalled {
+                temp_folder, ..
+            } => match temp_folder {
                 Some(path) => path.to_owned(),
                 None => std::env::temp_dir()
             }
@@ -220,23 +241,33 @@ impl VersionDiff {
     pub fn with_temp_folder(mut self, temp: PathBuf) -> Self {
         match &mut self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => self,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => self,
 
             // Can be installed
-            Self::Predownload { temp_folder, .. } => {
+            Self::Predownload {
+                temp_folder, ..
+            } => {
                 *temp_folder = Some(temp);
 
                 self
             }
 
-            Self::Diff { temp_folder, .. } => {
+            Self::Diff {
+                temp_folder, ..
+            } => {
                 *temp_folder = Some(temp);
 
                 self
             }
 
-            Self::NotInstalled { temp_folder, .. } => {
+            Self::NotInstalled {
+                temp_folder, ..
+            } => {
                 *temp_folder = Some(temp);
 
                 self
@@ -259,11 +290,7 @@ impl VersionDiff {
 
         let client = reqwest::blocking::Client::new();
 
-        let installer = SophonInstaller::new(
-            client,
-            download_info,
-            self.temp_folder()
-        )?;
+        let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
 
         installer.install(path.as_ref(), thread_count, move |msg| {
             (updater)(msg.into());
@@ -272,8 +299,10 @@ impl VersionDiff {
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
         // why he should re-download entire game update because something is failed
-        #[allow(unused_must_use)] {
-            let version_path = self.version_file_path()
+        #[allow(unused_must_use)]
+        {
+            let version_path = self
+                .version_file_path()
                 .unwrap_or(path.as_ref().join(".version"));
 
             std::fs::write(version_path, self.latest().version);
@@ -308,15 +337,17 @@ impl VersionDiff {
 
         let patcher = SophonPatcher::new(client, diff, self.temp_folder())?;
 
-        patcher.update(&path, from, thread_count, move |msg | {
+        patcher.update(&path, from, thread_count, move |msg| {
             (updater)(msg.into());
         })?;
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
         // why he should re-download entire game update because something is failed
-        #[allow(unused_must_use)] {
-            let version_path = self.version_file_path()
+        #[allow(unused_must_use)]
+        {
+            let version_path = self
+                .version_file_path()
                 .unwrap_or(path.as_ref().join(".version"));
 
             std::fs::write(version_path, self.latest().version);
@@ -351,9 +382,7 @@ impl VersionDiff {
             DownloadOrDiff::Download(download_info) => {
                 let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
 
-                installer.pre_download(
-                    thread_count,
-                    move |msg| {
+                installer.pre_download(thread_count, move |msg| {
                     (updater)(msg.into());
                 })?;
             }
@@ -369,87 +398,177 @@ impl VersionDiff {
 
         Ok(())
     }
+
+    /// Get the matching field value for this diff. Returns none in case of
+    /// [`VersionDiff::Latest`] or [`VersionDiff::Outdated`]
+    pub fn matching_field(&self) -> Option<&str> {
+        match self {
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
+            Self::Predownload {
+                download_info, ..
+            } => match download_info {
+                DownloadOrDiff::Patch(SophonDiff {
+                    matching_field, ..
+                })
+                | DownloadOrDiff::Download(SophonDownloadInfo {
+                    matching_field, ..
+                }) => Some(matching_field)
+            },
+            Self::Diff {
+                diff, ..
+            } => Some(&diff.matching_field),
+            Self::NotInstalled {
+                download_info, ..
+            } => Some(&download_info.matching_field)
+        }
+    }
 }
 
 impl VersionDiffExt for VersionDiff {
+    type Edition = GameEdition;
     type Error = DiffDownloadingError;
     type Update = DiffUpdate;
-    type Edition = GameEdition;
 
     fn edition(&self) -> GameEdition {
         match self {
-            Self::Latest { edition, .. } |
-            Self::Predownload { edition, .. } |
-            Self::Diff { edition, .. } |
-            Self::Outdated { edition, .. } |
-            Self::NotInstalled { edition, .. } => *edition
+            Self::Latest {
+                edition, ..
+            }
+            | Self::Predownload {
+                edition, ..
+            }
+            | Self::Diff {
+                edition, ..
+            }
+            | Self::Outdated {
+                edition, ..
+            }
+            | Self::NotInstalled {
+                edition, ..
+            } => *edition
         }
     }
 
     fn current(&self) -> Option<Version> {
         match self {
-            Self::Latest { version: current, .. } |
-            Self::Predownload { current, .. } |
-            Self::Diff { current, .. } |
-            Self::Outdated { current, .. } => Some(*current),
+            Self::Latest {
+                version: current, ..
+            }
+            | Self::Predownload {
+                current, ..
+            }
+            | Self::Diff {
+                current, ..
+            }
+            | Self::Outdated {
+                current, ..
+            } => Some(*current),
 
-            Self::NotInstalled { .. } => None
+            Self::NotInstalled {
+                ..
+            } => None
         }
     }
 
     fn latest(&self) -> Version {
         match self {
-            Self::Latest { version: latest, .. } |
-            Self::Predownload { latest, .. } |
-            Self::Diff { latest, .. } |
-            Self::Outdated { latest, .. } |
-            Self::NotInstalled { latest, .. } => *latest
+            Self::Latest {
+                version: latest, ..
+            }
+            | Self::Predownload {
+                latest, ..
+            }
+            | Self::Diff {
+                latest, ..
+            }
+            | Self::Outdated {
+                latest, ..
+            }
+            | Self::NotInstalled {
+                latest, ..
+            } => *latest
         }
     }
 
     fn downloaded_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { downloaded_size, .. } |
-            Self::Diff { downloaded_size, .. } |
-            Self::NotInstalled { downloaded_size, .. } => Some(*downloaded_size)
+            Self::Predownload {
+                downloaded_size, ..
+            }
+            | Self::Diff {
+                downloaded_size, ..
+            }
+            | Self::NotInstalled {
+                downloaded_size, ..
+            } => Some(*downloaded_size)
         }
     }
 
     fn unpacked_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { unpacked_size, .. } |
-            Self::Diff { unpacked_size, .. } |
-            Self::NotInstalled { unpacked_size, .. } => Some(*unpacked_size)
+            Self::Predownload {
+                unpacked_size, ..
+            }
+            | Self::Diff {
+                unpacked_size, ..
+            }
+            | Self::NotInstalled {
+                unpacked_size, ..
+            } => Some(*unpacked_size)
         }
     }
 
     fn installation_path(&self) -> Option<&Path> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { installation_path, .. } |
-            Self::Diff { installation_path, .. } |
-            Self::NotInstalled { installation_path, .. } => match installation_path {
+            Self::Predownload {
+                installation_path, ..
+            }
+            | Self::Diff {
+                installation_path, ..
+            }
+            | Self::NotInstalled {
+                installation_path, ..
+            } => match installation_path {
                 Some(path) => Some(path.as_path()),
                 None => None
             }
         }
     }
 
-    // There isn't a single type providing download information, so this method is useless
+    // There isn't a single type providing download information, so this method is
+    // useless
     fn downloading_uri(&self) -> Option<String> {
         None
     }
@@ -464,15 +583,19 @@ impl VersionDiffExt for VersionDiff {
 
         match self {
             // Can't be downloaded
-            Self::Latest { .. } => Err(Self::Error::AlreadyLatest),
-            Self::Outdated { .. } => Err(Self::Error::Outdated),
+            Self::Latest {
+                ..
+            } => Err(Self::Error::AlreadyLatest),
+            Self::Outdated {
+                ..
+            } => Err(Self::Error::Outdated),
 
             // Can be downloaded
-            //Self::Predownload { uri, .. } |
-            //Self::Diff { uri, .. } => uri,
+            // Self::Predownload { uri, .. } |
+            // Self::Diff { uri, .. } => uri,
 
             // Can be installed but amogus
-            //Self::NotInstalled { .. } => return Err(Self::Error::MultipleSegments),
+            // Self::NotInstalled { .. } => return Err(Self::Error::MultipleSegments),
             _ => Err(Self::Error::MultipleSegments)
         }
     }
@@ -498,21 +621,30 @@ impl VersionDiffExt for VersionDiff {
                 }
             });
 
-            self.install_to(folder, 1, move |msg| {
-                match msg {
-                    DiffUpdate::SophonPatcherUpdate(sophon::updater::Update::DownloadingProgressBytes { downloaded_bytes, total_bytes }) => {
-                        let _ = sender.send((downloaded_bytes, total_bytes));
+            self.install_to(folder, 1, move |msg| match msg {
+                DiffUpdate::SophonPatcherUpdate(
+                    sophon::updater::Update::DownloadingProgressBytes {
+                        downloaded_bytes,
+                        total_bytes
                     }
-
-                    DiffUpdate::SophonInstallerUpdate(sophon::installer::Update::DownloadingProgressBytes { downloaded_bytes, total_bytes }) => {
-                        let _ = sender.send((downloaded_bytes, total_bytes));
-                    }
-
-                    _ => ()
+                ) => {
+                    let _ = sender.send((downloaded_bytes, total_bytes));
                 }
+
+                DiffUpdate::SophonInstallerUpdate(
+                    sophon::installer::Update::DownloadingProgressBytes {
+                        downloaded_bytes,
+                        total_bytes
+                    }
+                ) => {
+                    let _ = sender.send((downloaded_bytes, total_bytes));
+                }
+
+                _ => ()
             })?;
 
-            proxy_thread_handle.join()
+            proxy_thread_handle
+                .join()
                 .expect("failed to join game downloader thread");
         }
 
@@ -529,15 +661,29 @@ impl VersionDiffExt for VersionDiff {
 
         match self {
             // Can't be installed
-            Self::Latest { .. } => Err(Self::Error::AlreadyLatest),
-            Self::Outdated { .. } => Err(Self::Error::Outdated),
+            Self::Latest {
+                ..
+            } => Err(Self::Error::AlreadyLatest),
+            Self::Outdated {
+                ..
+            } => Err(Self::Error::Outdated),
 
             // Can be installed
-            Self::Diff { diff, current, .. } => self.patch_game(*current, thread_count, diff, path, updater),
-            Self::NotInstalled { download_info, .. } => self.download_game(download_info, thread_count, path, updater),
+            Self::Diff {
+                diff,
+                current,
+                ..
+            } => self.patch_game(*current, thread_count, diff, path, updater),
+            Self::NotInstalled {
+                download_info, ..
+            } => self.download_game(download_info, thread_count, path, updater),
 
             // Predownload without applying
-            Self::Predownload { download_info, current , ..} => self.pre_download(download_info, *current, thread_count, updater)
+            Self::Predownload {
+                download_info,
+                current,
+                ..
+            } => self.pre_download(download_info, *current, thread_count, updater)
         }
     }
 }

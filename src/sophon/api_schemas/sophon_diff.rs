@@ -13,7 +13,8 @@ pub struct SophonDiffs {
 }
 
 impl SophonDiffs {
-    /// `matching_field` is usually either `game` or one of the voiceover language options
+    /// `matching_field` is usually either `game` or one of the voiceover
+    /// language options
     pub fn get_manifests_for(&self, matching_field: &str) -> Option<&SophonDiff> {
         self.manifests
             .iter()

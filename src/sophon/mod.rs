@@ -64,7 +64,9 @@ impl GameEdition {
     pub fn branches_host(&self) -> &str {
         match self {
             Self::Global => {
-                concat!("https://", "s", "g-hy", "p-api.", "h", "oy", "over", "se", ".com")
+                concat!(
+                    "https://", "s", "g-hy", "p-api.", "h", "oy", "over", "se", ".com"
+                )
             }
             Self::China => concat!("https://", "hy", "p-api.", "mi", "h", "oyo", ".com")
         }
@@ -287,8 +289,8 @@ fn file_region_hash_md5(file: &mut File, offset: u64, length: u64) -> std::io::R
 
 // TODO:
 // - Cull some variants of SophonError, especially those that are unused
-// - Make some better variants describign where the error happened, perhaps steal anyhow's context
-//   idea but simpler, especially useful for I/O errors.
+// - Make some better variants describign where the error happened, perhaps
+//   steal anyhow's context idea but simpler, especially useful for I/O errors.
 // - Cull unused installer/update messages
 
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

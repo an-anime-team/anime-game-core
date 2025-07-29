@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::iter;
@@ -17,13 +18,11 @@ use super::api_schemas::sophon_manifests::DownloadInfo;
 use super::protos::SophonPatch::{
     SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetInfo
 };
-
 use super::{
-    add_user_write_permission_to_file, api_post_request, check_file, ensure_parent,
-    file_md5_hash_str, get_protobuf_from_url, ArtifactDownloadState, DownloadQueue, GameEdition,
-    SophonError, ThreadQueue, DEFAULT_CHUNK_RETRIES
+    ArtifactDownloadState, DEFAULT_CHUNK_RETRIES, DownloadQueue, GameEdition, SophonError,
+    ThreadQueue, add_user_write_permission_to_file, api_post_request, check_file, ensure_parent,
+    file_md5_hash_str, get_protobuf_from_url
 };
-
 use crate::external::hpatchz;
 use crate::prelude::{free_space, prettify_bytes};
 use crate::version::Version;
@@ -124,7 +123,8 @@ impl FilePatchInfo<'_> {
         }
     }
 
-    /// Path to temporary file to store before patching or as a result of a copy from patch chunk
+    /// Path to temporary file to store before patching or as a result of a copy
+    /// from patch chunk
     fn tmp_src_filename(&self) -> String {
         format!("{}.tmp", &self.file_manifest.AssetHashMd5)
     }
@@ -135,8 +135,8 @@ impl FilePatchInfo<'_> {
     }
 
     /// Get filename for whatever artifact is needed to patch this file.
-    /// it's either an hdiff patch file or a plain blob that needs to be copied as the entire
-    /// contents of the new file.
+    /// it's either an hdiff patch file or a plain blob that needs to be copied
+    /// as the entire contents of the new file.
     fn artifact_filename(&self) -> String {
         if self.is_patch() {
             format!(
@@ -192,17 +192,14 @@ impl<'a> UpdateIndex<'a> {
             .PatchAssets
             .iter()
             .filter_map(|spap| {
-                Some((
-                    &spap.AssetName,
-                    FilePatchInfo {
-                        file_manifest: spap,
-                        patch_chunk_download_info,
-                        patch_chunk: spap
-                            .AssetPatchChunks
-                            .iter()
-                            .find_map(|(fromver, pchunk)| (*fromver == from).then_some(pchunk))?
-                    }
-                ))
+                Some((&spap.AssetName, FilePatchInfo {
+                    file_manifest: spap,
+                    patch_chunk_download_info,
+                    patch_chunk: spap
+                        .AssetPatchChunks
+                        .iter()
+                        .find_map(|(fromver, pchunk)| (*fromver == from).then_some(pchunk))?
+                }))
             })
             .collect::<HashMap<_, _>>();
 
@@ -298,9 +295,9 @@ impl<'a> UpdateIndex<'a> {
             .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
     }
 
-    /// Process chunk download failure. Either pushes the chunk onto the retries queue or sends the
-    /// chunk download fail update message using the updater. Refer to [Self::count_chunk_fail] for
-    /// more info.
+    /// Process chunk download failure. Either pushes the chunk onto the retries
+    /// queue or sends the chunk download fail update message using the
+    /// updater. Refer to [Self::count_chunk_fail] for more info.
     fn process_download_fail<'b>(
         &self,
         file: &'a FilePatchInfo<'a>,
@@ -313,11 +310,12 @@ impl<'a> UpdateIndex<'a> {
         }
     }
 
-    /// A download attempt or check failed, decrement the retry count or report the chunk as
-    /// completely failed.
-    /// The error type is a message to emit in case of a completely faield chunk download.
-    /// If this returns Ok, push the chunk on the retries queue.
-    /// If this returns Err, emit the fail message for this chunk and stop retrying.
+    /// A download attempt or check failed, decrement the retry count or report
+    /// the chunk as completely failed.
+    /// The error type is a message to emit in case of a completely faield chunk
+    /// download. If this returns Ok, push the chunk on the retries queue.
+    /// If this returns Err, emit the fail message for this chunk and stop
+    /// retrying.
     fn count_download_fail(&self, artifact_name: &'a String) -> Result<(), Update> {
         let mut states_lock = self
             .download_states
@@ -371,15 +369,13 @@ impl<'a> UpdateIndex<'a> {
             return false;
         }
 
-        tracing::debug!(
-            "Some artifacts still being downloaded or checked, waiting for updates"
-        );
-
-        // unlocks the mutex during wait, see [`Condvar::wait`]
+        // unlocks the mutex during wait, see [`Condvar::wait_timeout`]
+        // timeout 10s
         guard = self
             .download_states_notifier
-            .wait(guard)
-            .expect("Something poisoned teh mutex");
+            .wait_timeout(guard, Duration::from_secs(10))
+            .expect("Something poisoned the mutex")
+            .0;
 
         Self::any_downloading(&guard)
     }
@@ -465,11 +461,8 @@ impl SophonPatcher {
         from: Version,
         updater: impl Fn(Update) + Clone + Send + 'static
     ) {
-        let update_index = UpdateIndex::new(
-            &self.patch_manifest,
-            &self.diff_info.diff_download,
-            from
-        );
+        let update_index =
+            UpdateIndex::new(&self.patch_manifest, &self.diff_info.diff_download, from);
 
         tracing::info!(
             total_bytes = prettify_bytes(update_index.total_bytes),
@@ -537,10 +530,7 @@ impl SophonPatcher {
                 let retries_ref = &retries_queue;
 
                 scope.spawn(move || {
-                    let _span = tracing::debug_span!(
-                        "Patching thread",
-                        thread_id = i
-                    ).entered();
+                    let _span = tracing::debug_span!("Patching thread", thread_id = i).entered();
 
                     self.file_patch_loop(
                         game_folder,
@@ -554,10 +544,8 @@ impl SophonPatcher {
 
             // Unused file deletion - in main thread
             if let Some(unused) = &update_index.unused {
-                let _deleting_unused_span = tracing::trace_span!(
-                    "Deleting unused",
-                    amount = unused.Assets.len()
-                ).entered();
+                let _deleting_unused_span =
+                    tracing::trace_span!("Deleting unused", amount = unused.Assets.len()).entered();
 
                 // Deleting unused files
                 for unused_asset in &unused.Assets {
@@ -599,6 +587,9 @@ impl SophonPatcher {
 
         self.predownload_multithreaded(thread_count, from, updater.clone());
 
+        let marker_file_path = self.files_temp().join(".predownloadcomplete");
+        File::create(marker_file_path)?;
+
         Ok(())
     }
 
@@ -610,11 +601,8 @@ impl SophonPatcher {
     ) {
         tracing::debug!("Starting multithreaded update predownload process");
 
-        let update_index = UpdateIndex::new(
-            &self.patch_manifest,
-            &self.diff_info.diff_download,
-            from
-        );
+        let update_index =
+            UpdateIndex::new(&self.patch_manifest, &self.diff_info.diff_download, from);
 
         tracing::info!(
             "{} files to download, {} download total",
@@ -652,7 +640,9 @@ impl SophonPatcher {
 
             // no reason to spawn multiple of this, teh downloader itself is
             // basically single-threaded too
+            let updater_clone = updater.clone();
             scope.spawn(|| {
+                let local_updater = updater_clone;
                 let _span = tracing::trace_span!("Verification thread").entered();
 
                 'worker: loop {
@@ -662,14 +652,16 @@ impl SophonPatcher {
                         // process will redownload files that are broken.
                         update_index.artifact_success(&task.file_manifest.AssetName);
                         update_index.count_downloaded(task.patch_chunk.PatchLength);
+                        (local_updater)(update_index.msg_bytes());
 
                         update_index.download_states_notifier.notify_all();
                     }
-
                     else if patch_queue.is_empty() && !update_index.wait_downloading() {
                         break 'worker;
                     }
                 }
+
+                update_index.download_states_notifier.notify_all();
             });
         });
 
@@ -703,7 +695,6 @@ impl SophonPatcher {
 
                     Ok(())
                 }
-
                 else {
                     self.download_artifact(task)
                 };
@@ -734,7 +725,6 @@ impl SophonPatcher {
 
                 update_index.download_states_notifier.notify_all();
             }
-
             else if task_queue.is_empty() && !update_index.wait_downloading() {
                 break;
             }
@@ -744,7 +734,8 @@ impl SophonPatcher {
         update_index.download_states_notifier.notify_all();
     }
 
-    // instrumenting to maybe try and see how much time it takes to download, hash check, and apply
+    // instrumenting to maybe try and see how much time it takes to download, hash
+    // check, and apply
     #[tracing::instrument(
         level = "trace", ret, skip(self, task),
         fields(
@@ -811,28 +802,15 @@ impl SophonPatcher {
                     continue;
                 }
 
-                self.file_patch_handler(
-                    task,
-                    update_index,
-                    game_folder,
-                    retries_queue,
-                    &updater
-                );
+                self.file_patch_handler(task, update_index, game_folder, retries_queue, &updater);
             }
-
             else if !update_index.wait_downloading() {
                 break;
             }
         }
 
         if let Some(last_task) = do_this_task_last {
-            self.file_patch_handler(
-                last_task,
-                update_index,
-                game_folder,
-                retries_queue,
-                updater
-            );
+            self.file_patch_handler(last_task, update_index, game_folder, retries_queue, updater);
         }
     }
 
@@ -859,11 +837,9 @@ impl SophonPatcher {
 
                 Ok(())
             }
-
             else if let Some(orig_file_path) = file_patch_task.orig_file_path(game_folder) {
                 self.file_patch(&orig_file_path, file_patch_task, game_folder)
             }
-
             else {
                 self.file_copy_over(file_patch_task, game_folder)
             }
@@ -1021,7 +997,8 @@ impl SophonPatcher {
     /// Folder to temporarily store files being updated (patched, created, etc).
     #[inline]
     pub fn files_temp(&self) -> PathBuf {
-        self.temp_folder.join("updating")
+        self.temp_folder
+            .join(format!("updating-{}", self.diff_info.matching_field))
     }
 
     fn tmp_src_file_path(&self, file_info: &FilePatchInfo) -> PathBuf {

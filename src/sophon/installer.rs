@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, Write};
 use std::path::{Path, PathBuf};
@@ -15,9 +16,9 @@ use super::protos::SophonManifest::{
     SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto
 };
 use super::{
+    ArtifactDownloadState, DownloadQueue, GameEdition, SophonError, ThreadQueue,
     add_user_write_permission_to_file, api_get_request, check_file, ensure_parent,
-    file_md5_hash_str, get_protobuf_from_url, ArtifactDownloadState, DownloadQueue, GameEdition,
-    SophonError, ThreadQueue
+    file_md5_hash_str, get_protobuf_from_url
 };
 use crate::prelude::{free_space, prettify_bytes};
 use crate::sophon::md5_hash_str;
@@ -93,7 +94,8 @@ impl ChunkInfo<'_> {
             .download_url(&self.chunk_manifest.ChunkName)
     }
 
-    /// returns the expected size and md5 hash that will be used to download and check this chunk
+    /// returns the expected size and md5 hash that will be used to download and
+    /// check this chunk
     #[inline(always)]
     fn chunk_file_info(&self) -> (u64, &str) {
         if self.is_compressed() {
@@ -198,13 +200,10 @@ impl<'a> DownloadIndex<'a> {
                 chunk_files_list.0.push(&file_manifest.AssetName);
             }
 
-            files.insert(
-                &file_manifest.AssetName,
-                FileInfo {
-                    file_manifest,
-                    download_info: &download_info.chunk_download
-                }
-            );
+            files.insert(&file_manifest.AssetName, FileInfo {
+                file_manifest,
+                download_info: &download_info.chunk_download
+            });
         }
 
         Self {
@@ -258,9 +257,9 @@ impl<'a> DownloadIndex<'a> {
             .fetch_add(amount, std::sync::atomic::Ordering::SeqCst);
     }
 
-    /// Process chunk download failure. Either pushes the chunk onto the retries queue or sends the
-    /// chunk download fail update message using the updater. Refer to [Self::count_chunk_fail] for
-    /// more info.
+    /// Process chunk download failure. Either pushes the chunk onto the retries
+    /// queue or sends the chunk download fail update message using the
+    /// updater. Refer to [Self::count_chunk_fail] for more info.
     fn process_download_fail<'b>(
         &self,
         chunk: ChunkInfo<'a>,
@@ -273,11 +272,12 @@ impl<'a> DownloadIndex<'a> {
         }
     }
 
-    /// A download attempt or check failed, decrement the retry count or report the chunk as
-    /// completely failed.
-    /// The error type is a message to emit in case of a completely faield chunk download.
-    /// If this returns Ok, push the chunk on the retries queue.
-    /// If this returns Err, emit the fail message for this chunk and stop retrying.
+    /// A download attempt or check failed, decrement the retry count or report
+    /// the chunk as completely failed.
+    /// The error type is a message to emit in case of a completely faield chunk
+    /// download. If this returns Ok, push the chunk on the retries queue.
+    /// If this returns Err, emit the fail message for this chunk and stop
+    /// retrying.
     fn count_download_fail(&self, artifact_name: &'a String) -> Result<(), Update> {
         let mut states_lock = self
             .download_states
@@ -317,21 +317,21 @@ impl<'a> DownloadIndex<'a> {
     }
 
     /// Returns true to continue downloading, false to exit the loop.
-    /// if anything is still downloading, uses the [`Condvar`] to wait until the states are updated
-    /// by patching/checking threads and checks again.
+    /// if anything is still downloading, uses the [`Condvar`] to wait until the
+    /// states are updated by patching/checking threads and checks again.
     fn wait_downloading(&self) -> bool {
         let mut guard = self
             .download_states
             .lock()
             .expect("Something poisoned the mutex");
         if Self::any_downloading(&guard) {
-            // This message is printed way too often
-            //tracing::debug!("Some artifacts still being downloaded or checked, waiting for updates");
-            // unlocks the mutex during wait, see [`Condvar::wait`]
+            // unlocks the mutex during wait, see [`Condvar::wait_timeout`]
+            // timeout 10s
             guard = self
                 .download_states_notifier
-                .wait(guard)
-                .expect("Something poisoned the mutex");
+                .wait_timeout(guard, Duration::from_secs(10))
+                .expect("Something poisoned the mutex")
+                .0;
             Self::any_downloading(&guard)
         }
         else {
@@ -452,7 +452,7 @@ impl SophonInstaller {
             let updater_clone = updater.clone();
             let mut chunk_dedupe_set = HashSet::with_capacity(download_index.chunks_used_in.len());
             let download_queue = DownloadChunkQueue {
-                //tasks_iter: download_index.chunks.values().peekable(),
+                // tasks_iter: download_index.chunks.values().peekable(),
                 tasks_iter: download_index
                     .files
                     .values()
@@ -509,6 +509,9 @@ impl SophonInstaller {
 
         self.predownload_multithreaded(thread_count, updater);
 
+        let marker_file_path = self.downloading_temp().join(".predownloadcomplete");
+        File::create(marker_file_path)?;
+
         Ok(())
     }
 
@@ -550,10 +553,12 @@ impl SophonInstaller {
         (updater)(Update::DownloadingFinished);
     }
 
-    /// Loops over the tasks and retries and tries to download them, pushing onto the file assembly queue
-    /// if all the chunks for a file succeeded. If both the tasks iterator and the retries queue don't return
-    /// anything, checks if they are empty and then checks if there are any unfinished chunks and waits
-    /// for either all chunks to finish applying or a new retry being pushed onto the queue.
+    /// Loops over the tasks and retries and tries to download them, pushing
+    /// onto the file assembly queue if all the chunks for a file succeeded.
+    /// If both the tasks iterator and the retries queue don't return
+    /// anything, checks if they are empty and then checks if there are any
+    /// unfinished chunks and waits for either all chunks to finish applying
+    /// or a new retry being pushed onto the queue.
     fn artifact_download_loop<'a, 'b, I: Iterator<Item = ChunkInfo<'a>> + 'b>(
         &self,
         mut task_queue: DownloadChunkQueue<'a, 'b, I>,
@@ -564,7 +569,8 @@ impl SophonInstaller {
         let mut files_dispatched = HashSet::new();
         loop {
             if let Some(task) = task_queue.next() {
-                // Check if the file already exists on disk and if it does, skip re-downloading it
+                // Check if the file already exists on disk and if it does, skip re-downloading
+                // it
                 let artifact_path = self.tmp_artifact_file_path(&task);
 
                 let res = if artifact_path.exists() {
@@ -639,7 +645,8 @@ impl SophonInstaller {
         download_index.download_states_notifier.notify_all();
     }
 
-    // instrumenting to maybe try and see how much time it takes to download and save
+    // instrumenting to maybe try and see how much time it takes to download and
+    // save
     #[tracing::instrument(level = "trace", err, skip_all, fields(chunk = task.chunk_manifest.ChunkName, download_size = task.chunk_file_info().0))]
     fn download_artifact(&self, task: &ChunkInfo) -> Result<(), SophonError> {
         let download_url = task.download_url();
@@ -892,7 +899,8 @@ impl SophonInstaller {
     /// Folder to temporarily store files being downloaded
     #[inline]
     pub fn downloading_temp(&self) -> PathBuf {
-        self.temp_folder.join("downloading")
+        self.temp_folder
+            .join(format!("downloading-{}", self.download_info.matching_field))
     }
 
     fn tmp_downloading_file_path(&self, file_info: &FileInfo) -> PathBuf {
