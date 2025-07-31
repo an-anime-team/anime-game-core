@@ -798,8 +798,6 @@ impl SophonPatcher {
             if let Some(task) = queue.next_job() {
                 if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
                     do_this_task_last = Some(task);
-
-                    continue;
                 }
 
                 self.file_patch_handler(task, update_index, game_folder, retries_queue, &updater);
@@ -810,7 +808,16 @@ impl SophonPatcher {
         }
 
         if let Some(last_task) = do_this_task_last {
-            self.file_patch_handler(last_task, update_index, game_folder, retries_queue, updater);
+            let tmp_file_path = self.files_temp().join("globalgamemanagers.tmp");
+            let target_path = last_task.target_file_path(game_folder);
+            if let Err(err) = Self::finalize_patch(
+                &tmp_file_path,
+                &target_path,
+                last_task.file_manifest.AssetSize,
+                &last_task.file_manifest.AssetHashMd5
+            ) {
+                tracing::error!(?err, "Failed to finalize last file")
+            }
         }
     }
 
@@ -939,7 +946,16 @@ impl SophonPatcher {
 
         hpatchz::patch(&tmp_src_path, &artifact, &tmp_out_path)?;
 
-        let target = file_patch_task.target_file_path(game_folder);
+        let target = if file_patch_task
+            .file_manifest
+            .AssetName
+            .ends_with("globalgamemanagers")
+        {
+            self.files_temp().join("globalgamemanagers.tmp")
+        }
+        else {
+            file_patch_task.target_file_path(game_folder)
+        };
 
         Self::finalize_patch(
             &tmp_out_path,
