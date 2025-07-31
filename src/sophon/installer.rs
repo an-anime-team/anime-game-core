@@ -700,7 +700,12 @@ impl SophonInstaller {
             }
         }
         if let Some(last_task) = do_this_task_last {
-            self.file_assembly_handler(last_task, download_index, game_folder, updater);
+            // self.file_assembly_handler(last_task, download_index, game_folder, updater);
+            let target_path = last_task.target_file_path(game_folder);
+            let tmp_file_path = self.downloading_temp().join("globalgamemanagers.tmp");
+            let _ = ensure_parent(&target_path);
+            let _ = add_user_write_permission_to_file(&target_path);
+            let _ = std::fs::copy(tmp_file_path, &target_path);
         }
     }
 
@@ -711,7 +716,12 @@ impl SophonInstaller {
         game_folder: &Path,
         updater: impl Fn(Update)
     ) {
-        let target_path = task.target_file_path(game_folder);
+        let target_path = if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
+            self.downloading_temp().join("globalgamemanagers.tmp")
+        }
+        else {
+            task.target_file_path(game_folder)
+        };
         let tmp_file = self.tmp_downloading_file_path(task);
 
         let res = if let Ok(true) = check_file(
