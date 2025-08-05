@@ -13,15 +13,15 @@ use reqwest::header::RANGE;
 use serde::{Deserialize, Serialize};
 
 use super::api_schemas::game_branches::PackageInfo;
+use super::{
+    ArtifactDownloadState, DEFAULT_CHUNK_RETRIES, DownloadQueue, GameEdition, SophonError,
+    ThreadQueue, api_post_request, check_file, file_md5_hash_str, finalize_file,
+    get_protobuf_from_url
+};
 use super::api_schemas::sophon_diff::{SophonDiff, SophonDiffs};
 use super::api_schemas::sophon_manifests::DownloadInfo;
 use super::protos::SophonPatch::{
     SophonPatchAssetChunk, SophonPatchAssetProperty, SophonPatchProto, SophonUnusedAssetInfo
-};
-use super::{
-    ArtifactDownloadState, DEFAULT_CHUNK_RETRIES, DownloadQueue, GameEdition, SophonError,
-    ThreadQueue, add_user_write_permission_to_file, api_post_request, check_file, ensure_parent,
-    file_md5_hash_str, get_protobuf_from_url
 };
 use crate::external::hpatchz;
 use crate::prelude::{free_space, prettify_bytes};
@@ -810,7 +810,7 @@ impl SophonPatcher {
         if let Some(last_task) = do_this_task_last {
             let tmp_file_path = self.files_temp().join("globalgamemanagers.tmp");
             let target_path = last_task.target_file_path(game_folder);
-            if let Err(err) = Self::finalize_patch(
+            if let Err(err) = finalize_file(
                 &tmp_file_path,
                 &target_path,
                 last_task.file_manifest.AssetSize,
@@ -907,7 +907,7 @@ impl SophonPatcher {
 
         let artifact_path = self.tmp_artifact_file_path(file_patch_task);
 
-        Self::finalize_patch(
+        finalize_file(
             &artifact_path,
             &target_path,
             file_patch_task.file_manifest.AssetSize,
@@ -957,7 +957,7 @@ impl SophonPatcher {
             file_patch_task.target_file_path(game_folder)
         };
 
-        Self::finalize_patch(
+        finalize_file(
             &tmp_out_path,
             &target,
             file_patch_task.file_manifest.AssetSize,
@@ -969,32 +969,6 @@ impl SophonPatcher {
         let _ = std::fs::remove_file(&tmp_out_path);
 
         Ok(())
-    }
-
-    fn finalize_patch(
-        file: &Path,
-        target: &Path,
-        size: u64,
-        hash: &str
-    ) -> Result<(), SophonError> {
-        if check_file(file, size, hash)? {
-            tracing::debug!(
-                result = ?file,
-                destination = ?target,
-                "File hash check passed, copying into final destination"
-            );
-            ensure_parent(target)?;
-            add_user_write_permission_to_file(target)?;
-            std::fs::copy(file, target)?;
-            Ok(())
-        }
-        else {
-            Err(SophonError::FileHashMismatch {
-                path: file.to_owned(),
-                expected: hash.to_owned(),
-                got: file_md5_hash_str(file)?
-            })
-        }
     }
 
     /// Remove all the files that might have been created. Temporary files,
