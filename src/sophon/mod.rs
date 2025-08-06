@@ -206,6 +206,27 @@ fn get_protobuf_from_url<T: Message>(
     Ok(parsed_manifest)
 }
 
+fn finalize_file(file: &Path, target: &Path, size: u64, hash: &str) -> Result<(), SophonError> {
+    if check_file(file, size, hash)? {
+        tracing::debug!(
+            result = ?file,
+            destination = ?target,
+            "File hash check passed, copying into final destination"
+        );
+        ensure_parent(target)?;
+        add_user_write_permission_to_file(target)?;
+        std::fs::copy(file, target)?;
+        Ok(())
+    }
+    else {
+        Err(SophonError::FileHashMismatch {
+            path: file.to_owned(),
+            expected: hash.to_owned(),
+            got: file_md5_hash_str(file)?
+        })
+    }
+}
+
 fn ensure_parent(path: impl AsRef<Path>) -> std::io::Result<()> {
     if let Some(parent) = path.as_ref().parent() {
         if !parent.exists() {

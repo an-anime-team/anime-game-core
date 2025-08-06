@@ -11,14 +11,13 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
 use super::api_schemas::game_branches::PackageInfo;
+use super::{
+    ArtifactDownloadState, DownloadQueue, GameEdition, SophonError, ThreadQueue, api_get_request,
+    check_file, file_md5_hash_str, finalize_file, get_protobuf_from_url
+};
 use super::api_schemas::sophon_manifests::{DownloadInfo, SophonDownloadInfo, SophonDownloads};
 use super::protos::SophonManifest::{
     SophonManifestAssetChunk, SophonManifestAssetProperty, SophonManifestProto
-};
-use super::{
-    ArtifactDownloadState, DownloadQueue, GameEdition, SophonError, ThreadQueue,
-    add_user_write_permission_to_file, api_get_request, check_file, ensure_parent,
-    file_md5_hash_str, get_protobuf_from_url
 };
 use crate::prelude::{free_space, prettify_bytes};
 use crate::sophon::md5_hash_str;
@@ -691,7 +690,6 @@ impl SophonInstaller {
             if let Some(task) = queue.next_job() {
                 if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
                     do_this_task_last = Some(task);
-                    continue;
                 }
                 self.file_assembly_handler(task, download_index, game_folder, &updater);
             }
@@ -700,12 +698,16 @@ impl SophonInstaller {
             }
         }
         if let Some(last_task) = do_this_task_last {
-            // self.file_assembly_handler(last_task, download_index, game_folder, updater);
             let target_path = last_task.target_file_path(game_folder);
             let tmp_file_path = self.downloading_temp().join("globalgamemanagers.tmp");
-            let _ = ensure_parent(&target_path);
-            let _ = add_user_write_permission_to_file(&target_path);
-            let _ = std::fs::copy(tmp_file_path, &target_path);
+            if let Err(err) = finalize_file(
+                &tmp_file_path,
+                &target_path,
+                last_task.file_manifest.AssetSize,
+                &last_task.file_manifest.AssetHashMd5
+            ) {
+                tracing::error!(?err, "Failed to install globalgamemanagers");
+            }
         }
     }
 
@@ -809,21 +811,13 @@ impl SophonInstaller {
 
         drop(output_file);
 
-        if !check_file(
+        finalize_file(
             tmp_file,
+            target_path,
             task.file_manifest.AssetSize,
             &task.file_manifest.AssetHashMd5
-        )? {
-            return Err(SophonError::FileHashMismatch {
-                path: tmp_file.to_owned(),
-                expected: task.file_manifest.AssetHashMd5.clone(),
-                got: file_md5_hash_str(tmp_file)?
-            });
-        }
+        )?;
 
-        ensure_parent(target_path)?;
-        add_user_write_permission_to_file(target_path)?;
-        std::fs::copy(tmp_file, target_path)?;
         let _ = std::fs::remove_file(tmp_file);
 
         Ok(())
