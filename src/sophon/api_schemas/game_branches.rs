@@ -14,9 +14,23 @@ impl GameBranches {
 
         self.game_branches
             .iter()
-            .filter(|branch_info| branch_info.game.id == id)
-            .max_by_key(|branch_info| &branch_info.main.tag)
-            .and_then(|branch_info| Version::from_str(&branch_info.main.tag))
+            .filter(|branch_info| branch_info.game.id == id && branch_info.main.is_some())
+            .max_by_key(|branch_info| {
+                &branch_info
+                    .main
+                    .as_ref()
+                    .expect("`None` cases were filtered out")
+                    .tag
+            })
+            .and_then(|branch_info| {
+                Version::from_str(
+                    &branch_info
+                        .main
+                        .as_ref()
+                        .expect("`None` cases were filtered out")
+                        .tag
+                )
+            })
     }
 
     /// Get `GameBranchInfo` of a specified id and game version.
@@ -24,9 +38,14 @@ impl GameBranches {
         let id = id.as_ref();
         let version = version.to_string();
 
-        self.game_branches
-            .iter()
-            .find(|branch_info| branch_info.game.id == id && branch_info.main.tag == version)
+        self.game_branches.iter().find(|branch_info| {
+            branch_info.game.id == id
+                && branch_info
+                    .main
+                    .as_ref()
+                    .map(|main_info| main_info.tag == version)
+                    .unwrap_or(false)
+        })
     }
 
     /// Get latest version of specified game by id.
@@ -35,21 +54,27 @@ impl GameBranches {
 
         self.game_branches
             .iter()
-            .filter(|branch_info| branch_info.game.id == id)
-            .max_by_key(|branch_info| &branch_info.main.tag)
+            .filter(|branch_info| branch_info.game.id == id && branch_info.main.is_some())
+            .max_by_key(|branch_info| {
+                &branch_info
+                    .main
+                    .as_ref()
+                    .expect("`None` cases were filtered out")
+                    .tag
+            })
     }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameBranchInfo {
     pub game: Game,
-    pub main: PackageInfo,
+    pub main: Option<PackageInfo>,
     pub pre_download: Option<PackageInfo>
 }
 
 impl GameBranchInfo {
     pub fn version(&self) -> Option<Version> {
-        Version::from_str(&self.main.tag)
+        Version::from_str(&self.main.as_ref()?.tag)
     }
 }
 
