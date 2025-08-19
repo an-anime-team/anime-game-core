@@ -3,15 +3,11 @@ use std::path::{Path, PathBuf};
 use fs_extra::dir::get_size;
 
 use crate::version::Version;
-use crate::sophon::api_schemas::{
-    sophon_diff::SophonDiff,
-    sophon_manifests::SophonDownloadInfo
-};
+use crate::sophon::api_schemas::sophon_diff::SophonDiff;
+use crate::sophon::api_schemas::sophon_manifests::SophonDownloadInfo;
 use crate::sophon;
-
 use crate::genshin::consts::*;
 use crate::genshin::voice_data::locale::VoiceLocale;
-
 #[cfg(feature = "install")]
 use crate::genshin::version_diff::*;
 
@@ -53,14 +49,15 @@ pub const VOICE_PACKAGE_THRESHOLD: u64 = 400 * 1024 * 1024; // 400 MB, ~4 files
 
 /// Get specific voice package sizes from `VOICE_PACKAGES_SIZES` constant
 pub fn get_voice_pack_sizes<'a>(locale: VoiceLocale) -> Vec<(&'a str, u64)> {
-    VOICE_PACKAGES_SIZES.iter().map(|item| {
-        match locale {
-            VoiceLocale::English  => (item.0, item.1),
+    VOICE_PACKAGES_SIZES
+        .iter()
+        .map(|item| match locale {
+            VoiceLocale::English => (item.0, item.1),
             VoiceLocale::Japanese => (item.0, item.2),
-            VoiceLocale::Korean   => (item.0, item.3),
-            VoiceLocale::Chinese  => (item.0, item.4)
-        }
-    }).collect()
+            VoiceLocale::Korean => (item.0, item.3),
+            VoiceLocale::Chinese => (item.0, item.4)
+        })
+        .collect()
 }
 
 /// Predict next value of slice using WMA
@@ -84,9 +81,16 @@ pub fn wma_predict(values: &[u64]) -> u64 {
     }
 }
 
-/// Predict new voice package size using WMA based on `VOICE_PACKAGES_SIZES` constant
+/// Predict new voice package size using WMA based on `VOICE_PACKAGES_SIZES`
+/// constant
 pub fn predict_new_voice_pack_size(locale: VoiceLocale) -> u64 {
-    wma_predict(&get_voice_pack_sizes(locale).into_iter().map(|item| item.1).rev().collect::<Vec<u64>>())
+    wma_predict(
+        &get_voice_pack_sizes(locale)
+            .into_iter()
+            .map(|item| item.1)
+            .rev()
+            .collect::<Vec<u64>>()
+    )
 }
 
 /// Find voice package with specified locale from list of packages
@@ -97,7 +101,8 @@ fn find_voice_pack(list: &[SophonDownloadInfo], locale: VoiceLocale) -> SophonDo
         }
     }
 
-    // We're sure that all possible voice packages are listed in VoiceLocale... right?
+    // We're sure that all possible voice packages are listed in VoiceLocale...
+    // right?
     unreachable!();
 }
 
@@ -109,7 +114,8 @@ fn find_voice_pack_diff(list: &[SophonDiff], locale: VoiceLocale) -> SophonDiff 
         }
     }
 
-    // We're sure that all possible voice packages are listed in VoiceLocale... right?
+    // We're sure that all possible voice packages are listed in VoiceLocale...
+    // right?
     unreachable!();
 }
 
@@ -141,14 +147,11 @@ impl VoicePackage {
         if path.is_dir() {
             let name = path.file_name()?;
 
-            return VoiceLocale::from_str(name.to_string_lossy())
-                .map(|locale| {
-                    Self::Installed {
-                        path,
-                        locale,
-                        game_edition
-                    }
-                });
+            return VoiceLocale::from_str(name.to_string_lossy()).map(|locale| Self::Installed {
+                path,
+                locale,
+                game_edition
+            });
         }
 
         None
@@ -157,30 +160,34 @@ impl VoicePackage {
     /// Get latest voice package with specified locale
     ///
     /// Note that returned object will be `VoicePackage::NotInstalled`, but
-    /// technically it can be installed. This method just don't know the game's path
+    /// technically it can be installed. This method just don't know the game's
+    /// path
     pub fn with_locale(locale: VoiceLocale, game_edition: GameEdition) -> anyhow::Result<Self> {
         let client = reqwest::blocking::Client::new();
 
         let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
 
-        let latest_version = game_branches.latest_version_by_id(game_edition.game_id())
+        let latest_version = game_branches
+            .latest_version_by_id(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to find the latest game version")
                     .context(format!("game id: {}", game_edition.game_id()))
             })?;
 
-        let game_branch_info = game_branches.get_game_by_id(
-            game_edition.game_id(),
-            latest_version
-        ).ok_or_else(|| {
-            anyhow::anyhow!("failed to get the game version information")
-                .context(format!("game id: {}", game_edition.game_id()))
-                .context(format!("game version: {latest_version}"))
-        })?;
+        let game_branch_info = game_branches
+            .get_game_by_id(game_edition.game_id(), latest_version)
+            .ok_or_else(|| {
+                anyhow::anyhow!("failed to get the game version information")
+                    .context(format!("game id: {}", game_edition.game_id()))
+                    .context(format!("game version: {latest_version}"))
+            })?;
 
         let downloads_info = sophon::installer::get_game_download_sophon_info(
             &client,
-            &game_branch_info.main,
+            game_branch_info
+                .main
+                .as_ref()
+                .expect("The `None` case would have been caught earlier"),
             game_edition.into()
         )?;
 
@@ -196,8 +203,12 @@ impl VoicePackage {
     #[inline]
     pub fn game_edition(&self) -> GameEdition {
         match self {
-            Self::Installed { game_edition, .. } |
-            Self::NotInstalled { game_edition, .. } => *game_edition
+            Self::Installed {
+                game_edition, ..
+            }
+            | Self::NotInstalled {
+                game_edition, ..
+            } => *game_edition
         }
     }
 
@@ -205,14 +216,20 @@ impl VoicePackage {
 
     /// Get installation status of this package
     ///
-    /// This method will return `false` if this package is `VoicePackage::NotInstalled` enum value
+    /// This method will return `false` if this package is
+    /// `VoicePackage::NotInstalled` enum value
     ///
-    /// If you want to check it's actually installed - you'd need to use `is_installed_in`
+    /// If you want to check it's actually installed - you'd need to use
+    /// `is_installed_in`
     #[inline]
     pub fn is_installed(&self) -> bool {
         match self {
-            Self::Installed { .. } => true,
-            Self::NotInstalled { .. } => false
+            Self::Installed {
+                ..
+            } => true,
+            Self::NotInstalled {
+                ..
+            } => false
         }
     }
 
@@ -221,22 +238,32 @@ impl VoicePackage {
     /// (unpacked size, Option(archive size))
     pub fn size(&self) -> (u64, Option<u64>) {
         match self {
-            VoicePackage::Installed { path, .. } => (get_size(path).unwrap(), None),
-            VoicePackage::NotInstalled { data, .. } => (
+            VoicePackage::Installed {
+                path, ..
+            } => (get_size(path).unwrap(), None),
+            VoicePackage::NotInstalled {
+                data, ..
+            } => (
                 data.stats.compressed_size.parse::<u64>().unwrap(),
                 Some(data.stats.uncompressed_size.parse::<u64>().unwrap())
             )
         }
     }
 
-    /// This method will return `true` if the package has `VoicePackage::Installed` enum value
+    /// This method will return `true` if the package has
+    /// `VoicePackage::Installed` enum value
     ///
-    /// If it's `VoicePackage::NotInstalled`, then this method will check `game_path`'s voices folder
+    /// If it's `VoicePackage::NotInstalled`, then this method will check
+    /// `game_path`'s voices folder
     #[inline]
     pub fn is_installed_in<T: AsRef<Path>>(&self, game_path: T) -> bool {
         match self {
-            Self::Installed { .. } => true,
-            Self::NotInstalled { locale, .. } => get_voice_package_path(game_path, self.game_edition(), *locale).exists()
+            Self::Installed {
+                ..
+            } => true,
+            Self::NotInstalled {
+                locale, ..
+            } => get_voice_package_path(game_path, self.game_edition(), *locale).exists()
         }
     }
 
@@ -246,24 +273,27 @@ impl VoicePackage {
 
         let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
 
-        let latest_version = game_branches.latest_version_by_id(game_edition.game_id())
+        let latest_version = game_branches
+            .latest_version_by_id(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to find the latest game version")
                     .context(format!("game id: {}", game_edition.game_id()))
             })?;
 
-        let branch_info = game_branches.get_game_by_id(
-            game_edition.game_id(),
-            latest_version
-        ).ok_or_else(|| {
-            anyhow::anyhow!("failed to get the game version information")
-                .context(format!("game id: {}", game_edition.game_id()))
-                .context(format!("game version: {latest_version}"))
-        })?;
+        let branch_info = game_branches
+            .get_game_by_id(game_edition.game_id(), latest_version)
+            .ok_or_else(|| {
+                anyhow::anyhow!("failed to get the game version information")
+                    .context(format!("game id: {}", game_edition.game_id()))
+                    .context(format!("game version: {latest_version}"))
+            })?;
 
         let downloads_info = sophon::installer::get_game_download_sophon_info(
             &client,
-            &branch_info.main,
+            branch_info
+                .main
+                .as_ref()
+                .expect("The `None` case would have been caught earlier"),
             game_edition.into()
         )?;
 
@@ -288,8 +318,12 @@ impl VoicePackage {
     #[inline]
     pub fn locale(&self) -> VoiceLocale {
         match self {
-            Self::Installed { locale, .. } |
-            Self::NotInstalled { locale, .. } => *locale
+            Self::Installed {
+                locale, ..
+            }
+            | Self::NotInstalled {
+                locale, ..
+            } => *locale
         }
     }
 
@@ -303,9 +337,15 @@ impl VoicePackage {
         let client = reqwest::blocking::Client::new();
 
         match &self {
-            Self::NotInstalled { version, .. } => Ok(*version),
+            Self::NotInstalled {
+                version, ..
+            } => Ok(*version),
 
-            Self::Installed { path, locale, game_edition } => {
+            Self::Installed {
+                path,
+                locale,
+                game_edition
+            } => {
                 match std::fs::read(path.join(".version")) {
                     Ok(curr) => {
                         tracing::debug!("Found .version file: {}.{}.{}", curr[0], curr[1], curr[2]);
@@ -319,29 +359,42 @@ impl VoicePackage {
                     Err(_) => {
                         let package_size = get_size(path)?;
 
-                        let game_branches = sophon::get_game_branches_info(
-                            &client,
-                            (*game_edition).into()
-                        )?;
+                        let game_branches =
+                            sophon::get_game_branches_info(&client, (*game_edition).into())?;
 
-                        let game_branch_info = game_branches.get_game_latest_by_id(game_edition.game_id())
+                        let game_branch_info = game_branches
+                            .get_game_latest_by_id(game_edition.game_id())
                             .expect("Latest version should be available");
 
-                        tracing::debug!(package_size, ".version file wasn't found, predicting voiceover version");
+                        tracing::debug!(
+                            package_size,
+                            ".version file wasn't found, predicting voiceover version"
+                        );
 
                         let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
 
                         // Get the latest game version's voice pack sizes from the API
-                        if !voice_packages_sizes.iter().any(|(tag, _)| *tag == game_branch_info.main.tag) {
+                        if !voice_packages_sizes.iter().any(|(tag, _)| {
+                            *tag == game_branch_info
+                                .main
+                                .as_ref()
+                                .expect("The `None` case would have been caught earlier")
+                                .tag
+                        }) {
                             let locale = locale.to_code();
 
                             let download_info = sophon::installer::get_game_download_sophon_info(
                                 &client,
-                                &game_branch_info.main,
+                                game_branch_info
+                                    .main
+                                    .as_ref()
+                                    .expect("The `None` case would have been caught earlier"),
                                 (*game_edition).into()
                             )?;
 
-                            let info = download_info.manifests.iter()
+                            let info = download_info
+                                .manifests
+                                .iter()
                                 .find(|download_info| download_info.matching_field == locale);
 
                             if let Some(api_size) = info {
@@ -349,21 +402,48 @@ impl VoicePackage {
 
                                 // Inserting at `0` so that it gets picked up at the next bit of
                                 // code, doesn't have to predict.
-                                voice_packages_sizes.insert(0, (&game_branch_info.main.tag, size));
+                                voice_packages_sizes.insert(
+                                    0,
+                                    (
+                                        &game_branch_info
+                                            .main
+                                            .as_ref()
+                                            .expect(
+                                                "The `None` case would have been caught earlier"
+                                            )
+                                            .tag,
+                                        size
+                                    )
+                                );
                             }
                         }
 
                         // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
                         // then we should predict their sizes
-                        if VOICE_PACKAGES_SIZES[0].0 != game_branch_info.main.tag {
+                        if VOICE_PACKAGES_SIZES[0].0
+                            != game_branch_info
+                                .main
+                                .as_ref()
+                                .expect("The `None` case would have been caught earlier")
+                                .tag
+                        {
                             let mut t = voice_packages_sizes;
 
-                            voice_packages_sizes = vec![(&game_branch_info.main.tag, predict_new_voice_pack_size(*locale))];
+                            voice_packages_sizes = vec![(
+                                &game_branch_info
+                                    .main
+                                    .as_ref()
+                                    .expect("The `None` case would have been caught earlier")
+                                    .tag,
+                                predict_new_voice_pack_size(*locale)
+                            )];
                             voice_packages_sizes.append(&mut t);
                         }
 
-                        // To predict voice package version we're going through saved voice packages sizes in the `VOICE_PACKAGES_SIZES` constant
-                        // plus predicted voice packages sizes if needed. The version with closest folder size is version we have installed
+                        // To predict voice package version we're going through saved voice packages
+                        // sizes in the `VOICE_PACKAGES_SIZES` constant plus
+                        // predicted voice packages sizes if needed. The version with closest folder
+                        // size is version we have installed
                         for (version, size) in voice_packages_sizes {
                             if package_size > size - VOICE_PACKAGE_THRESHOLD {
                                 tracing::debug!("Predicted version: {version}");
@@ -388,7 +468,9 @@ impl VoicePackage {
         tracing::trace!(locale = ?self.locale(), "Deleting voice package");
 
         match self {
-            VoicePackage::Installed { path, .. } => {
+            VoicePackage::Installed {
+                path, ..
+            } => {
                 let mut game_path = path.clone();
 
                 for _ in 0..4 {
@@ -406,15 +488,15 @@ impl VoicePackage {
                 self.delete_in(game_path)?;
             }
 
-            VoicePackage::NotInstalled { game_path, .. } => {
-                match game_path {
-                    Some(game_path) => self.delete_in(game_path)?,
+            VoicePackage::NotInstalled {
+                game_path, ..
+            } => match game_path {
+                Some(game_path) => self.delete_in(game_path)?,
 
-                    None => {
-                        tracing::error!("Failed to find game directory");
+                None => {
+                    tracing::error!("Failed to find game directory");
 
-                        anyhow::bail!("Failed to find game directory");
-                    }
+                    anyhow::bail!("Failed to find game directory");
                 }
             }
         }
@@ -427,14 +509,21 @@ impl VoicePackage {
     ///
     /// FIXME:
     /// ⚠️ May fail on Chinese version due to paths differences
-    pub fn delete_in<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> anyhow::Result<()> {
+    pub fn delete_in<T: Into<PathBuf> + std::fmt::Debug>(
+        &self,
+        game_path: T
+    ) -> anyhow::Result<()> {
         let game_path = game_path.into();
         let locale = self.locale();
 
         tracing::debug!(?locale, "Deleting voice package");
 
         // Audio_<locale folder>_pkg_version
-        std::fs::remove_dir_all(get_voice_package_path(&game_path, self.game_edition(), locale))?;
+        std::fs::remove_dir_all(get_voice_package_path(
+            &game_path,
+            self.game_edition(),
+            locale
+        ))?;
         std::fs::remove_file(game_path.join(format!("Audio_{}_pkg_version", locale.to_folder())))?;
 
         Ok(())
@@ -443,7 +532,10 @@ impl VoicePackage {
     #[cfg(feature = "install")]
     #[tracing::instrument(level = "debug", ret)]
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
-        tracing::debug!("Trying to find version diff for {} voice package", self.locale().to_code());
+        tracing::debug!(
+            "Trying to find version diff for {} voice package",
+            self.locale().to_code()
+        );
 
         let game_edition = self.game_edition();
 
@@ -451,24 +543,27 @@ impl VoicePackage {
 
         let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
 
-        let latest_version = game_branches.latest_version_by_id(game_edition.game_id())
+        let latest_version = game_branches
+            .latest_version_by_id(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to find the latest game version")
                     .context(format!("game id: {}", game_edition.game_id()))
             })?;
 
-        let branch_info = game_branches.get_game_by_id(
-            game_edition.game_id(),
-            latest_version
-        ).ok_or_else(|| {
-            anyhow::anyhow!("failed to get the game version information")
-                .context(format!("game id: {}", game_edition.game_id()))
-                .context(format!("game version: {latest_version}"))
-        })?;
+        let branch_info = game_branches
+            .get_game_by_id(game_edition.game_id(), latest_version)
+            .ok_or_else(|| {
+                anyhow::anyhow!("failed to get the game version information")
+                    .context(format!("game id: {}", game_edition.game_id()))
+                    .context(format!("game version: {latest_version}"))
+            })?;
 
         let downloads_info = sophon::installer::get_game_download_sophon_info(
             &client,
-            &branch_info.main,
+            branch_info
+                .main
+                .as_ref()
+                .expect("The `None` case would have been caught earlier"),
             game_edition.into()
         )?;
 
@@ -484,7 +579,11 @@ impl VoicePackage {
                 // (which is not possible in reality) we should just say thath the game
                 // is latest
                 if let Some(predownload_info) = &branch_info.pre_download {
-                    if predownload_info.diff_tags.iter().any(|pre_ver| *pre_ver == current) {
+                    if predownload_info
+                        .diff_tags
+                        .iter()
+                        .any(|pre_ver| *pre_ver == current)
+                    {
                         let game_patches = sophon::updater::get_game_diffs_sophon_info(
                             &client,
                             predownload_info,
@@ -493,11 +592,14 @@ impl VoicePackage {
 
                         let diff = find_voice_pack_diff(&game_patches.manifests, self.locale());
 
-                        let stats = diff.stats.get(&current.to_string())
+                        let stats = diff
+                            .stats
+                            .get(&current.to_string())
                             .ok_or_else(|| anyhow::anyhow!("failed to get voiceover diff stats"))?;
 
-                        let predownload_version = predownload_info.version()
-                            .ok_or_else(|| anyhow::anyhow!("failed to get predownload game version"))?;
+                        let predownload_version = predownload_info.version().ok_or_else(|| {
+                            anyhow::anyhow!("failed to get predownload game version")
+                        })?;
 
                         return Ok(VersionDiff::Predownload {
                             current,
@@ -509,24 +611,30 @@ impl VoicePackage {
                             download_info: sophon::api_schemas::DownloadOrDiff::Patch(diff),
 
                             installation_path: match self {
-                                VoicePackage::Installed { .. } => None,
-                                VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                                VoicePackage::Installed {
+                                    ..
+                                } => None,
+                                VoicePackage::NotInstalled {
+                                    game_path, ..
+                                } => game_path.clone()
                             },
 
                             version_file_path: match self {
-                                VoicePackage::Installed { path, .. } => Some(path.join(".version")),
+                                VoicePackage::Installed {
+                                    path, ..
+                                } => Some(path.join(".version")),
 
-                                VoicePackage::NotInstalled { game_path, .. } => {
-                                    game_path.as_ref().map(|game_path| {
-                                        get_voice_package_path(game_path, game_edition, self.locale())
-                                            .join(".version")
-                                    })
-                                }
+                                VoicePackage::NotInstalled {
+                                    game_path, ..
+                                } => game_path.as_ref().map(|game_path| {
+                                    get_voice_package_path(game_path, game_edition, self.locale())
+                                        .join(".version")
+                                })
                             },
 
                             temp_folder: None,
                             edition: game_edition
-                        })
+                        });
                     }
                 }
 
@@ -535,7 +643,6 @@ impl VoicePackage {
                     edition: game_edition
                 })
             }
-
             else {
                 tracing::debug!(
                     current_version = current.to_string(),
@@ -543,16 +650,28 @@ impl VoicePackage {
                     "Voice package is outdated"
                 );
 
-                if branch_info.main.diff_tags.iter().any(|tag| *tag == current) {
+                if branch_info
+                    .main
+                    .as_ref()
+                    .expect("The `None` case would have been caught earlier")
+                    .diff_tags
+                    .iter()
+                    .any(|tag| *tag == current)
+                {
                     let game_patches = sophon::updater::get_game_diffs_sophon_info(
                         &client,
-                        &branch_info.main,
+                        branch_info
+                            .main
+                            .as_ref()
+                            .expect("The `None` case would have been caught earlier"),
                         game_edition.into()
                     )?;
 
                     let diff = find_voice_pack_diff(&game_patches.manifests, self.locale());
 
-                    let current_ver_patch_stats = diff.stats.get(&current.to_string())
+                    let current_ver_patch_stats = diff
+                        .stats
+                        .get(&current.to_string())
                         .ok_or_else(|| anyhow::anyhow!("failed to get voiceover diff stats"))?;
 
                     return Ok(VersionDiff::Diff {
@@ -564,24 +683,30 @@ impl VoicePackage {
                         diff,
 
                         installation_path: match self {
-                            VoicePackage::Installed { .. } => None,
-                            VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                            VoicePackage::Installed {
+                                ..
+                            } => None,
+                            VoicePackage::NotInstalled {
+                                game_path, ..
+                            } => game_path.clone()
                         },
 
                         version_file_path: match self {
-                            VoicePackage::Installed { path, .. } => Some(path.join(".version")),
+                            VoicePackage::Installed {
+                                path, ..
+                            } => Some(path.join(".version")),
 
-                            VoicePackage::NotInstalled { game_path, .. } => {
-                                game_path.as_ref().map(|game_path| {
-                                    get_voice_package_path(game_path, game_edition, self.locale())
-                                        .join(".version")
-                                })
-                            }
+                            VoicePackage::NotInstalled {
+                                game_path, ..
+                            } => game_path.as_ref().map(|game_path| {
+                                get_voice_package_path(game_path, game_edition, self.locale())
+                                    .join(".version")
+                            })
                         },
 
                         temp_folder: None,
                         edition: game_edition
-                    })
+                    });
                 }
 
                 Ok(VersionDiff::Outdated {
@@ -591,7 +716,6 @@ impl VoicePackage {
                 })
             }
         }
-
         else {
             tracing::debug!("Package is not installed");
 
@@ -605,19 +729,25 @@ impl VoicePackage {
                 download_info: latest,
 
                 installation_path: match self {
-                    VoicePackage::Installed { .. } => None,
-                    VoicePackage::NotInstalled { game_path, .. } => game_path.clone()
+                    VoicePackage::Installed {
+                        ..
+                    } => None,
+                    VoicePackage::NotInstalled {
+                        game_path, ..
+                    } => game_path.clone()
                 },
 
                 version_file_path: match self {
-                    VoicePackage::Installed { path, .. } => Some(path.join(".version")),
+                    VoicePackage::Installed {
+                        path, ..
+                    } => Some(path.join(".version")),
 
-                    VoicePackage::NotInstalled { game_path, .. } => {
-                        game_path.as_ref().map(|game_path| {
-                            get_voice_package_path(game_path, game_edition, self.locale())
-                                .join(".version")
-                        })
-                    }
+                    VoicePackage::NotInstalled {
+                        game_path, ..
+                    } => game_path.as_ref().map(|game_path| {
+                        get_voice_package_path(game_path, game_edition, self.locale())
+                            .join(".version")
+                    })
                 },
 
                 temp_folder: None,
