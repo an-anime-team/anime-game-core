@@ -184,7 +184,10 @@ impl VoicePackage {
 
         let downloads_info = sophon::installer::get_game_download_sophon_info(
             &client,
-            &game_branch_info.main,
+            game_branch_info
+                .main
+                .as_ref()
+                .expect("The `None` case would have been caught earlier"),
             game_edition.into()
         )?;
 
@@ -287,7 +290,10 @@ impl VoicePackage {
 
         let downloads_info = sophon::installer::get_game_download_sophon_info(
             &client,
-            &branch_info.main,
+            branch_info
+                .main
+                .as_ref()
+                .expect("The `None` case would have been caught earlier"),
             game_edition.into()
         )?;
 
@@ -368,15 +374,21 @@ impl VoicePackage {
                         let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
 
                         // Get the latest game version's voice pack sizes from the API
-                        if !voice_packages_sizes
-                            .iter()
-                            .any(|(tag, _)| *tag == game_branch_info.main.tag)
-                        {
+                        if !voice_packages_sizes.iter().any(|(tag, _)| {
+                            *tag == game_branch_info
+                                .main
+                                .as_ref()
+                                .expect("The `None` case would have been caught earlier")
+                                .tag
+                        }) {
                             let locale = locale.to_code();
 
                             let download_info = sophon::installer::get_game_download_sophon_info(
                                 &client,
-                                &game_branch_info.main,
+                                game_branch_info
+                                    .main
+                                    .as_ref()
+                                    .expect("The `None` case would have been caught earlier"),
                                 (*game_edition).into()
                             )?;
 
@@ -390,17 +402,39 @@ impl VoicePackage {
 
                                 // Inserting at `0` so that it gets picked up at the next bit of
                                 // code, doesn't have to predict.
-                                voice_packages_sizes.insert(0, (&game_branch_info.main.tag, size));
+                                voice_packages_sizes.insert(
+                                    0,
+                                    (
+                                        &game_branch_info
+                                            .main
+                                            .as_ref()
+                                            .expect(
+                                                "The `None` case would have been caught earlier"
+                                            )
+                                            .tag,
+                                        size
+                                    )
+                                );
                             }
                         }
 
                         // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
                         // then we should predict their sizes
-                        if VOICE_PACKAGES_SIZES[0].0 != game_branch_info.main.tag {
+                        if VOICE_PACKAGES_SIZES[0].0
+                            != game_branch_info
+                                .main
+                                .as_ref()
+                                .expect("The `None` case would have been caught earlier")
+                                .tag
+                        {
                             let mut t = voice_packages_sizes;
 
                             voice_packages_sizes = vec![(
-                                &game_branch_info.main.tag,
+                                &game_branch_info
+                                    .main
+                                    .as_ref()
+                                    .expect("The `None` case would have been caught earlier")
+                                    .tag,
                                 predict_new_voice_pack_size(*locale)
                             )];
                             voice_packages_sizes.append(&mut t);
@@ -526,7 +560,10 @@ impl VoicePackage {
 
         let downloads_info = sophon::installer::get_game_download_sophon_info(
             &client,
-            &branch_info.main,
+            branch_info
+                .main
+                .as_ref()
+                .expect("The `None` case would have been caught earlier"),
             game_edition.into()
         )?;
 
@@ -613,10 +650,20 @@ impl VoicePackage {
                     "Voice package is outdated"
                 );
 
-                if branch_info.main.diff_tags.iter().any(|tag| *tag == current) {
+                if branch_info
+                    .main
+                    .as_ref()
+                    .expect("The `None` case would have been caught earlier")
+                    .diff_tags
+                    .iter()
+                    .any(|tag| *tag == current)
+                {
                     let game_patches = sophon::updater::get_game_diffs_sophon_info(
                         &client,
-                        &branch_info.main,
+                        branch_info
+                            .main
+                            .as_ref()
+                            .expect("The `None` case would have been caught earlier"),
                         game_edition.into()
                     )?;
 

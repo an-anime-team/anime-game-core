@@ -173,7 +173,8 @@ impl Game {
 
         let client = reqwest::blocking::Client::new();
 
-        let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
+        let game_branches = sophon::get_game_branches_info(&client, game_edition.into())
+            .inspect_err(|err| tracing::error!(?err, "getting game branches error"))?;
 
         let latest_version = game_branches
             .latest_version_by_id(self.edition.game_id())
@@ -198,9 +199,13 @@ impl Game {
                     if self.path.exists() && self.path.metadata()?.len() == 0 {
                         let game_downloads = sophon::installer::get_game_download_sophon_info(
                             &client,
-                            &branch_info.main,
+                            branch_info
+                                .main
+                                .as_ref()
+                                .expect("The `None` case would have been caught earlier"),
                             game_edition.into()
-                        )?;
+                        )
+                        .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
 
                         let download_info = game_downloads
                             .get_manifests_for("game")
@@ -295,11 +300,21 @@ impl Game {
 
                 let diffs = sophon::updater::get_game_diffs_sophon_info(
                     &client,
-                    &branch_info.main,
+                    branch_info
+                        .main
+                        .as_ref()
+                        .expect("The `None` case would have been caught earlier"),
                     game_edition.into()
                 )?;
 
-                if branch_info.main.diff_tags.iter().any(|tag| *tag == current) {
+                if branch_info
+                    .main
+                    .as_ref()
+                    .expect("The `None` case would have been caught earlier")
+                    .diff_tags
+                    .iter()
+                    .any(|tag| *tag == current)
+                {
                     for diff in &diffs.manifests {
                         if diff.matching_field == "game" {
                             if let Some((_, stats)) =
@@ -340,7 +355,10 @@ impl Game {
 
             let game_downloads = sophon::installer::get_game_download_sophon_info(
                 &client,
-                &branch_info.main,
+                branch_info
+                    .main
+                    .as_ref()
+                    .expect("The `None` case would have been caught earlier"),
                 game_edition.into()
             )?;
 

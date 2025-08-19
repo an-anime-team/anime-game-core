@@ -35,7 +35,10 @@ fn try_get_some_integrity_files(
 
     let downloads = sophon::installer::get_game_download_sophon_info(
         &client,
-        &game_branch_info.main,
+        game_branch_info
+            .main
+            .as_ref()
+            .expect("The `None` case would have been caught earlier"),
         game_edition.into()
     )?;
 
