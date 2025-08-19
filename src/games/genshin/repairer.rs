@@ -4,7 +4,6 @@ use cached::proc_macro::cached;
 
 use crate::repairer::IntegrityFile;
 use crate::sophon;
-
 use super::consts::GameEdition;
 use super::voice_data::locale::VoiceLocale;
 
@@ -19,13 +18,15 @@ fn try_get_some_integrity_files(
 
     let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
 
-    let latest_version = game_branches.latest_version_by_id(game_edition.game_id())
+    let latest_version = game_branches
+        .latest_version_by_id(game_edition.game_id())
         .ok_or_else(|| {
             anyhow::anyhow!("failed to find the latest game version")
                 .context(format!("game id: {}", game_edition.game_id()))
         })?;
 
-    let game_branch_info = game_branches.get_game_by_id(game_edition.game_id(), latest_version)
+    let game_branch_info = game_branches
+        .get_game_by_id(game_edition.game_id(), latest_version)
         .ok_or_else(|| {
             anyhow::anyhow!("failed to get the game version information")
                 .context(format!("game id: {}", game_edition.game_id()))
@@ -38,7 +39,9 @@ fn try_get_some_integrity_files(
         game_edition.into()
     )?;
 
-    let download_info = downloads.manifests.iter()
+    let download_info = downloads
+        .manifests
+        .iter()
         .find(|download_info| download_info.matching_field == matching_field)
         .ok_or_else(|| {
             anyhow::anyhow!("failed to find game download info")
@@ -47,7 +50,9 @@ fn try_get_some_integrity_files(
 
     let download_manifest = sophon::installer::get_download_manifest(&client, download_info)?;
 
-    let files = download_manifest.Assets.iter()
+    let files = download_manifest
+        .Assets
+        .iter()
         .map(IntegrityFile::from)
         .collect::<Vec<_>>();
 
@@ -77,7 +82,8 @@ pub fn try_get_voice_integrity_files(
 ///
 /// `relative_path` must be relative to the game's root folder, so if your file
 /// is e.g. `/path/to/[AnimeGame]/[AnimeGame_Data]/level0`, then root folder is
-/// `/path/to/[AnimeGame]`, and `relative_path` must be `[AnimeGame_Data]/level0`.
+/// `/path/to/[AnimeGame]`, and `relative_path` must be
+/// `[AnimeGame_Data]/level0`.
 pub fn try_get_integrity_file(
     game_edition: GameEdition,
     relative_path: impl AsRef<Path>,
@@ -127,7 +133,7 @@ pub fn try_get_unused_files(
         String::from("webCaches"),
         String::from("SDKCaches"),
         String::from("GeneratedSoundBanks"),
-        String::from("ScreenShot"),
+        String::from("ScreenShot")
     ];
 
     crate::repairer::try_get_unused_files(game_dir, used_files, skip_names)
