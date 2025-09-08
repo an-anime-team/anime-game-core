@@ -6,8 +6,6 @@ use crate::version::Version;
 
 #[cfg(feature = "star-rail")]
 use crate::games::star_rail::consts::GameEdition as StarRailGameEdition;
-#[cfg(feature = "wuwa")]
-use crate::games::wuwa::consts::GameEdition as WuwaGameEdition;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct JadeiteMetadata {
@@ -157,16 +155,6 @@ impl From<&JsonValue> for JadeiteWuwaMetadata {
             china: value.get("china")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default()
-        }
-    }
-}
-
-#[cfg(feature = "wuwa")]
-impl JadeiteWuwaMetadata {
-    pub fn for_edition(&self, edition: WuwaGameEdition) -> JadeitePatchStatus {
-        match edition {
-            WuwaGameEdition::Global => self.global,
-            WuwaGameEdition::China => self.china
         }
     }
 }

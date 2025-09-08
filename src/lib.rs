@@ -38,12 +38,6 @@ pub use games::zzz;
 #[cfg(feature = "honkai")]
 pub use games::honkai;
 
-#[cfg(feature = "pgr")]
-pub use games::pgr;
-
-#[cfg(feature = "wuwa")]
-pub use games::wuwa;
-
 // Core functionality
 
 #[cfg(feature = "external")]
@@ -79,12 +73,6 @@ pub mod prelude {
 
     #[cfg(feature = "honkai")]
     pub use super::honkai::prelude as honkai;
-
-    #[cfg(feature = "pgr")]
-    pub use super::pgr::prelude as pgr;
-
-    #[cfg(feature = "wuwa")]
-    pub use super::wuwa::prelude as wuwa;
 
     #[cfg(feature = "install")]
     pub use super::installer::prelude::*;

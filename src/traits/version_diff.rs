@@ -82,18 +82,7 @@ pub trait VersionDiffExt {
     /// this difference should be saved as
     fn download_as(&mut self, path: impl AsRef<Path>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), Self::Error>;
 
-    #[cfg(all(feature = "install", not(feature = "sophon")))]
-    /// Try to install the difference into the path returned by `Self::installation_path` method
-    /// 
-    /// This method can fail if installation path is not provided
-    fn install(&self, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error> {
-        let path = self.installation_path()
-            .expect("Difference installation path is not provided");
-
-        self.install_to(path, updater)
-    }
-
-    #[cfg(all(feature = "install", feature = "sophon"))]
+    #[cfg(feature = "install")]
     /// Try to install the difference into the path returned by `Self::installation_path` method
     /// 
     /// This method can fail if installation path is not provided
@@ -104,11 +93,7 @@ pub trait VersionDiffExt {
         self.install_to(path, thread_count, updater)
     }
 
-    #[cfg(all(feature = "install", not(feature = "sophon")))]
-    /// Try to install the difference by given location
-    fn install_to(&self, path: impl AsRef<Path>, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error>;
-
-    #[cfg(all(feature = "install", feature = "sophon"))]
+    #[cfg(feature = "install")]
     /// Try to install the difference by given location
     fn install_to(&self, path: impl AsRef<Path>, thread_count: usize, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error>;
 }

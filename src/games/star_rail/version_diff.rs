@@ -343,7 +343,7 @@ impl VersionDiffExt for VersionDiff {
         Ok(())
     }
 
-    fn install_to(&self, path: impl AsRef<Path>, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error> {
+    fn install_to(&self, path: impl AsRef<Path>, _thread_count: usize, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error> {
         tracing::debug!("Installing version difference");
 
         let uris = match self {
