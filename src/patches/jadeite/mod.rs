@@ -63,7 +63,7 @@ pub fn get_latest() -> anyhow::Result<JadeiteLatest> {
 #[cached::proc_macro::cached(result)]
 pub fn get_metadata() -> anyhow::Result<metadata::JadeiteMetadata> {
     for uri in METADATA_URIS {
-        let Ok(resp) = minreq::get(*uri).send() else {
+        let Ok(resp) = minreq::get(*uri).with_timeout(20).send() else {
             tracing::warn!("Could not reach '{uri}'. Attempting to use next fallback");
             continue;
         };
