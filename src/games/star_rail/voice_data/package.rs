@@ -266,10 +266,9 @@ impl VoicePackage {
             } => Ok(*version),
             Self::Installed {
                 path,
-                locale,
-                game_edition
+                game_edition,
+                ..
             } => {
-                let package_size = get_size(&path)?;
                 let response = api::request(*game_edition)?;
 
                 match std::fs::read(path.join(".version")) {
@@ -279,42 +278,13 @@ impl VoicePackage {
                         Ok(Version::new(curr[0], curr[1], curr[2]))
                     }
 
-                    // We don't create .version file here because we don't
-                    // actually know current version and just predict it
+                    // We don't create .version file here because we don't actually know current
+                    // version and just assume it's latest
                     // This file will be properly created in the install method
                     Err(_) => {
-                        tracing::debug!(
-                            ".version file wasn't found. Predict version. Package size: {package_size}"
-                        );
+                        tracing::debug!(".version file wasn't found. Assuming latest");
 
-                        let mut voice_packages_sizes = get_voice_pack_sizes(*locale);
-
-                        // If latest voice packages sizes aren't listed in `VOICE_PACKAGES_SIZES`
-                        // then we should predict their sizes
-                        if VOICE_PACKAGES_SIZES[0].0 != response.main.major.version {
-                            let mut t = voice_packages_sizes;
-
-                            voice_packages_sizes = vec![(
-                                &response.main.major.version,
-                                predict_new_voice_pack_size(*locale)
-                            )];
-                            voice_packages_sizes.append(&mut t);
-                        }
-
-                        // To predict voice package version we're going through saved voice packages
-                        // sizes in the `VOICE_PACKAGES_SIZES` constant plus
-                        // predicted voice packages sizes if needed. The version with closest folder
-                        // size is version we have installed
-                        for (version, size) in voice_packages_sizes {
-                            if package_size > size - VOICE_PACKAGE_THRESHOLD {
-                                tracing::debug!("Predicted version: {version}");
-
-                                return Ok(Version::from_str(version).unwrap());
-                            }
-                        }
-
-                        // This *should* be unreachable
-                        unreachable!()
+                        Ok(Version::from_str(&response.main.major.version).unwrap())
                     }
                 }
             }
