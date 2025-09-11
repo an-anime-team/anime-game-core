@@ -3,6 +3,7 @@ use std::collections::HashSet;
 
 use md5::{Md5, Digest};
 
+#[cfg(feature = "sophon")]
 use crate::sophon::protos::SophonManifest::SophonManifestAssetProperty;
 
 use super::installer::downloader::{Downloader, DownloadingError};
@@ -16,6 +17,7 @@ pub struct IntegrityFile {
     pub base_url: String
 }
 
+#[cfg(feature = "sophon")]
 impl From<&SophonManifestAssetProperty> for IntegrityFile {
     fn from(value: &SophonManifestAssetProperty) -> Self {
         Self {
