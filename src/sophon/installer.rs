@@ -386,13 +386,16 @@ impl SophonInstaller {
             let mut download_size = self.download_info.stats.compressed_size.parse().unwrap();
             let mut installed_size = self.download_info.stats.uncompressed_size.parse().unwrap();
 
-            let already_installed_size = if output_folder.exists() {
-                fs_extra::dir::get_size(output_folder)
-                    .map_err(|e| SophonError::IoError(e.to_string()))?
+            if self.download_info.matching_field == "game" {
+                let already_installed_size = if output_folder.exists() {
+                    fs_extra::dir::get_size(output_folder)
+                        .map_err(|e| SophonError::IoError(e.to_string()))?
+                }
+                else {
+                    0
+                };
+                installed_size -= already_installed_size;
             }
-            else {
-                0
-            };
 
             let temp_dir = self.downloading_temp();
             let already_downloaded_size = if temp_dir.exists() {
@@ -403,7 +406,6 @@ impl SophonInstaller {
                 0
             };
 
-            installed_size -= already_installed_size;
             download_size -= already_downloaded_size;
 
             (updater)(Update::CheckingFreeSpace(self.temp_folder.clone()));
