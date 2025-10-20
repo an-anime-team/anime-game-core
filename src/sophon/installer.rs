@@ -388,24 +388,24 @@ impl SophonInstaller {
                 self.download_info.stats.uncompressed_size.parse().unwrap();
 
             if self.download_info.matching_field == "game" {
-                let already_installed_size = if output_folder.exists() {
-                    fs_extra::dir::get_size(output_folder)
-                        .map_err(|e| SophonError::IoError(e.to_string()))?
-                }
-                else {
-                    0
-                };
+                let already_installed_size = fs_extra::dir::get_size(output_folder)
+                    .inspect_err(|e| {
+                        if !matches!(e.kind, fs_extra::error::ErrorKind::NotFound) {
+                            tracing::error!(err = ?e, "Failed to get installed files size");
+                        }
+                    })
+                    .unwrap_or(0);
                 installed_size = installed_size.saturating_sub(already_installed_size);
             }
 
             let temp_dir = self.downloading_temp();
-            let already_downloaded_size = if temp_dir.exists() {
-                fs_extra::dir::get_size(temp_dir)
-                    .map_err(|e| SophonError::IoError(e.to_string()))?
-            }
-            else {
-                0
-            };
+            let already_downloaded_size = fs_extra::dir::get_size(temp_dir)
+                .inspect_err(|e| {
+                    if !matches!(e.kind, fs_extra::error::ErrorKind::NotFound) {
+                        tracing::error!(err = ?e, "Failed to get downloaded files size");
+                    }
+                })
+                .unwrap_or(0);
 
             download_size = download_size.saturating_sub(already_downloaded_size);
 

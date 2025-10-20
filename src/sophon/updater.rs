@@ -445,15 +445,15 @@ impl SophonPatcher {
                 .unwrap();
 
             let temp_dir = self.files_temp();
-            let already_downloaded = if temp_dir.exists() {
-                fs_extra::dir::get_size(temp_dir)
-                    .map_err(|e| SophonError::IoError(e.to_string()))?
-            }
-            else {
-                0
-            };
+            let already_downloaded_size = fs_extra::dir::get_size(temp_dir)
+                .inspect_err(|e| {
+                    if !matches!(e.kind, fs_extra::error::ErrorKind::NotFound) {
+                        tracing::error!(err = ?e, "Failed to get downloaded files size");
+                    }
+                })
+                .unwrap_or(0);
 
-            download_bytes = download_bytes.saturating_sub(already_downloaded);
+            download_bytes = download_bytes.saturating_sub(already_downloaded_size);
 
             Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
         }
