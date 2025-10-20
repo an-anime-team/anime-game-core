@@ -380,12 +380,35 @@ impl SophonInstaller {
         thread_count: usize,
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
-        let download_size = self.download_info.stats.compressed_size.parse().unwrap();
-        let installed_size = self.download_info.stats.uncompressed_size.parse().unwrap();
-
-        tracing::trace!("Checking free space availability");
-
         if self.check_free_space {
+            tracing::trace!("Checking free space availability");
+
+            let mut download_size: u64 = self.download_info.stats.compressed_size.parse().unwrap();
+            let mut installed_size: u64 =
+                self.download_info.stats.uncompressed_size.parse().unwrap();
+
+            if self.download_info.matching_field == "game" {
+                let already_installed_size = fs_extra::dir::get_size(output_folder)
+                    .inspect_err(|e| {
+                        if !matches!(e.kind, fs_extra::error::ErrorKind::NotFound) {
+                            tracing::error!(err = ?e, "Failed to get installed files size");
+                        }
+                    })
+                    .unwrap_or(0);
+                installed_size = installed_size.saturating_sub(already_installed_size);
+            }
+
+            let temp_dir = self.downloading_temp();
+            let already_downloaded_size = fs_extra::dir::get_size(temp_dir)
+                .inspect_err(|e| {
+                    if !matches!(e.kind, fs_extra::error::ErrorKind::NotFound) {
+                        tracing::error!(err = ?e, "Failed to get downloaded files size");
+                    }
+                })
+                .unwrap_or(0);
+
+            download_size = download_size.saturating_sub(already_downloaded_size);
+
             (updater)(Update::CheckingFreeSpace(self.temp_folder.clone()));
 
             Self::free_space_check(updater.clone(), &self.temp_folder, download_size)?;
@@ -499,7 +522,18 @@ impl SophonInstaller {
         if self.check_free_space {
             (updater)(Update::CheckingFreeSpace(self.temp_folder.clone()));
 
-            let download_size = self.download_info.stats.compressed_size.parse().unwrap();
+            let mut download_size = self.download_info.stats.compressed_size.parse().unwrap();
+
+            let temp_dir = self.downloading_temp();
+            let already_downloaded_size = if temp_dir.exists() {
+                fs_extra::dir::get_size(temp_dir)
+                    .map_err(|e| SophonError::IoError(e.to_string()))?
+            }
+            else {
+                0
+            };
+
+            download_size -= already_downloaded_size;
 
             Self::free_space_check(updater.clone(), &self.temp_folder, download_size)?;
         }

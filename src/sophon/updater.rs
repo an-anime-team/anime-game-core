@@ -435,7 +435,7 @@ impl SophonPatcher {
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         if self.check_free_space {
-            let download_bytes = self
+            let mut download_bytes: u64 = self
                 .diff_info
                 .stats
                 .get(&from.to_string())
@@ -443,6 +443,17 @@ impl SophonPatcher {
                 .compressed_size
                 .parse()
                 .unwrap();
+
+            let temp_dir = self.files_temp();
+            let already_downloaded_size = fs_extra::dir::get_size(temp_dir)
+                .inspect_err(|e| {
+                    if !matches!(e.kind, fs_extra::error::ErrorKind::NotFound) {
+                        tracing::error!(err = ?e, "Failed to get downloaded files size");
+                    }
+                })
+                .unwrap_or(0);
+
+            download_bytes = download_bytes.saturating_sub(already_downloaded_size);
 
             Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
         }
@@ -571,7 +582,7 @@ impl SophonPatcher {
         updater: impl Fn(Update) + Clone + Send + 'static
     ) -> Result<(), SophonError> {
         if self.check_free_space {
-            let download_bytes = self
+            let mut download_bytes: u64 = self
                 .diff_info
                 .stats
                 .get(&from.to_string())
@@ -579,6 +590,17 @@ impl SophonPatcher {
                 .compressed_size
                 .parse()
                 .unwrap();
+
+            let temp_dir = self.files_temp();
+            let already_downloaded = if temp_dir.exists() {
+                fs_extra::dir::get_size(temp_dir)
+                    .map_err(|e| SophonError::IoError(e.to_string()))?
+            }
+            else {
+                0
+            };
+
+            download_bytes = download_bytes.saturating_sub(already_downloaded);
 
             Self::free_space_check(updater.clone(), &self.temp_folder, download_bytes)?;
         }
