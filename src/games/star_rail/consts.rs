@@ -37,6 +37,15 @@ impl GameEdition {
         concat!("Sta", "rRai", "l_Data")
     }
 
+    /// API IDs used by Sophon
+    #[inline]
+    pub fn api_game_id(&self) -> &str {
+        match self {
+            Self::Global => "4ziysqXOQ8",
+            Self::China => "64kMb5iAWu"
+        }
+    }
+
     #[inline]
     pub fn telemetry_servers(&self) -> &[&str] {
         match self {
@@ -45,6 +54,7 @@ impl GameEdition {
                 concat!("sg-public-data-api.ho", "yo", "ver", "se.com"),
                 concat!("hkrpg-log-upload-os.ho", "yo", "ver", "se.com")
             ],
+
             GameEdition::China => &[
                 concat!("log-upload.m", "iho", "yo.com"),
                 concat!("public-data-api.m", "iho", "yo.com")

@@ -59,6 +59,16 @@ impl From<genshin::consts::GameEdition> for GameEdition {
     }
 }
 
+#[cfg(feature = "star-rail")]
+impl From<crate::star_rail::consts::GameEdition> for GameEdition {
+    fn from(value: crate::star_rail::consts::GameEdition) -> Self {
+        match value {
+            crate::star_rail::consts::GameEdition::China => Self::China,
+            _ => Self::Global
+        }
+    }
+}
+
 impl GameEdition {
     #[inline]
     pub fn branches_host(&self) -> &str {
