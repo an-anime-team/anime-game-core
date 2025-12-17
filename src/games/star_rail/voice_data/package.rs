@@ -349,7 +349,7 @@ impl VoicePackage {
                             sophon::get_game_branches_info(&client, (*game_edition).into())?;
                         let latest_version = game_branches
                             .get_game_latest_by_id(game_edition.api_game_id())
-                            .expect("Latest version shoudl be available");
+                            .ok_or_else(|| anyhow::anyhow!("No game branches found in the API"))?;
 
                         Ok(latest_version.version().unwrap())
                     }
