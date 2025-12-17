@@ -298,7 +298,8 @@ impl VersionDiff {
 
         let client = reqwest::blocking::Client::new();
 
-        let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        let installer = SophonInstaller::new(client, download_info, self.temp_folder())?
+            .with_hold_last_file_suffix("data.unity3d".to_owned());
 
         installer.install(path.as_ref(), thread_count, move |msg| {
             (updater)(msg.into());
@@ -343,7 +344,8 @@ impl VersionDiff {
 
         let client = reqwest::blocking::Client::new();
 
-        let patcher = SophonPatcher::new(client, diff, self.temp_folder())?;
+        let patcher = SophonPatcher::new(client, diff, self.temp_folder())?
+            .with_hold_last_file_suffix("data.unity3d".to_owned());
 
         patcher.update(&path, from, thread_count, move |msg| {
             (updater)(msg.into());
@@ -388,7 +390,8 @@ impl VersionDiff {
 
         match download_or_patch_info {
             DownloadOrDiff::Download(download_info) => {
-                let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+                let installer = SophonInstaller::new(client, download_info, self.temp_folder())?
+                    .with_hold_last_file_suffix("data.unity3d".to_owned());
 
                 installer.pre_download(thread_count, move |msg| {
                     (updater)(msg.into());
@@ -396,7 +399,8 @@ impl VersionDiff {
             }
 
             DownloadOrDiff::Patch(diff_info) => {
-                let patcher = SophonPatcher::new(client, diff_info, self.temp_folder())?;
+                let patcher = SophonPatcher::new(client, diff_info, self.temp_folder())?
+                    .with_hold_last_file_suffix("data.unity3d".to_owned());
 
                 patcher.pre_download(from, thread_count, move |msg| {
                     (updater)(msg.into());
