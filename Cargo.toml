@@ -47,7 +47,7 @@ crossbeam-deque = { version = "0.8.6", optional = true }
 
 [features]
 genshin = ["sophon"]
-star-rail = []
+star-rail = ["sophon"]
 zzz = []
 honkai = []
 sophon = ["dep:md-5", "dep:zstd", "dep:reqwest", "dep:protobuf", "dep:protobuf-codegen", "dep:crossbeam-deque", "external"]
