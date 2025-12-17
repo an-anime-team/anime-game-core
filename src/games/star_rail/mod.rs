@@ -14,7 +14,6 @@ pub mod prelude {
     pub use super::game::Game;
     pub use super::voice_data::prelude::*;
     pub use super::telemetry;
-
     #[cfg(feature = "install")]
     pub use super::repairer;
 }

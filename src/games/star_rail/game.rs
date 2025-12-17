@@ -4,13 +4,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 
-use crate::{sophon, version::Version};
+use crate::sophon;
+use crate::version::Version;
 use crate::traits::game::GameExt;
-
 use super::api;
 use super::consts::*;
 use super::version_diff::*;
-
 use super::voice_data::locale::VoiceLocale;
 use super::voice_data::package::VoicePackage;
 
@@ -69,7 +68,11 @@ impl GameExt for Game {
             .map(|version| Version::new(version[0], version[1], version[2]))
             .ok();
 
-        let file = File::open(self.path.join(self.edition.data_folder()).join("data.unity3d"))?;
+        let file = File::open(
+            self.path
+                .join(self.edition.data_folder())
+                .join("data.unity3d")
+        )?;
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
@@ -93,7 +96,11 @@ impl GameExt for Game {
                     }
 
                     38 => {
-                        if correct && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
+                        if correct
+                            && version[0].len() > 0
+                            && version[1].len() > 0
+                            && version[2].len() > 0
+                        {
                             let found_version = Version::new(
                                 bytes_to_num(&version[0]),
                                 bytes_to_num(&version[1]),
@@ -118,7 +125,6 @@ impl GameExt for Game {
                         if correct && b"0123456789".contains(&byte) {
                             version[version_ptr].push(byte);
                         }
-
                         else {
                             correct = false;
                         }
@@ -142,7 +148,8 @@ impl Game {
     pub fn get_voice_packages(&self) -> anyhow::Result<Vec<VoicePackage>> {
         let content = std::fs::read_dir(get_voice_packages_path(&self.path, self.edition))?;
 
-        let packages = content.into_iter()
+        let packages = content
+            .into_iter()
             .flatten()
             .flat_map(|entry| {
                 VoiceLocale::from_str(entry.file_name().to_string_lossy())
@@ -165,12 +172,15 @@ impl Game {
 
         let game_branches = sophon::get_game_branches_info(&client, game_edition.into())
             .context("Getting game branches")?;
-        let latest_branch = game_branches.get_game_latest_by_id(game_edition.api_game_id())
+        let latest_branch = game_branches
+            .get_game_latest_by_id(game_edition.api_game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("Failed to find the latest game version")
                     .context(format!("game id: {}", game_edition.api_game_id()))
             })?;
-        let latest_version = latest_branch.version().expect("Valid version returned by the api");
+        let latest_version = latest_branch
+            .version()
+            .expect("Valid version returned by the api");
 
         let response = api::request(self.edition)?;
 
@@ -261,9 +271,12 @@ impl Game {
                     edition: self.edition
                 })
             }
-
             else {
-                tracing::debug!(current_version = current.to_string(), latest_version = latest_version.to_string(), "Game is outdated");
+                tracing::debug!(
+                    current_version = current.to_string(),
+                    latest_version = latest_version.to_string(),
+                    "Game is outdated"
+                );
 
                 let diffs = sophon::updater::get_game_diffs_sophon_info(
                     &client,
@@ -281,10 +294,13 @@ impl Game {
                     .expect("The `None` case is filtered out earlier")
                     .diff_tags
                     .iter()
-                    .any(|tag| *tag == current) {
+                    .any(|tag| *tag == current)
+                {
                     for diff in &diffs.manifests {
                         if diff.matching_field == "game" {
-                            if let Some((_, stats)) = diff.stats.iter().find(|(tag, _)| **tag == current) {
+                            if let Some((_, stats)) =
+                                diff.stats.iter().find(|(tag, _)| **tag == current)
+                            {
                                 let diff = diff.clone();
 
                                 let downloaded_size = stats.compressed_size.parse()?;
@@ -313,7 +329,6 @@ impl Game {
                 })
             }
         }
-
         else {
             tracing::debug!("Game is not installed");
             let game_downloads = sophon::installer::get_game_download_sophon_info(

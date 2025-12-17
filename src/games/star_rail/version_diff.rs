@@ -1,23 +1,27 @@
 use std::path::{Path, PathBuf};
 use std::os::unix::prelude::PermissionsExt;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::consts::GameEdition;
-
-use crate::{sophon::{self, SophonError, api_schemas::{DownloadOrDiff, sophon_diff::SophonDiff, sophon_manifests::SophonDownloadInfo}, installer::SophonInstaller, updater::SophonPatcher}, version::Version};
+use crate::sophon::{self, SophonError};
+use crate::sophon::api_schemas::DownloadOrDiff;
+use crate::sophon::api_schemas::sophon_diff::SophonDiff;
+use crate::sophon::api_schemas::sophon_manifests::SophonDownloadInfo;
+use crate::sophon::installer::SophonInstaller;
+use crate::sophon::updater::SophonPatcher;
+use crate::version::Version;
 use crate::traits::version_diff::VersionDiffExt;
-
 #[cfg(feature = "install")]
 use crate::{
+    external::hpatchz,
     installer::{
+        archives::Archive,
         downloader::{Downloader, DownloadingError},
-        installer::Update as InstallerUpdate,
         free_space,
-        archives::Archive
-    },
-    external::hpatchz
+        installer::Update as InstallerUpdate
+    }
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,9 +122,11 @@ pub enum VersionDiff {
         downloaded_size: u64,
         unpacked_size: u64,
 
-        /// Path to the folder this difference should be installed by the `install` method
+        /// Path to the folder this difference should be installed by the
+        /// `install` method
         ///
-        /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
+        /// This value can be `None`, so `install` will return
+        /// `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
@@ -141,9 +147,11 @@ pub enum VersionDiff {
         downloaded_size: u64,
         unpacked_size: u64,
 
-        /// Path to the folder this difference should be installed by the `install` method
+        /// Path to the folder this difference should be installed by the
+        /// `install` method
         ///
-        /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
+        /// This value can be `None`, so `install` will return
+        /// `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
@@ -169,9 +177,11 @@ pub enum VersionDiff {
         downloaded_size: u64,
         unpacked_size: u64,
 
-        /// Path to the folder this difference should be installed by the `install` method
+        /// Path to the folder this difference should be installed by the
+        /// `install` method
         ///
-        /// This value can be `None`, so `install` will return `Err(DiffDownloadError::PathNotSpecified)`
+        /// This value can be `None`, so `install` will return
+        /// `Err(DiffDownloadError::PathNotSpecified)`
         installation_path: Option<PathBuf>,
 
         /// Optional path to the `.version` file
@@ -187,13 +197,23 @@ impl VersionDiff {
     pub fn version_file_path(&self) -> Option<PathBuf> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { version_file_path, .. } |
-            Self::Diff { version_file_path, .. } |
-            Self::NotInstalled { version_file_path, .. } => version_file_path.to_owned()
+            Self::Predownload {
+                version_file_path, ..
+            }
+            | Self::Diff {
+                version_file_path, ..
+            }
+            | Self::NotInstalled {
+                version_file_path, ..
+            } => version_file_path.to_owned()
         }
     }
 
@@ -203,13 +223,23 @@ impl VersionDiff {
     pub fn temp_folder(&self) -> PathBuf {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => std::env::temp_dir(),
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => std::env::temp_dir(),
 
             // Can be installed
-            Self::Predownload { temp_folder, .. } |
-            Self::Diff { temp_folder, .. } |
-            Self::NotInstalled { temp_folder, .. } => match temp_folder {
+            Self::Predownload {
+                temp_folder, ..
+            }
+            | Self::Diff {
+                temp_folder, ..
+            }
+            | Self::NotInstalled {
+                temp_folder, ..
+            } => match temp_folder {
                 Some(path) => path.to_owned(),
                 None => std::env::temp_dir()
             }
@@ -219,23 +249,33 @@ impl VersionDiff {
     pub fn with_temp_folder(mut self, temp: PathBuf) -> Self {
         match &mut self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => self,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => self,
 
             // Can be installed
-            Self::Predownload { temp_folder, .. } => {
+            Self::Predownload {
+                temp_folder, ..
+            } => {
                 *temp_folder = Some(temp);
 
                 self
             }
 
-            Self::Diff { temp_folder, .. } => {
+            Self::Diff {
+                temp_folder, ..
+            } => {
                 *temp_folder = Some(temp);
 
                 self
             }
 
-            Self::NotInstalled { temp_folder, .. } => {
+            Self::NotInstalled {
+                temp_folder, ..
+            } => {
                 *temp_folder = Some(temp);
 
                 self
@@ -398,77 +438,137 @@ impl VersionDiff {
 }
 
 impl VersionDiffExt for VersionDiff {
+    type Edition = GameEdition;
     type Error = DiffDownloadingError;
     type Update = DiffUpdate;
-    type Edition = GameEdition;
 
     fn edition(&self) -> GameEdition {
         match self {
-            Self::Latest { edition, .. } |
-            Self::Predownload { edition, .. } |
-            Self::Diff { edition, .. } |
-            Self::Outdated { edition, .. } |
-            Self::NotInstalled { edition, .. } => *edition
+            Self::Latest {
+                edition, ..
+            }
+            | Self::Predownload {
+                edition, ..
+            }
+            | Self::Diff {
+                edition, ..
+            }
+            | Self::Outdated {
+                edition, ..
+            }
+            | Self::NotInstalled {
+                edition, ..
+            } => *edition
         }
     }
 
     fn current(&self) -> Option<Version> {
         match self {
-            Self::Latest { version: current, .. } |
-            Self::Predownload { current, .. } |
-            Self::Diff { current, .. } |
-            Self::Outdated { current, .. } => Some(*current),
+            Self::Latest {
+                version: current, ..
+            }
+            | Self::Predownload {
+                current, ..
+            }
+            | Self::Diff {
+                current, ..
+            }
+            | Self::Outdated {
+                current, ..
+            } => Some(*current),
 
-            Self::NotInstalled { .. } => None
+            Self::NotInstalled {
+                ..
+            } => None
         }
     }
 
     fn latest(&self) -> Version {
         match self {
-            Self::Latest { version: latest, .. } |
-            Self::Predownload { latest, .. } |
-            Self::Diff { latest, .. } |
-            Self::Outdated { latest, .. } |
-            Self::NotInstalled { latest, .. } => *latest
+            Self::Latest {
+                version: latest, ..
+            }
+            | Self::Predownload {
+                latest, ..
+            }
+            | Self::Diff {
+                latest, ..
+            }
+            | Self::Outdated {
+                latest, ..
+            }
+            | Self::NotInstalled {
+                latest, ..
+            } => *latest
         }
     }
 
     fn downloaded_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { downloaded_size, .. } |
-            Self::Diff { downloaded_size, .. } |
-            Self::NotInstalled { downloaded_size, .. } => Some(*downloaded_size)
+            Self::Predownload {
+                downloaded_size, ..
+            }
+            | Self::Diff {
+                downloaded_size, ..
+            }
+            | Self::NotInstalled {
+                downloaded_size, ..
+            } => Some(*downloaded_size)
         }
     }
 
     fn unpacked_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { unpacked_size, .. } |
-            Self::Diff { unpacked_size, .. } |
-            Self::NotInstalled { unpacked_size, .. } => Some(*unpacked_size)
+            Self::Predownload {
+                unpacked_size, ..
+            }
+            | Self::Diff {
+                unpacked_size, ..
+            }
+            | Self::NotInstalled {
+                unpacked_size, ..
+            } => Some(*unpacked_size)
         }
     }
 
     fn installation_path(&self) -> Option<&Path> {
         match self {
             // Can't be installed
-            Self::Latest { .. } |
-            Self::Outdated { .. } => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
-            Self::Predownload { installation_path, .. } |
-            Self::Diff { installation_path, .. } |
-            Self::NotInstalled { installation_path, .. } => match installation_path {
+            Self::Predownload {
+                installation_path, ..
+            }
+            | Self::Diff {
+                installation_path, ..
+            }
+            | Self::NotInstalled {
+                installation_path, ..
+            } => match installation_path {
                 Some(path) => Some(path.as_path()),
                 None => None
             }
@@ -557,7 +657,12 @@ impl VersionDiffExt for VersionDiff {
         Ok(())
     }
 
-    fn install_to(&self, path: impl AsRef<Path>, thread_count: usize, updater: impl Fn(Self::Update) + Clone + Send + 'static) -> Result<(), Self::Error> {
+    fn install_to(
+        &self,
+        path: impl AsRef<Path>,
+        thread_count: usize,
+        updater: impl Fn(Self::Update) + Clone + Send + 'static
+    ) -> Result<(), Self::Error> {
         tracing::debug!("Installing version difference");
 
         match self {

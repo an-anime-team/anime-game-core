@@ -2,7 +2,10 @@ use std::path::{Path, PathBuf};
 
 use fs_extra::dir::get_size;
 
-use crate::{sophon::{self, api_schemas::{sophon_diff::SophonDiff, sophon_manifests::SophonDownloadInfo}}, version::Version};
+use crate::sophon::{self};
+use crate::sophon::api_schemas::sophon_diff::SophonDiff;
+use crate::sophon::api_schemas::sophon_manifests::SophonDownloadInfo;
+use crate::version::Version;
 use crate::star_rail::api::{self};
 use crate::star_rail::api::schema::AudioPackage;
 use crate::star_rail::consts::*;
@@ -129,8 +132,10 @@ impl VoicePackage {
         if path.is_dir() {
             let name = path.file_name()?;
             return VoiceLocale::from_str(name.to_string_lossy()).map(|locale| Self::Installed {
-                path, locale, game_edition
-            })
+                path,
+                locale,
+                game_edition
+            });
         }
 
         None
@@ -340,7 +345,8 @@ impl VoicePackage {
 
                         let client = reqwest::blocking::Client::new();
 
-                        let game_branches = sophon::get_game_branches_info(&client, (*game_edition).into())?;
+                        let game_branches =
+                            sophon::get_game_branches_info(&client, (*game_edition).into())?;
                         let latest_version = game_branches
                             .get_game_latest_by_id(game_edition.api_game_id())
                             .expect("Latest version shoudl be available");
