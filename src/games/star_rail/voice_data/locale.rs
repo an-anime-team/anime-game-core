@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VoiceLocale {
@@ -15,46 +15,46 @@ impl VoiceLocale {
     }
 
     /// Convert enum value to its name
-    /// 
+    ///
     /// `VoiceLocale::English` -> `English`
     #[inline]
     pub fn to_name(&self) -> &str {
         match self {
-            Self::English  => "English",
+            Self::English => "English",
             Self::Japanese => "Japanese",
-            Self::Korean   => "Korean",
-            Self::Chinese  => "Chinese"
+            Self::Korean => "Korean",
+            Self::Chinese => "Chinese"
         }
     }
 
     /// Convert enum value to its code
-    /// 
+    ///
     /// `VoiceLocale::English` -> `en-us`
     #[inline]
     pub fn to_code(&self) -> &str {
         match self {
-            Self::English  => "en-us",
+            Self::English => "en-us",
             Self::Japanese => "ja-jp",
-            Self::Korean   => "ko-kr",
-            Self::Chinese  => "zh-cn"
+            Self::Korean => "ko-kr",
+            Self::Chinese => "zh-cn"
         }
     }
 
     /// Convert enum value to its folder name
-    /// 
+    ///
     /// `VoiceLocale::English` -> `English(US)`
     #[inline]
     pub fn to_folder(&self) -> &str {
         match self {
-            Self::English  => "English",
+            Self::English => "English",
             Self::Japanese => "Japanese",
-            Self::Korean   => "Korean",
-            Self::Chinese  => "Chinese(PRC)"
+            Self::Korean => "Korean",
+            Self::Chinese => "Chinese(PRC)"
         }
     }
 
     /// Try to convert string to enum
-    /// 
+    ///
     /// - `English` -> `VoiceLocale::English`
     /// - `English(US)` -> `VoiceLocale::English`
     /// - `en-us` -> `VoiceLocale::English`
@@ -62,16 +62,16 @@ impl VoiceLocale {
     pub fn from_str<T: AsRef<str>>(str: T) -> Option<Self> {
         match str.as_ref() {
             // Locales names
-            "English"  => Some(Self::English),
+            "English" => Some(Self::English),
             "Japanese" => Some(Self::Japanese),
-            "Korean"   => Some(Self::Korean),
-            "Chinese"  => Some(Self::Chinese),
+            "Korean" => Some(Self::Korean),
+            "Chinese" => Some(Self::Chinese),
 
             // Lowercased variants
-            "english"  => Some(Self::English),
+            "english" => Some(Self::English),
             "japanese" => Some(Self::Japanese),
-            "korean"   => Some(Self::Korean),
-            "chinese"  => Some(Self::Chinese),
+            "korean" => Some(Self::Korean),
+            "chinese" => Some(Self::Chinese),
 
             // Folders
             "Chinese(PRC)" => Some(Self::Chinese),

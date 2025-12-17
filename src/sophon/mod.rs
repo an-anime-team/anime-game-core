@@ -16,6 +16,8 @@ use thiserror::Error;
 
 #[cfg(feature = "genshin")]
 use crate::genshin;
+#[cfg(feature = "star-rail")]
+use crate::star_rail;
 use crate::prettify_bytes::prettify_bytes;
 
 pub mod api_schemas;
@@ -55,6 +57,16 @@ impl From<genshin::consts::GameEdition> for GameEdition {
         match value {
             genshin::consts::GameEdition::China => Self::China,
             genshin::consts::GameEdition::Global => Self::Global
+        }
+    }
+}
+
+#[cfg(feature = "star-rail")]
+impl From<star_rail::consts::GameEdition> for GameEdition {
+    fn from(value: star_rail::consts::GameEdition) -> Self {
+        match value {
+            star_rail::consts::GameEdition::China => Self::China,
+            star_rail::consts::GameEdition::Global => Self::Global
         }
     }
 }

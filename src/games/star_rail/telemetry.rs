@@ -1,13 +1,13 @@
 use super::consts::GameEdition;
 
 /// Check whether telemetry servers disabled
-/// 
+///
 /// If some of them is not disabled, then this function will return its address
-/// 
+///
 /// ```
 /// use anime_game_core::star_rail::telemetry;
 /// use anime_game_core::star_rail::consts::GameEdition;
-/// 
+///
 /// if let Ok(None) = telemetry::is_disabled(GameEdition::Global) {
 ///     println!("Telemetry is disabled");
 /// }
