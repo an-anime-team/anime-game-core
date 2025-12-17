@@ -1,11 +1,12 @@
 [package]
 name = "anime-game-core"
-version = "1.37.0"
+version = "1.37.1"
 authors = ["Nikita Podvirnyi <krypt0nn@vk.com>"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/an-anime-team/anime-game-core"
 edition = "2021"
+publish = false
 
 [dependencies]
 minreq = { version = "2.13", features = ["json-using-serde", "https-rustls-probe", "proxy"] }
