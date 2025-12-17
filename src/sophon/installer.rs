@@ -354,7 +354,8 @@ pub struct SophonInstaller {
     pub manifest: SophonManifestProto,
     pub download_info: SophonDownloadInfo,
     pub check_free_space: bool,
-    pub temp_folder: PathBuf
+    pub temp_folder: PathBuf,
+    pub hold_last_file_suffix: String
 }
 
 impl SophonInstaller {
@@ -370,7 +371,8 @@ impl SophonInstaller {
             manifest,
             download_info: download_info.clone(),
             check_free_space: true,
-            temp_folder: temp_dir.as_ref().to_owned()
+            temp_folder: temp_dir.as_ref().to_owned(),
+            hold_last_file_suffix: "globalgamemanagers".to_owned()
         })
     }
 
@@ -722,7 +724,11 @@ impl SophonInstaller {
         let mut do_this_task_last = None;
         loop {
             if let Some(task) = queue.next_job() {
-                if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
+                if task
+                    .file_manifest
+                    .AssetName
+                    .ends_with(&self.hold_last_file_suffix)
+                {
                     do_this_task_last = Some(task);
                 }
                 self.file_assembly_handler(task, download_index, game_folder, &updater);
@@ -733,14 +739,14 @@ impl SophonInstaller {
         }
         if let Some(last_task) = do_this_task_last {
             let target_path = last_task.target_file_path(game_folder);
-            let tmp_file_path = self.downloading_temp().join("globalgamemanagers.tmp");
+            let tmp_file_path = self.downloading_temp().join("last_file.tmp");
             if let Err(err) = finalize_file(
                 &tmp_file_path,
                 &target_path,
                 last_task.file_manifest.AssetSize,
                 &last_task.file_manifest.AssetHashMd5
             ) {
-                tracing::error!(?err, "Failed to install globalgamemanagers");
+                tracing::error!(?err, "Failed to install {}", self.hold_last_file_suffix);
             }
         }
     }
@@ -752,8 +758,12 @@ impl SophonInstaller {
         game_folder: &Path,
         updater: impl Fn(Update)
     ) {
-        let target_path = if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
-            self.downloading_temp().join("globalgamemanagers.tmp")
+        let target_path = if task
+            .file_manifest
+            .AssetName
+            .ends_with(&self.hold_last_file_suffix)
+        {
+            self.downloading_temp().join("last_file.tmp")
         }
         else {
             task.target_file_path(game_folder)
@@ -930,6 +940,13 @@ impl SophonInstaller {
     #[inline]
     pub fn with_temp_folder(mut self, temp_folder: PathBuf) -> Self {
         self.temp_folder = temp_folder;
+
+        self
+    }
+
+    #[inline]
+    pub fn with_hold_last_file_suffix(mut self, suffix: String) -> Self {
+        self.hold_last_file_suffix = suffix;
 
         self
     }

@@ -395,7 +395,8 @@ pub struct SophonPatcher {
     pub patch_manifest: SophonPatchProto,
     pub diff_info: SophonDiff,
     pub check_free_space: bool,
-    pub temp_folder: PathBuf
+    pub temp_folder: PathBuf,
+    pub hold_last_file_suffix: String
 }
 
 impl SophonPatcher {
@@ -409,7 +410,8 @@ impl SophonPatcher {
             client,
             diff_info: diff.clone(),
             check_free_space: true,
-            temp_folder: temp_dir.as_ref().to_owned()
+            temp_folder: temp_dir.as_ref().to_owned(),
+            hold_last_file_suffix: "globalgamemanagers".to_owned()
         })
     }
 
@@ -423,6 +425,13 @@ impl SophonPatcher {
     #[inline]
     pub fn with_temp_folder(mut self, temp_folder: impl Into<PathBuf>) -> Self {
         self.temp_folder = temp_folder.into();
+
+        self
+    }
+
+    #[inline]
+    pub fn with_hold_last_file_suffix(mut self, suffix: String) -> Self {
+        self.hold_last_file_suffix = suffix;
 
         self
     }
@@ -818,7 +827,11 @@ impl SophonPatcher {
 
         loop {
             if let Some(task) = queue.next_job() {
-                if task.file_manifest.AssetName.ends_with("globalgamemanagers") {
+                if task
+                    .file_manifest
+                    .AssetName
+                    .ends_with(&self.hold_last_file_suffix)
+                {
                     do_this_task_last = Some(task);
                 }
 
@@ -830,7 +843,7 @@ impl SophonPatcher {
         }
 
         if let Some(last_task) = do_this_task_last {
-            let tmp_file_path = self.files_temp().join("globalgamemanagers.tmp");
+            let tmp_file_path = self.files_temp().join("last_file.tmp");
             let target_path = last_task.target_file_path(game_folder);
             if let Err(err) = finalize_file(
                 &tmp_file_path,
@@ -971,9 +984,9 @@ impl SophonPatcher {
         let target = if file_patch_task
             .file_manifest
             .AssetName
-            .ends_with("globalgamemanagers")
+            .ends_with(&self.hold_last_file_suffix)
         {
-            self.files_temp().join("globalgamemanagers.tmp")
+            self.files_temp().join("last_file.tmp")
         }
         else {
             file_patch_task.target_file_path(game_folder)

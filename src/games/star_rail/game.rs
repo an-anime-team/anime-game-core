@@ -43,7 +43,7 @@ impl GameExt for Game {
     fn is_installed(&self) -> bool {
         self.path
             .join(self.edition.data_folder())
-            .join("globalgamemanagers")
+            .join("data.unity3d")
             .exists()
     }
 
