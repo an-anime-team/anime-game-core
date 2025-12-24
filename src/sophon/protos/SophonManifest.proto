@@ -21,6 +21,6 @@ message SophonManifestAssetChunk
     uint64 ChunkOnFileOffset        = 3; // Offset at which this chunk should be put into the resulting file
     uint64 ChunkSize                = 4; // Size of the compressed chunk
     uint64 ChunkSizeDecompressed    = 5; // Size of the uncompressed chunk
-    uint64 ChunkCompressedHashXxh   = 6; // not an xxh64 checlsum of the compressed data
+    uint64 ChunkCompressedHashXxh   = 6; // not an xxh64 checksum of the compressed data
     string ChunkCompressedHashMd5   = 7; // MD5 checksum of the compressed chunk data
 }
