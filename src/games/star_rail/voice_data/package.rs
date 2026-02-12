@@ -347,11 +347,15 @@ impl VoicePackage {
 
                         let game_branches =
                             sophon::get_game_branches_info(&client, (*game_edition).into())?;
+                        
                         let latest_version = game_branches
-                            .get_game_latest_by_id(game_edition.api_game_id())
-                            .ok_or_else(|| anyhow::anyhow!("No game branches found in the API"))?;
+                            .latest_version_by_id(game_edition.api_game_id())
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("failed to find the latest game version")
+                                    .context(format!("game id: {}", game_edition.api_game_id()))
+                            })?;
 
-                        Ok(latest_version.version().unwrap())
+                        Ok(latest_version)
                     }
                 }
             }
