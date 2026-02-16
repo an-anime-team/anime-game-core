@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use std::io::{BufWriter, Cursor, Read, Seek, Write};
+use std::os::unix::fs::MetadataExt;
 use std::time::Duration;
 use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::iter;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
@@ -942,12 +943,60 @@ impl SophonPatcher {
 
         let artifact_path = self.tmp_artifact_file_path(file_patch_task);
 
+        let mut file = File::open(&artifact_path)?;
+
+        let blob_path = if let Ok((is_compressed, inner_size)) = weird_hdiff_parse(&mut file) {
+            self.new_file_hdiff(is_compressed, inner_size, &mut file, &artifact_path)?
+        }
+        else {
+            artifact_path
+        };
+
         finalize_file(
-            &artifact_path,
+            &blob_path,
             &target_path,
             file_patch_task.file_manifest.AssetSize,
             &file_patch_task.file_manifest.AssetHashMd5
         )
+        .inspect_err(|err| {
+            tracing::error!(
+                ?err,
+                asset_name = file_patch_task.file_manifest.AssetName,
+                "Error with new file"
+            );
+            tracing::debug!(?file_patch_task, "Errored file task information");
+        })
+    }
+
+    fn new_file_hdiff(
+        &self,
+        is_compressed: bool,
+        inner_size: u64,
+        hdiff_file: &mut File,
+        artifact_path: &Path
+    ) -> Result<PathBuf, SophonError> {
+        tracing::debug!("Using weird hdiff workaround");
+        let file_size = hdiff_file.metadata().map(|m| m.size())?;
+        hdiff_file.seek(std::io::SeekFrom::Start(file_size - inner_size))?;
+        let mut artifact_file_name = artifact_path
+            .file_name()
+            .expect("path must point to a file")
+            .to_owned();
+        artifact_file_name.push(".tmp");
+        let tmp_path = artifact_path
+            .parent()
+            .expect("where parent")
+            .join(artifact_file_name);
+        let mut out_tmp_file = File::create(&tmp_path)?;
+        out_tmp_file.set_len(inner_size)?;
+        if is_compressed {
+            let mut decoder = zstd::Decoder::new(hdiff_file)?;
+            std::io::copy(&mut decoder, &mut out_tmp_file)?;
+        }
+        else {
+            std::io::copy(hdiff_file, &mut out_tmp_file)?;
+        }
+        Ok(tmp_path)
     }
 
     fn file_patch(
@@ -1090,4 +1139,58 @@ impl SophonPatcher {
             }
         }
     }
+}
+
+/// Returns whether the file is compressed and how many last bytes the file
+/// takes
+fn weird_hdiff_parse<R: Read>(reader: &mut R) -> std::io::Result<(bool, u64)> {
+    let mut buf = [0_u8; 128];
+    reader.read_exact(&mut buf)?;
+    let buf = buf;
+    if !buf.starts_with(b"HDIFF13") {
+        return Err(std::io::Error::other(
+            "Invalid HDIFF, file does not start with HDIFF13"
+        ));
+    }
+    let header_start = buf
+        .iter()
+        .enumerate()
+        .find(|(_, b)| **b == 0)
+        .ok_or(std::io::Error::other("Invalid HDIFF, 0x0 not found"))?
+        .0 as u64;
+    let mut operating_buf = Cursor::new(&buf);
+    operating_buf.seek(std::io::SeekFrom::Start(header_start))?;
+    (0..10).for_each(|_| {
+        let _ = read_varint(&mut operating_buf);
+    });
+    // eprintln!("{}", operating_buf.stream_position().unwrap());
+    let new_data_diff_size = read_varint(&mut operating_buf)?;
+    let compressed_new_data_diff_size = read_varint(&mut operating_buf)?;
+    if compressed_new_data_diff_size == 0 {
+        Ok((false, new_data_diff_size))
+    }
+    else {
+        Ok((true, compressed_new_data_diff_size))
+    }
+}
+
+fn read_varint<R: Read>(reader: &mut R) -> std::io::Result<u64> {
+    const CONTINUE_BIT: u8 = 0b10000000;
+    const MASK_BOTTOM: u8 = !CONTINUE_BIT;
+
+    let mut byte = read_u8(reader)?;
+    let mut res = (byte & MASK_BOTTOM) as u64;
+    while byte & CONTINUE_BIT != 0 {
+        byte = read_u8(reader)?;
+        res <<= 7;
+        res |= (byte & MASK_BOTTOM) as u64;
+    }
+
+    Ok(res)
+}
+
+fn read_u8<R: Read>(reader: &mut R) -> std::io::Result<u8> {
+    let mut buf = [0_u8];
+    reader.read_exact(&mut buf)?;
+    Ok(buf[0])
 }
