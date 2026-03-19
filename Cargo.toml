@@ -41,12 +41,17 @@ md-5 = { version = "0.10", features = ["asm"], optional = true }
 kinda-virtual-fs = { version = "0.1.1", optional = true }
 
 # Needed for Sophon
-
-sophon = { git = "https://github.com/dawn-winery/sophon-tools.git", optional = true, package = "sophon-lib" }
 #zstd = { version = "0.13", optional = true }
 #reqwest = { version = "0.12", features = ["blocking", "h2", "http2", "json", "rustls-tls", "rustls-tls-webpki-roots", "socks"], default-features = false, optional = true }
 #protobuf = { version = "3.7", optional = true }
 #crossbeam-deque = { version = "0.8.6", optional = true }
+
+[dependencies.sophon]
+#git = "https://github.com/dawn-winery/sophon-tools.git"
+package = "sophon-lib"
+optional = true
+
+path = "../sophon-tools/sophon-lib"
 
 [features]
 genshin = ["sophon"]
