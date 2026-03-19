@@ -42,7 +42,7 @@ kinda-virtual-fs = { version = "0.1.1", optional = true }
 
 # Needed for Sophon
 
-sophon = { git = "https://dawn.wine/dawn-winery/sophon-tools.git", optional = true, package = "sophon-lib" }
+sophon = { git = "https://github.com/dawn-winery/sophon-tools.git", optional = true, package = "sophon-lib" }
 #zstd = { version = "0.13", optional = true }
 #reqwest = { version = "0.12", features = ["blocking", "h2", "http2", "json", "rustls-tls", "rustls-tls-webpki-roots", "socks"], default-features = false, optional = true }
 #protobuf = { version = "3.7", optional = true }
