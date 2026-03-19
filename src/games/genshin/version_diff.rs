@@ -16,7 +16,7 @@ use crate::traits::version_diff::VersionDiffExt;
 use crate::installer::installer::Update as InstallerUpdate;
 use super::consts::GameEdition;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum DiffUpdate {
     CheckingFreeSpace(PathBuf),
 
@@ -55,7 +55,7 @@ impl From<sophon::updater::Update> for DiffUpdate {
     }
 }
 
-#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Error, Debug)]
 pub enum DiffDownloadingError {
     /// Your installation is already up to date and not needed to be updated
     #[error("Component version is already latest")]
@@ -290,7 +290,10 @@ impl VersionDiff {
 
         let client = sophon::reqwest::blocking::Client::new();
 
-        let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        let mut installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        installer.chunks_in_mem = true;
+        installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024);
+        installer.inplace = true;
 
         installer.install(path.as_ref(), thread_count, move |msg| {
             (updater)(msg.into());
