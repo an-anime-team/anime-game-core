@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 use std::collections::HashSet;
 
-use md5::{Md5, Digest};
+use md5::{Digest, Md5};
 
 #[cfg(feature = "sophon")]
-use crate::sophon::protos::SophonManifest::SophonManifestAssetProperty;
-
+use crate::sophon::protos::SophonManifestAssetProperty;
 use super::installer::downloader::{Downloader, DownloadingError};
 
-// {"remoteName": "UnityPlayer.dll", "md5": "8c8c3d845b957e4cb84c662bed44d072", "fileSize": 33466104}
+// {"remoteName": "UnityPlayer.dll", "md5": "8c8c3d845b957e4cb84c662bed44d072",
+// "fileSize": 33466104}
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct IntegrityFile {
     pub path: PathBuf,
@@ -21,9 +21,9 @@ pub struct IntegrityFile {
 impl From<&SophonManifestAssetProperty> for IntegrityFile {
     fn from(value: &SophonManifestAssetProperty) -> Self {
         Self {
-            path: PathBuf::from(&value.AssetName),
-            md5: value.AssetHashMd5.clone(),
-            size: value.AssetSize,
+            path: PathBuf::from(&value.asset_name),
+            md5: value.asset_hash_md5.clone(),
+            size: value.asset_size,
             base_url: "".to_owned() // empty because there's no single url for downloading
         }
     }
@@ -38,7 +38,8 @@ impl IntegrityFile {
         let file_path: PathBuf = game_path.into().join(&self.path);
 
         // Get file metadata, or return false if it's unavailable
-        let Ok(metadata) = file_path.metadata() else {
+        let Ok(metadata) = file_path.metadata()
+        else {
             return false;
         };
 
@@ -46,7 +47,6 @@ impl IntegrityFile {
         if metadata.len() != self.size {
             false
         }
-
         // Otherwise compare file hashes
         else {
             tracing::trace!("Comparing hashes");
@@ -58,7 +58,8 @@ impl IntegrityFile {
         }
     }
 
-    /// Compare files' sizes and do not compare files' hashes. Works lots faster than `verify`
+    /// Compare files' sizes and do not compare files' hashes. Works lots faster
+    /// than `verify`
     #[tracing::instrument(level = "trace", ret)]
     pub fn fast_verify<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> bool {
         tracing::trace!("Verifying file");
@@ -72,10 +73,14 @@ impl IntegrityFile {
     ///
     /// This method doesn't compare them, so you should do it manually
     #[tracing::instrument(level = "debug", ret)]
-    pub fn repair<T: Into<PathBuf> + std::fmt::Debug>(&self, game_path: T) -> Result<(), DownloadingError> {
+    pub fn repair<T: Into<PathBuf> + std::fmt::Debug>(
+        &self,
+        game_path: T
+    ) -> Result<(), DownloadingError> {
         tracing::debug!("Repairing file");
 
-        let mut downloader = Downloader::new(format!("{}/{}", self.base_url, self.path.to_string_lossy()))?;
+        let mut downloader =
+            Downloader::new(format!("{}/{}", self.base_url, self.path.to_string_lossy()))?;
 
         // Obviously re-download file entirely
         downloader.continue_downloading = false;
@@ -84,12 +89,18 @@ impl IntegrityFile {
     }
 }
 
-/// Calculate difference between actual files stored in `game_dir`, and files listed in `used_files`
+/// Calculate difference between actual files stored in `game_dir`, and files
+/// listed in `used_files`
 ///
-/// Returned difference will contain files that are not used by the game and should (or just can) be deleted
+/// Returned difference will contain files that are not used by the game and
+/// should (or just can) be deleted
 ///
 /// `used_files` can be both absolute and relative to `game_dir`
-pub fn try_get_unused_files<T, F, U>(game_dir: T, used_files: F, skip_names: U) -> anyhow::Result<Vec<PathBuf>>
+pub fn try_get_unused_files<T, F, U>(
+    game_dir: T,
+    used_files: F,
+    skip_names: U
+) -> anyhow::Result<Vec<PathBuf>>
 where
     T: Into<PathBuf>,
     F: IntoIterator<Item = PathBuf>,
@@ -116,7 +127,6 @@ where
                 if entry.file_type()?.is_dir() {
                     files.append(&mut list_files(entry_path, skip_names)?);
                 }
-
                 else {
                     files.push(entry_path);
                 }
@@ -126,11 +136,9 @@ where
         Ok(files)
     }
 
-    let used_files = used_files.into_iter()
-        .collect::<HashSet<PathBuf>>();
+    let used_files = used_files.into_iter().collect::<HashSet<PathBuf>>();
 
-    let skip_names = skip_names.into_iter()
-        .collect::<Vec<String>>();
+    let skip_names = skip_names.into_iter().collect::<Vec<String>>();
 
     let game_dir = game_dir.into();
 

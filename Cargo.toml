@@ -41,17 +41,20 @@ md-5 = { version = "0.10", features = ["asm"], optional = true }
 kinda-virtual-fs = { version = "0.1.1", optional = true }
 
 # Needed for Sophon
-zstd = { version = "0.13", optional = true }
-reqwest = { version = "0.12", features = ["blocking", "h2", "http2", "json", "rustls-tls", "rustls-tls-webpki-roots", "socks"], default-features = false, optional = true }
-protobuf = { version = "3.7", optional = true }
-crossbeam-deque = { version = "0.8.6", optional = true }
+
+sophon = { git = "https://dawn.wine/dawn-winery/sophon-tools.git", optional = true, package = "sophon-lib" }
+#zstd = { version = "0.13", optional = true }
+#reqwest = { version = "0.12", features = ["blocking", "h2", "http2", "json", "rustls-tls", "rustls-tls-webpki-roots", "socks"], default-features = false, optional = true }
+#protobuf = { version = "3.7", optional = true }
+#crossbeam-deque = { version = "0.8.6", optional = true }
 
 [features]
 genshin = ["sophon"]
 star-rail = ["sophon"]
 zzz = []
 honkai = []
-sophon = ["dep:md-5", "dep:zstd", "dep:reqwest", "dep:protobuf", "dep:protobuf-codegen", "dep:crossbeam-deque", "external"]
+#sophon = ["dep:md-5", "dep:zstd", "dep:reqwest", "dep:protobuf", "dep:protobuf-codegen", "dep:crossbeam-deque", "external"]
+sophon = ["dep:sophon"]
 
 install = [
     # Only genshin need it so perhaps I should

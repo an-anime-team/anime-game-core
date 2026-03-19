@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use fs_extra::dir::get_size;
 
 use crate::version::Version;
-use crate::sophon::api_schemas::sophon_diff::SophonDiff;
-use crate::sophon::api_schemas::sophon_manifests::SophonDownloadInfo;
+use crate::sophon::api::schemas::sophon_diff::SophonDiff;
+use crate::sophon::api::schemas::sophon_manifests::SophonDownloadInfo;
+use crate::sophon::reqwest;
 use crate::sophon;
 use crate::genshin::consts::*;
 use crate::genshin::voice_data::locale::VoiceLocale;
@@ -165,35 +166,26 @@ impl VoicePackage {
     pub fn with_locale(locale: VoiceLocale, game_edition: GameEdition) -> anyhow::Result<Self> {
         let client = reqwest::blocking::Client::new();
 
-        let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
+        let game_branches = sophon::api::get_game_branches_info(&client, &game_edition.into())?;
 
-        let latest_version = game_branches
-            .latest_version_by_id(game_edition.game_id())
-            .ok_or_else(|| {
-                anyhow::anyhow!("failed to find the latest game version")
-                    .context(format!("game id: {}", game_edition.game_id()))
-            })?;
-
-        let game_branch_info = game_branches
-            .get_game_by_id(game_edition.game_id(), latest_version)
+        let game_branch_info = game_branches.get_game_branch_by_id_or_biz_latest(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to get the game version information")
                     .context(format!("game id: {}", game_edition.game_id()))
-                    .context(format!("game version: {latest_version}"))
             })?;
 
-        let downloads_info = sophon::installer::get_game_download_sophon_info(
+        let downloads_info = sophon::api::get_game_download_sophon_info(
             &client,
             game_branch_info
                 .main
                 .as_ref()
                 .expect("The `None` case would have been caught earlier"),
-            game_edition.into()
+            &game_edition.into()
         )?;
 
         Ok(Self::NotInstalled {
             locale,
-            version: latest_version,
+            version: game_branch_info.version().expect("must be valid version").into(),
             data: find_voice_pack(&downloads_info.manifests, locale),
             game_path: None,
             game_edition
@@ -271,30 +263,21 @@ impl VoicePackage {
     pub fn list_latest(game_edition: GameEdition) -> anyhow::Result<Vec<VoicePackage>> {
         let client = reqwest::blocking::Client::new();
 
-        let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
+        let game_branches = sophon::api::get_game_branches_info(&client, &game_edition.into())?;
 
-        let latest_version = game_branches
-            .latest_version_by_id(game_edition.game_id())
-            .ok_or_else(|| {
-                anyhow::anyhow!("failed to find the latest game version")
-                    .context(format!("game id: {}", game_edition.game_id()))
-            })?;
-
-        let branch_info = game_branches
-            .get_game_by_id(game_edition.game_id(), latest_version)
+        let branch_info = game_branches.get_game_branch_by_id_or_biz_latest(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to get the game version information")
                     .context(format!("game id: {}", game_edition.game_id()))
-                    .context(format!("game version: {latest_version}"))
             })?;
 
-        let downloads_info = sophon::installer::get_game_download_sophon_info(
+        let downloads_info = sophon::api::get_game_download_sophon_info(
             &client,
             branch_info
                 .main
                 .as_ref()
                 .expect("The `None` case would have been caught earlier"),
-            game_edition.into()
+            &game_edition.into()
         )?;
 
         let mut packages = Vec::new();
@@ -303,7 +286,7 @@ impl VoicePackage {
             if let Some(locale) = VoiceLocale::from_str(&package.matching_field) {
                 packages.push(Self::NotInstalled {
                     locale,
-                    version: latest_version,
+                    version: branch_info.version().expect("must be a valid version").into(),
                     data: package.clone(),
                     game_path: None,
                     game_edition
@@ -360,10 +343,10 @@ impl VoicePackage {
                         let package_size = get_size(path)?;
 
                         let game_branches =
-                            sophon::get_game_branches_info(&client, (*game_edition).into())?;
+                            sophon::api::get_game_branches_info(&client, &game_edition.into())?;
 
                         let game_branch_info = game_branches
-                            .get_game_latest_by_id(game_edition.game_id())
+                            .get_game_branch_by_id_or_biz_latest(game_edition.game_id())
                             .expect("Latest version should be available");
 
                         tracing::debug!(
@@ -383,13 +366,13 @@ impl VoicePackage {
                         }) {
                             let locale = locale.to_code();
 
-                            let download_info = sophon::installer::get_game_download_sophon_info(
+                            let download_info = sophon::api::get_game_download_sophon_info(
                                 &client,
                                 game_branch_info
                                     .main
                                     .as_ref()
                                     .expect("The `None` case would have been caught earlier"),
-                                (*game_edition).into()
+                                &game_edition.into()
                             )?;
 
                             let info = download_info
@@ -541,30 +524,24 @@ impl VoicePackage {
 
         let client = reqwest::blocking::Client::new();
 
-        let game_branches = sophon::get_game_branches_info(&client, game_edition.into())?;
-
-        let latest_version = game_branches
-            .latest_version_by_id(game_edition.game_id())
-            .ok_or_else(|| {
-                anyhow::anyhow!("failed to find the latest game version")
-                    .context(format!("game id: {}", game_edition.game_id()))
-            })?;
+        let game_branches = sophon::api::get_game_branches_info(&client, &game_edition.into())?;
 
         let branch_info = game_branches
-            .get_game_by_id(game_edition.game_id(), latest_version)
+            .get_game_branch_by_id_or_biz_latest(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to get the game version information")
                     .context(format!("game id: {}", game_edition.game_id()))
-                    .context(format!("game version: {latest_version}"))
             })?;
 
-        let downloads_info = sophon::installer::get_game_download_sophon_info(
+        let latest_version: Version = branch_info.version().expect("must be a valid version").into();
+
+        let downloads_info = sophon::api::get_game_download_sophon_info(
             &client,
             branch_info
                 .main
                 .as_ref()
                 .expect("The `None` case would have been caught earlier"),
-            game_edition.into()
+            &game_edition.into()
         )?;
 
         if self.is_installed() {
@@ -584,10 +561,10 @@ impl VoicePackage {
                         .iter()
                         .any(|pre_ver| *pre_ver == current)
                     {
-                        let game_patches = sophon::updater::get_game_diffs_sophon_info(
+                        let game_patches = sophon::api::get_game_diffs_sophon_info(
                             &client,
                             predownload_info,
-                            game_edition.into()
+                            &game_edition.into()
                         )?;
 
                         let diff = find_voice_pack_diff(&game_patches.manifests, self.locale());
@@ -603,12 +580,12 @@ impl VoicePackage {
 
                         return Ok(VersionDiff::Predownload {
                             current,
-                            latest: predownload_version,
+                            latest: predownload_version.into(),
 
                             downloaded_size: stats.compressed_size.parse()?,
                             unpacked_size: stats.uncompressed_size.parse()?,
 
-                            download_info: sophon::api_schemas::DownloadOrDiff::Patch(diff),
+                            download_info: sophon::api::schemas::DownloadOrDiff::Patch(diff),
 
                             installation_path: match self {
                                 VoicePackage::Installed {
@@ -658,13 +635,13 @@ impl VoicePackage {
                     .iter()
                     .any(|tag| *tag == current)
                 {
-                    let game_patches = sophon::updater::get_game_diffs_sophon_info(
+                    let game_patches = sophon::api::get_game_diffs_sophon_info(
                         &client,
                         branch_info
                             .main
                             .as_ref()
                             .expect("The `None` case would have been caught earlier"),
-                        game_edition.into()
+                        &game_edition.into()
                     )?;
 
                     let diff = find_voice_pack_diff(&game_patches.manifests, self.locale());

@@ -24,7 +24,9 @@ mod games;
 pub use minreq;
 
 #[cfg(feature = "sophon")]
-pub use reqwest;
+pub use sophon;
+#[cfg(feature = "sophon")]
+pub use sophon::reqwest;
 
 #[cfg(feature = "genshin")]
 pub use games::genshin;
@@ -48,9 +50,6 @@ pub mod installer;
 
 #[cfg(feature = "install")]
 pub mod repairer;
-
-#[cfg(feature = "sophon")]
-pub mod sophon;
 
 pub mod prelude {
     pub use super::version::*;
