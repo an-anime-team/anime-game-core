@@ -74,6 +74,7 @@ external = ["dep:kinda-virtual-fs"]
 
 patches = []
 patch-jadeite = []
+patch-mfc140 = []
 
 all = [
     "install",
