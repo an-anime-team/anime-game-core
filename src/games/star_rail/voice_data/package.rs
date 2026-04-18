@@ -347,7 +347,7 @@ impl VoicePackage {
 
                         let game_branches =
                             sophon::get_game_branches_info(&client, (*game_edition).into())?;
-                        
+
                         let latest_version = game_branches
                             .latest_version_by_id(game_edition.api_game_id())
                             .ok_or_else(|| {

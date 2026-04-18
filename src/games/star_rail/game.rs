@@ -203,10 +203,10 @@ impl Game {
                         )
                         .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
 
-                    let download_info = game_downloads
-                        .get_manifests_for("game")
-                        .cloned()
-                        .ok_or_else(|| anyhow::anyhow!("Failed to get game manifest"))?;
+                        let download_info = game_downloads
+                            .get_manifests_for("game")
+                            .cloned()
+                            .ok_or_else(|| anyhow::anyhow!("Failed to get game manifest"))?;
 
                         let downloaded_size = download_info.stats.compressed_size.parse()?;
                         let unpacked_size = download_info.stats.uncompressed_size.parse()?;
