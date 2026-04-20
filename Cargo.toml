@@ -42,7 +42,7 @@ kinda-virtual-fs = { version = "0.1.1", optional = true }
 
 [dependencies.sophon]
 git = "https://github.com/dawn-winery/sophon-tools.git"
-tag = "v0.1.3"
+tag = "v0.1.4"
 package = "sophon-lib"
 optional = true
 
@@ -82,6 +82,8 @@ all = [
     "external",
     "patches"
 ]
+
+default = ["all", "star-rail", "patch-jadeite"]
 
 [build-dependencies]
 protobuf-codegen = { version = "3.7.2", optional = true }
