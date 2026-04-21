@@ -1,30 +1,21 @@
 use std::path::{Path, PathBuf};
-use std::os::unix::prelude::PermissionsExt;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::consts::GameEdition;
-use crate::sophon::{self, SophonError};
-use crate::sophon::api_schemas::DownloadOrDiff;
-use crate::sophon::api_schemas::sophon_diff::SophonDiff;
-use crate::sophon::api_schemas::sophon_manifests::SophonDownloadInfo;
+use crate::sophon::{self, SophonError, reqwest};
+use crate::sophon::api::schemas::DownloadOrDiff;
+use crate::sophon::api::schemas::sophon_diff::SophonDiff;
+use crate::sophon::api::schemas::sophon_manifests::SophonDownloadInfo;
 use crate::sophon::installer::SophonInstaller;
 use crate::sophon::updater::SophonPatcher;
 use crate::version::Version;
 use crate::traits::version_diff::VersionDiffExt;
 #[cfg(feature = "install")]
-use crate::{
-    external::hpatchz,
-    installer::{
-        archives::Archive,
-        downloader::{Downloader, DownloadingError},
-        free_space,
-        installer::Update as InstallerUpdate
-    }
-};
+use crate::installer::{downloader::DownloadingError, installer::Update as InstallerUpdate};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum DiffUpdate {
     CheckingFreeSpace(PathBuf),
 
@@ -61,7 +52,7 @@ impl From<InstallerUpdate> for DiffUpdate {
     }
 }
 
-#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Error, Debug)]
 pub enum DiffDownloadingError {
     /// Your installation is already up to date and not needed to be updated
     #[error("Component version is already latest")]
@@ -99,7 +90,7 @@ pub enum DiffDownloadingError {
 
 impl From<reqwest::Error> for DiffDownloadingError {
     fn from(error: reqwest::Error) -> Self {
-        SophonError::Reqwest(error.to_string()).into()
+        SophonError::Reqwest(error).into()
     }
 }
 
@@ -298,8 +289,11 @@ impl VersionDiff {
 
         let client = reqwest::blocking::Client::new();
 
-        let installer = SophonInstaller::new(client, download_info, self.temp_folder())?
-            .with_hold_last_file_suffix("data.unity3d".to_owned());
+        let mut installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        installer.last_file_suffix = Some("data.unity3d".to_owned());
+        installer.chunks_in_mem = true;
+        installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
+        installer.inplace = true;
 
         installer.install(path.as_ref(), thread_count, move |msg| {
             (updater)(msg.into());
@@ -344,10 +338,10 @@ impl VersionDiff {
 
         let client = reqwest::blocking::Client::new();
 
-        let patcher = SophonPatcher::new(client, diff, self.temp_folder())?
-            .with_hold_last_file_suffix("data.unity3d".to_owned());
+        let mut patcher = SophonPatcher::new(client, diff, self.temp_folder(), None)?;
+        patcher.last_file_suffix = Some("data.unity3d".to_owned());
 
-        patcher.update(&path, from, thread_count, move |msg| {
+        patcher.update(&path, from.into(), thread_count, move |msg| {
             (updater)(msg.into());
         })?;
 
@@ -390,8 +384,9 @@ impl VersionDiff {
 
         match download_or_patch_info {
             DownloadOrDiff::Download(download_info) => {
-                let installer = SophonInstaller::new(client, download_info, self.temp_folder())?
-                    .with_hold_last_file_suffix("data.unity3d".to_owned());
+                let mut installer =
+                    SophonInstaller::new(client, download_info, self.temp_folder())?;
+                installer.last_file_suffix = Some("data.unity3d".to_owned());
 
                 installer.pre_download(thread_count, move |msg| {
                     (updater)(msg.into());
@@ -399,10 +394,10 @@ impl VersionDiff {
             }
 
             DownloadOrDiff::Patch(diff_info) => {
-                let patcher = SophonPatcher::new(client, diff_info, self.temp_folder())?
-                    .with_hold_last_file_suffix("data.unity3d".to_owned());
+                let mut patcher = SophonPatcher::new(client, diff_info, self.temp_folder(), None)?;
+                patcher.last_file_suffix = Some("data.unity3d".to_owned());
 
-                patcher.pre_download(from, thread_count, move |msg| {
+                patcher.pre_download(from.into(), thread_count, move |msg| {
                     (updater)(msg.into());
                 })?;
             }

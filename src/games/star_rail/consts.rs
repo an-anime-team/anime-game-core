@@ -4,6 +4,26 @@ use serde::{Deserialize, Serialize};
 
 use super::voice_data::locale::VoiceLocale;
 
+#[cfg(feature = "sophon")]
+impl From<GameEdition> for sophon::GameEdition {
+    fn from(value: GameEdition) -> Self {
+        match value {
+            GameEdition::Global => sophon::GameEdition::Global,
+            GameEdition::China => sophon::GameEdition::China
+        }
+    }
+}
+
+#[cfg(feature = "sophon")]
+impl From<&GameEdition> for sophon::GameEdition {
+    fn from(value: &GameEdition) -> Self {
+        match value {
+            GameEdition::Global => sophon::GameEdition::Global,
+            GameEdition::China => sophon::GameEdition::China
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameEdition {
     Global,

@@ -3,6 +3,26 @@ use serde::{Serialize, Deserialize};
 use std::fmt::{Debug, Display, Formatter};
 use std::cmp::Ordering;
 
+#[cfg(feature = "sophon")]
+impl From<sophon::utils::version::Version> for Version {
+    fn from(v: sophon::utils::version::Version) -> Self {
+        Self {
+            version: [v.major, v.minor, v.patch]
+        }
+    }
+}
+
+#[cfg(feature = "sophon")]
+impl From<Version> for sophon::utils::version::Version {
+    fn from(v: Version) -> Self {
+        Self { 
+            major: v.version[0],
+            minor: v.version[1],
+            patch: v.version[2]
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Version {
     pub version: [u8; 3]

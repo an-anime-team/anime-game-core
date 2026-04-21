@@ -5,9 +5,9 @@ use thiserror::Error;
 
 use crate::version::Version;
 use crate::sophon::SophonError;
-use crate::sophon::api_schemas::DownloadOrDiff;
-use crate::sophon::api_schemas::sophon_diff::SophonDiff;
-use crate::sophon::api_schemas::sophon_manifests::SophonDownloadInfo;
+use crate::sophon::api::schemas::DownloadOrDiff;
+use crate::sophon::api::schemas::sophon_diff::SophonDiff;
+use crate::sophon::api::schemas::sophon_manifests::SophonDownloadInfo;
 use crate::sophon::installer::SophonInstaller;
 use crate::sophon::updater::SophonPatcher;
 use crate::sophon;
@@ -16,7 +16,7 @@ use crate::traits::version_diff::VersionDiffExt;
 use crate::installer::installer::Update as InstallerUpdate;
 use super::consts::GameEdition;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum DiffUpdate {
     CheckingFreeSpace(PathBuf),
 
@@ -55,7 +55,7 @@ impl From<sophon::updater::Update> for DiffUpdate {
     }
 }
 
-#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Error, Debug)]
 pub enum DiffDownloadingError {
     /// Your installation is already up to date and not needed to be updated
     #[error("Component version is already latest")]
@@ -87,9 +87,9 @@ pub enum DiffDownloadingError {
     PathNotSpecified
 }
 
-impl From<reqwest::Error> for DiffDownloadingError {
-    fn from(error: reqwest::Error) -> Self {
-        SophonError::Reqwest(error.to_string()).into()
+impl From<sophon::reqwest::Error> for DiffDownloadingError {
+    fn from(error: sophon::reqwest::Error) -> Self {
+        Self::SophonError(SophonError::from(error))
     }
 }
 
@@ -288,9 +288,12 @@ impl VersionDiff {
             "Downloading game"
         );
 
-        let client = reqwest::blocking::Client::new();
+        let client = sophon::reqwest::blocking::Client::new();
 
-        let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        let mut installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        installer.chunks_in_mem = true;
+        installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024);
+        installer.inplace = true;
 
         installer.install(path.as_ref(), thread_count, move |msg| {
             (updater)(msg.into());
@@ -333,11 +336,11 @@ impl VersionDiff {
             "Patching game files"
         );
 
-        let client = reqwest::blocking::Client::new();
+        let client = sophon::reqwest::blocking::Client::new();
 
-        let patcher = SophonPatcher::new(client, diff, self.temp_folder())?;
+        let patcher = SophonPatcher::new(client, diff, self.temp_folder(), None)?;
 
-        patcher.update(&path, from, thread_count, move |msg| {
+        patcher.update(&path, from.into(), thread_count, move |msg| {
             (updater)(msg.into());
         })?;
 
@@ -376,7 +379,7 @@ impl VersionDiff {
             "Predownloading game update"
         );
 
-        let client = reqwest::blocking::Client::new();
+        let client = sophon::reqwest::blocking::Client::new();
 
         match download_or_patch_info {
             DownloadOrDiff::Download(download_info) => {
@@ -388,9 +391,9 @@ impl VersionDiff {
             }
 
             DownloadOrDiff::Patch(diff_info) => {
-                let patcher = SophonPatcher::new(client, diff_info, self.temp_folder())?;
+                let patcher = SophonPatcher::new(client, diff_info, self.temp_folder(), None)?;
 
-                patcher.pre_download(from, thread_count, move |msg| {
+                patcher.pre_download(from.into(), thread_count, move |msg| {
                     (updater)(msg.into());
                 })?;
             }
