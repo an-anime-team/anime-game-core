@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use crate::version::Version;
 use crate::traits::prelude::*;
-
 use super::api;
 use super::consts::*;
 use super::version_diff::*;
@@ -57,7 +56,11 @@ impl GameExt for Game {
             .map(|version| Version::new(version[0], version[1], version[2]))
             .ok();
 
-        let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
+        let file = File::open(
+            self.path
+                .join(self.edition.data_folder())
+                .join("globalgamemanagers")
+        )?;
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
@@ -66,7 +69,11 @@ impl GameExt for Game {
         for byte in file.bytes().skip(4000).take(10000).flatten() {
             match byte {
                 0 => {
-                    if correct && !version[0].is_empty() && !version[1].is_empty() && !version[2].is_empty() {
+                    if correct
+                        && !version[0].is_empty()
+                        && !version[1].is_empty()
+                        && !version[2].is_empty()
+                    {
                         let found_version = Version::new(
                             bytes_to_num(&version[0]),
                             bytes_to_num(&version[1]),
@@ -102,7 +109,6 @@ impl GameExt for Game {
                     if correct && b"0123456789".contains(&byte) {
                         version[version_ptr].push(byte);
                     }
-
                     else {
                         correct = false;
                     }
@@ -132,13 +138,22 @@ impl Game {
                 Ok(version) => version,
                 Err(err) => {
                     if self.path.exists() && self.path.metadata()?.len() == 0 {
-                        let downloaded_size = response.main.major.game_pkgs.iter()
+                        let downloaded_size = response
+                            .main
+                            .major
+                            .game_pkgs
+                            .iter()
                             .flat_map(|pkg| pkg.size.parse::<u64>())
                             .sum();
 
-                        let unpacked_size = response.main.major.game_pkgs.iter()
+                        let unpacked_size = response
+                            .main
+                            .major
+                            .game_pkgs
+                            .iter()
                             .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                            .sum::<u64>() - downloaded_size;
+                            .sum::<u64>()
+                            - downloaded_size;
 
                         return Ok(VersionDiff::NotInstalled {
                             latest: Version::from_str(&response.main.major.version).unwrap(),
@@ -148,7 +163,11 @@ impl Game {
                             downloaded_size,
                             unpacked_size,
 
-                            segments_uris: response.main.major.game_pkgs.into_iter()
+                            segments_uris: response
+                                .main
+                                .major
+                                .game_pkgs
+                                .into_iter()
                                 .map(|segment| segment.url)
                                 .collect(),
 
@@ -174,19 +193,25 @@ impl Game {
                     if let Some(predownload_major) = predownload_info.major {
                         for diff in predownload_info.patches {
                             if diff.version == current {
-                                let downloaded_size = diff.game_pkgs.iter()
+                                let downloaded_size = diff
+                                    .game_pkgs
+                                    .iter()
                                     .flat_map(|pkg| pkg.size.parse::<u64>())
                                     .sum();
 
-                                let unpacked_size = diff.game_pkgs.iter()
+                                let unpacked_size = diff
+                                    .game_pkgs
+                                    .iter()
                                     .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                                    .sum::<u64>() - downloaded_size;
+                                    .sum::<u64>()
+                                    - downloaded_size;
 
                                 return Ok(VersionDiff::Predownload {
                                     current,
                                     latest: Version::from_str(predownload_major.version).unwrap(),
 
-                                    uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
+                                    uri: diff.game_pkgs[0].url.clone(), /* TODO: can be a hard
+                                                                         * issue in future */
                                     edition: self.edition,
 
                                     downloaded_size,
@@ -206,25 +231,34 @@ impl Game {
                     edition: self.edition
                 })
             }
-
             else {
-                tracing::debug!("Game is outdated: {} -> {}", current, response.main.major.version);
+                tracing::debug!(
+                    "Game is outdated: {} -> {}",
+                    current,
+                    response.main.major.version
+                );
 
                 for diff in response.main.patches {
                     if diff.version == current {
-                        let downloaded_size = diff.game_pkgs.iter()
+                        let downloaded_size = diff
+                            .game_pkgs
+                            .iter()
                             .flat_map(|pkg| pkg.size.parse::<u64>())
                             .sum();
 
-                        let unpacked_size = diff.game_pkgs.iter()
+                        let unpacked_size = diff
+                            .game_pkgs
+                            .iter()
                             .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                            .sum::<u64>() - downloaded_size;
+                            .sum::<u64>()
+                            - downloaded_size;
 
                         return Ok(VersionDiff::Diff {
                             current,
                             latest: Version::from_str(response.main.major.version).unwrap(),
 
-                            uri: diff.game_pkgs[0].url.clone(), // TODO: can be a hard issue in future
+                            uri: diff.game_pkgs[0].url.clone(), /* TODO: can be a hard issue in
+                                                                 * future */
                             edition: self.edition,
 
                             downloaded_size,
@@ -244,17 +278,25 @@ impl Game {
                 })
             }
         }
-
         else {
             tracing::debug!("Game is not installed");
 
-            let downloaded_size = response.main.major.game_pkgs.iter()
+            let downloaded_size = response
+                .main
+                .major
+                .game_pkgs
+                .iter()
                 .flat_map(|pkg| pkg.size.parse::<u64>())
                 .sum();
 
-            let unpacked_size = response.main.major.game_pkgs.iter()
+            let unpacked_size = response
+                .main
+                .major
+                .game_pkgs
+                .iter()
                 .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                .sum::<u64>() - downloaded_size;
+                .sum::<u64>()
+                - downloaded_size;
 
             Ok(VersionDiff::NotInstalled {
                 latest: Version::from_str(&response.main.major.version).unwrap(),
@@ -264,7 +306,11 @@ impl Game {
                 downloaded_size,
                 unpacked_size,
 
-                segments_uris: response.main.major.game_pkgs.into_iter()
+                segments_uris: response
+                    .main
+                    .major
+                    .game_pkgs
+                    .into_iter()
                     .map(|segment| segment.url)
                     .collect(),
 

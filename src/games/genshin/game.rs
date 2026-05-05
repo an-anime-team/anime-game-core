@@ -184,7 +184,10 @@ impl Game {
                     .context(format!("game id: {}", game_edition.game_id()))
             })?;
 
-        let latest_version: Version = branch_info.version().expect("must be a valid version").into();
+        let latest_version: Version = branch_info
+            .version()
+            .expect("must be a valid version")
+            .into();
 
         if self.is_installed() {
             let current = match self.get_version() {
