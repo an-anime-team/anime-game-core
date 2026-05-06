@@ -308,7 +308,7 @@ impl VersionDiff {
                 .version_file_path()
                 .unwrap_or(path.as_ref().join(".version"));
 
-            std::fs::write(version_path, self.latest().version);
+            std::fs::write(version_path, self.latest().to_string());
         }
 
         tracing::debug!(
@@ -353,7 +353,7 @@ impl VersionDiff {
                 .version_file_path()
                 .unwrap_or(path.as_ref().join(".version"));
 
-            std::fs::write(version_path, self.latest().version);
+            std::fs::write(version_path, self.latest().to_string());
         }
 
         tracing::debug!(

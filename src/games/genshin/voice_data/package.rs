@@ -15,6 +15,7 @@ use crate::genshin::version_diff::*;
 /// List of voiceover sizes
 ///
 /// Format: `(version, english, japanese, korean, chinese)`
+#[rustfmt::skip]
 pub const VOICE_PACKAGES_SIZES: &[(&str, u64, u64, u64, u64)] = &[
     //         English(US)   Japanese      Korean        Chinese
     ("5.7.0",  19512988499,  22222747101,  16908205123,  17127113750),
@@ -168,7 +169,8 @@ impl VoicePackage {
 
         let game_branches = sophon::api::get_game_branches_info(&client, &game_edition.into())?;
 
-        let game_branch_info = game_branches.get_game_branch_by_id_or_biz_latest(game_edition.game_id())
+        let game_branch_info = game_branches
+            .get_game_branch_by_id_or_biz_latest(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to get the game version information")
                     .context(format!("game id: {}", game_edition.game_id()))
@@ -185,7 +187,10 @@ impl VoicePackage {
 
         Ok(Self::NotInstalled {
             locale,
-            version: game_branch_info.version().expect("must be valid version").into(),
+            version: game_branch_info
+                .version()
+                .expect("must be valid version")
+                .into(),
             data: find_voice_pack(&downloads_info.manifests, locale),
             game_path: None,
             game_edition
@@ -265,7 +270,8 @@ impl VoicePackage {
 
         let game_branches = sophon::api::get_game_branches_info(&client, &game_edition.into())?;
 
-        let branch_info = game_branches.get_game_branch_by_id_or_biz_latest(game_edition.game_id())
+        let branch_info = game_branches
+            .get_game_branch_by_id_or_biz_latest(game_edition.game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to get the game version information")
                     .context(format!("game id: {}", game_edition.game_id()))
@@ -286,7 +292,10 @@ impl VoicePackage {
             if let Some(locale) = VoiceLocale::from_str(&package.matching_field) {
                 packages.push(Self::NotInstalled {
                     locale,
-                    version: branch_info.version().expect("must be a valid version").into(),
+                    version: branch_info
+                        .version()
+                        .expect("must be a valid version")
+                        .into(),
                     data: package.clone(),
                     game_path: None,
                     game_edition
@@ -331,9 +340,22 @@ impl VoicePackage {
             } => {
                 match std::fs::read(path.join(".version")) {
                     Ok(curr) => {
-                        tracing::debug!("Found .version file: {}.{}.{}", curr[0], curr[1], curr[2]);
+                        tracing::debug!("Found .version file");
+                        if curr.len() == 3 {
+                            tracing::info!("Found old format version file");
+                            let parsed_ver = Version::new(curr[0], curr[1], curr[2]);
+                            Ok(parsed_ver)
+                        }
+                        else if curr.len() > 3 {
+                            let version_str = String::from_utf8(curr)?;
 
-                        Ok(Version::new(curr[0], curr[1], curr[2]))
+                            Version::from_str(&version_str).ok_or_else(|| {
+                                anyhow::anyhow!("Invalid version string: {version_str}")
+                            })
+                        }
+                        else {
+                            Err(anyhow::anyhow!("The `.version` file is too short"))
+                        }
                     }
 
                     // We don't create .version file here because we don't
@@ -533,7 +555,10 @@ impl VoicePackage {
                     .context(format!("game id: {}", game_edition.game_id()))
             })?;
 
-        let latest_version: Version = branch_info.version().expect("must be a valid version").into();
+        let latest_version: Version = branch_info
+            .version()
+            .expect("must be a valid version")
+            .into();
 
         let downloads_info = sophon::api::get_game_download_sophon_info(
             &client,

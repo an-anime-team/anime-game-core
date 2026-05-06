@@ -322,9 +322,22 @@ impl VoicePackage {
             } => {
                 match std::fs::read(path.join(".version")) {
                     Ok(curr) => {
-                        tracing::debug!("Found .version file: {}.{}.{}", curr[0], curr[1], curr[2]);
+                        tracing::debug!("Found .version file");
+                        if curr.len() == 3 {
+                            tracing::info!("Found old format version file");
+                            let parsed_ver = Version::new(curr[0], curr[1], curr[2]);
+                            Ok(parsed_ver)
+                        }
+                        else if curr.len() > 3 {
+                            let version_str = String::from_utf8(curr)?;
 
-                        Ok(Version::new(curr[0], curr[1], curr[2]))
+                            Version::from_str(&version_str).ok_or_else(|| {
+                                anyhow::anyhow!("Invalid version string: {version_str}")
+                            })
+                        }
+                        else {
+                            Err(anyhow::anyhow!("The `.version` file is too short"))
+                        }
                     }
 
                     // We don't create .version file here because we don't actually know current

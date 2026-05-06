@@ -14,6 +14,28 @@ use super::version_diff::*;
 use super::voice_data::locale::VoiceLocale;
 use super::voice_data::package::VoicePackage;
 
+fn parse_dotversion(path: &Path) -> Option<Version> {
+    std::fs::read(path)
+        .map(|version| {
+            if version.len() == 3 {
+                tracing::info!("Found old format version file");
+                Some(Version::new(version[0], version[1], version[2]))
+            }
+            else if version.len() > 3 {
+                String::from_utf8(version)
+                    .map(|version_str| Version::from_str(&version_str))
+                    .ok()
+                    .flatten()
+            }
+            else {
+                tracing::error!(?path, "The `.version` file is too short!");
+                None
+            }
+        })
+        .ok()
+        .flatten()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
     path: PathBuf,
@@ -65,9 +87,8 @@ impl GameExt for Game {
             bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
         }
 
-        let stored_version = std::fs::read(self.path.join(".version"))
-            .map(|version| Version::new(version[0], version[1], version[2]))
-            .ok();
+        let stored_version_path = self.path.join(".version");
+        let stored_version = parse_dotversion(&stored_version_path);
 
         let file = File::open(
             self.path

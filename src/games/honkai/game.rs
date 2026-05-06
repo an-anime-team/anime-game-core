@@ -4,10 +4,31 @@ use std::path::{Path, PathBuf};
 
 use crate::version::Version;
 use crate::traits::game::GameExt;
-
 use super::api;
 use super::consts::*;
 use super::version_diff::*;
+
+fn parse_dotversion(path: &Path) -> Option<Version> {
+    std::fs::read(path)
+        .map(|version| {
+            if version.len() == 3 {
+                tracing::info!("Found old format version file");
+                Some(Version::new(version[0], version[1], version[2]))
+            }
+            else if version.len() > 3 {
+                String::from_utf8(version)
+                    .map(|version_str| Version::from_str(&version_str))
+                    .ok()
+                    .flatten()
+            }
+            else {
+                tracing::error!(?path, "The `.version` file is too short!");
+                None
+            }
+        })
+        .ok()
+        .flatten()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Game {
@@ -53,11 +74,14 @@ impl GameExt for Game {
             bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - '0' as u8))
         }
 
-        let stored_version = std::fs::read(self.path.join(".version"))
-            .map(|version| Version::new(version[0], version[1], version[2]))
-            .ok();
+        let stored_version_path = self.path.join(".version");
+        let stored_version = parse_dotversion(&stored_version_path);
 
-        let file = File::open(self.path.join(self.edition.data_folder()).join("globalgamemanagers"))?;
+        let file = File::open(
+            self.path
+                .join(self.edition.data_folder())
+                .join("globalgamemanagers")
+        )?;
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
@@ -67,13 +91,18 @@ impl GameExt for Game {
             if let Ok(byte) = byte {
                 match byte {
                     0 => {
-                        if correct && version_ptr == 2 && version[0].len() > 0 && version[1].len() > 0 && version[2].len() > 0 {
+                        if correct
+                            && version_ptr == 2
+                            && version[0].len() > 0
+                            && version[1].len() > 0
+                            && version[2].len() > 0
+                        {
                             let found_version = Version::new(
                                 bytes_to_num(&version[0]),
                                 bytes_to_num(&version[1]),
                                 bytes_to_num(&version[2])
                             );
-    
+
                             // Prioritize version stored in the .version file
                             // because it's parsed from the API directly
                             if let Some(stored_version) = stored_version {
@@ -81,7 +110,7 @@ impl GameExt for Game {
                                     return Ok(stored_version);
                                 }
                             }
-    
+
                             return Ok(found_version);
                         }
 
@@ -102,7 +131,6 @@ impl GameExt for Game {
                         if correct && b"0123456789".contains(&byte) {
                             version[version_ptr].push(byte);
                         }
-
                         else {
                             correct = false;
                         }
@@ -136,9 +164,12 @@ impl Game {
 
                 Ok(VersionDiff::Latest(current))
             }
-
             else {
-                tracing::debug!("Game is outdated: {} -> {}", current, response.main.major.version);
+                tracing::debug!(
+                    "Game is outdated: {} -> {}",
+                    current,
+                    response.main.major.version
+                );
 
                 Ok(VersionDiff::Diff {
                     current,
@@ -147,11 +178,19 @@ impl Game {
                     // TODO: can be a hard issue in future
                     url: response.main.major.game_pkgs[0].url.clone(),
 
-                    downloaded_size: response.main.major.game_pkgs.iter()
+                    downloaded_size: response
+                        .main
+                        .major
+                        .game_pkgs
+                        .iter()
                         .flat_map(|pkg| pkg.size.parse::<u64>())
                         .sum(),
 
-                    unpacked_size: response.main.major.game_pkgs.iter()
+                    unpacked_size: response
+                        .main
+                        .major
+                        .game_pkgs
+                        .iter()
                         .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
                         .sum(),
 
@@ -161,7 +200,6 @@ impl Game {
                 })
             }
         }
-
         else {
             tracing::debug!("Game is not installed");
 
@@ -171,11 +209,19 @@ impl Game {
                 // TODO: can be a hard issue in future
                 url: response.main.major.game_pkgs[0].url.clone(),
 
-                downloaded_size: response.main.major.game_pkgs.iter()
+                downloaded_size: response
+                    .main
+                    .major
+                    .game_pkgs
+                    .iter()
                     .flat_map(|pkg| pkg.size.parse::<u64>())
                     .sum(),
 
-                unpacked_size: response.main.major.game_pkgs.iter()
+                unpacked_size: response
+                    .main
+                    .major
+                    .game_pkgs
+                    .iter()
                     .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
                     .sum(),
 

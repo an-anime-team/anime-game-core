@@ -84,7 +84,5 @@ all = [
     "patches"
 ]
 
-default = ["all", "star-rail", "patch-jadeite"]
-
 [build-dependencies]
 protobuf-codegen = { version = "3.7.2", optional = true }
