@@ -11,12 +11,12 @@ use sysinfo::Disks;
 pub fn available(path: impl AsRef<Path>) -> Option<u64> {
     let disks = Disks::new_with_refreshed_list();
 
-    let path = path.as_ref().metadata().expect("Path does not exist");
-    let devno = path.dev();
+    let meta = path.as_ref().metadata().ok()?;
+    let devno = meta.dev();
 
     for disk in disks.iter() {
         let disk_meta = disk.mount_point().metadata();
-        if disk_meta.is_ok_and(|m| { m.dev() == devno }) {
+        if disk_meta.is_ok_and(|m| m.dev() == devno) {
             return Some(disk.available_space());
         }
     }
@@ -27,18 +27,13 @@ pub fn available(path: impl AsRef<Path>) -> Option<u64> {
 /// Check if two paths are contained on the same device
 pub fn is_same_disk(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> bool {
 
-    let dev1 = path1.as_ref().metadata()
-        .expect("Path does not exist")
-        .dev();
-
-    let dev2 = path2.as_ref().metadata()
-        .expect("Path does not exist")
-        .dev();
+    let Some(dev1) = path1.as_ref().metadata().ok() else { return false };
+    let Some(dev2) = path2.as_ref().metadata().ok() else { return false };
 
     // The semantics here aren't exactly the same as the old code (is_same_mount):
     // This tests if the path are on the same device specifically,
     // not that the mount point is the same.
-    dev1 == dev2
+    dev1.dev() == dev2.dev()
 }
 
 /// Check if two paths share the same mount point
