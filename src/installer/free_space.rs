@@ -1,3 +1,4 @@
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use sysinfo::Disks;
@@ -8,21 +9,14 @@ use sysinfo::Disks;
 ///
 /// Can return `None` if path is not prefixed by any available disk
 pub fn available(path: impl AsRef<Path>) -> Option<u64> {
-    let mut disks = Disks::new_with_refreshed_list();
+    let disks = Disks::new_with_refreshed_list();
 
-    disks.sort_by(|a, b| {
-        let a = a.mount_point().as_os_str().len();
-        let b = b.mount_point().as_os_str().len();
-
-        a.cmp(&b).reverse()
-    });
-
-    let path = path.as_ref()
-        .read_link()
-        .unwrap_or_else(|_| path.as_ref().to_path_buf());
+    let path = path.as_ref().metadata().expect("Path does not exist");
+    let devno = path.dev();
 
     for disk in disks.iter() {
-        if path.starts_with(disk.mount_point()) {
+        let disk_meta = disk.mount_point().metadata();
+        if disk_meta.is_ok_and(|m| { m.dev() == devno }) {
             return Some(disk.available_space());
         }
     }
@@ -30,8 +24,25 @@ pub fn available(path: impl AsRef<Path>) -> Option<u64> {
     None
 }
 
-/// Check if two paths exist on the same disk
+/// Check if two paths are contained on the same device
 pub fn is_same_disk(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> bool {
+
+    let dev1 = path1.as_ref().metadata()
+        .expect("Path does not exist")
+        .dev();
+
+    let dev2 = path2.as_ref().metadata()
+        .expect("Path does not exist")
+        .dev();
+
+    // The semantics here aren't exactly the same as the old code (is_same_mount):
+    // This tests if the path are on the same device specifically,
+    // not that the mount point is the same.
+    dev1 == dev2
+}
+
+/// Check if two paths share the same mount point
+pub fn is_same_mount(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> bool {
     let mut disks = Disks::new_with_refreshed_list();
 
     disks.sort_by(|a, b| {
