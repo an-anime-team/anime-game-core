@@ -22,9 +22,27 @@ pub fn is_installed(folder: impl AsRef<Path>) -> bool {
 }
 
 pub fn get_version(folder: impl AsRef<Path>) -> anyhow::Result<Version> {
-    let bytes = std::fs::read(folder.as_ref().join(".version"))?;
+    let dotversion_path = folder.as_ref().join(".version");
+    let version_bytes = std::fs::read(dotversion_path)?;
 
-    Ok(Version::new(bytes[0], bytes[1], bytes[2]))
+    if version_bytes.len() == 3 {
+        tracing::info!("Found old format version file");
+        Ok(Version::new(
+            version_bytes[0],
+            version_bytes[1],
+            version_bytes[2]
+        ))
+    }
+    else if version_bytes.len() > 3 {
+        let version_str = String::from_utf8(version_bytes)?;
+        Version::from_str(&version_str)
+            .ok_or_else(|| anyhow::anyhow!("Invalid version string: {version_str}"))
+    }
+    else {
+        Err(anyhow::anyhow!(
+            "The `.version` file is too short, cannot parse"
+        ))
+    }
 }
 
 #[cfg(feature = "install")]
