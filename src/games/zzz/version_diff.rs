@@ -741,7 +741,7 @@ impl VersionDiffExt for VersionDiff {
         {
             let version_path = self.version_file_path().unwrap_or(path.join(".version"));
 
-            std::fs::write(version_path, self.latest().version);
+            std::fs::write(version_path, self.latest().to_string());
         }
 
         // Apply hdiff patches

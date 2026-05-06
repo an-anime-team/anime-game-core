@@ -376,7 +376,7 @@ impl VersionDiffExt for VersionDiff {
                 .version_file_path()
                 .unwrap_or_else(|| path.join(".version"));
 
-            std::fs::write(version_path, self.latest().version);
+            std::fs::write(version_path, self.latest().to_string());
         }
 
         Ok(())
