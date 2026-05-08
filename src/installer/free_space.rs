@@ -11,7 +11,14 @@ use sysinfo::Disks;
 pub fn available(path: impl AsRef<Path>) -> Option<u64> {
     let disks = Disks::new_with_refreshed_list();
 
-    let meta = path.as_ref().metadata().ok()?;
+    let Some(meta) = path
+        .as_ref()
+        .ancestors()
+        .find_map(|parent_path| parent_path.metadata().ok())
+    else {
+        tracing::error!(path = ?path.as_ref(), "Could not find metadata for any of the ancestors of the path");
+        return None;
+    };
     let devno = meta.dev();
 
     for disk in disks.iter() {
