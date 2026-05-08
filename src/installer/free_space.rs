@@ -26,9 +26,14 @@ pub fn available(path: impl AsRef<Path>) -> Option<u64> {
 
 /// Check if two paths are contained on the same device
 pub fn is_same_disk(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> bool {
-
-    let Some(dev1) = path1.as_ref().metadata().ok() else { return false };
-    let Some(dev2) = path2.as_ref().metadata().ok() else { return false };
+    let Some(dev1) = path1.as_ref().metadata().ok()
+    else {
+        return false;
+    };
+    let Some(dev2) = path2.as_ref().metadata().ok()
+    else {
+        return false;
+    };
 
     // The semantics here aren't exactly the same as the old code (is_same_mount):
     // This tests if the path are on the same device specifically,
@@ -47,11 +52,13 @@ pub fn is_same_mount(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> bool {
         a.cmp(&b).reverse()
     });
 
-    let path1 = path1.as_ref()
+    let path1 = path1
+        .as_ref()
         .read_link()
         .unwrap_or_else(|_| path1.as_ref().to_path_buf());
 
-    let path2 = path2.as_ref()
+    let path2 = path2
+        .as_ref()
         .read_link()
         .unwrap_or_else(|_| path2.as_ref().to_path_buf());
 
