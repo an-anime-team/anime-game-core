@@ -35,7 +35,7 @@ pub fn get_version(folder: impl AsRef<Path>) -> anyhow::Result<Version> {
     }
     else if version_bytes.len() > 3 {
         let version_str = String::from_utf8(version_bytes)?;
-        Version::from_str(&version_str)
+        Version::from_str(version_str.trim_end())
             .ok_or_else(|| anyhow::anyhow!("Invalid version string: {version_str}"))
     }
     else {

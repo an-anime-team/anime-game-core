@@ -23,7 +23,7 @@ fn parse_dotversion(path: &Path) -> Option<Version> {
             }
             else if version.len() > 3 {
                 String::from_utf8(version)
-                    .map(|version_str| Version::from_str(&version_str))
+                    .map(|version_str| Version::from_str(version_str.trim_end()))
                     .ok()
                     .flatten()
             }
