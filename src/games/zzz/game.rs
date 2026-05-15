@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use crate::version::Version;
@@ -70,24 +70,24 @@ impl GameExt for Game {
     fn get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!("Trying to get installed game version");
 
-        fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
+        fn bytes_to_num(bytes: &[u8]) -> u8 {
             bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
         }
 
         let stored_version_path = self.path.join(".version");
         let stored_version = parse_dotversion(&stored_version_path);
 
-        let file = File::open(
+        let file = BufReader::new(File::open(
             self.path
                 .join(self.edition.data_folder())
                 .join("globalgamemanagers")
-        )?;
+        )?);
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes().skip(4000).take(10000).flatten() {
+        for byte in file.bytes().skip(45000).take(10000).flatten() {
             match byte {
                 0 => {
                     if correct
@@ -127,7 +127,7 @@ impl GameExt for Game {
                 }
 
                 _ => {
-                    if correct && b"0123456789".contains(&byte) {
+                    if correct && byte.is_ascii_digit() {
                         version[version_ptr].push(byte);
                     }
                     else {

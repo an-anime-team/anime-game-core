@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -90,66 +90,60 @@ impl GameExt for Game {
         let stored_version_path = self.path.join(".version");
         let stored_version = parse_dotversion(&stored_version_path);
 
-        let file = File::open(
+        let file = BufReader::new(File::open(
             self.path
                 .join(self.edition.data_folder())
                 .join("data.unity3d")
-        )?;
+        )?);
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes().skip(2000).take(10000) {
-            if let Ok(byte) = byte {
-                match byte {
-                    0 => {
-                        version = [vec![], vec![], vec![]];
-                        version_ptr = 0;
-                        correct = true;
-                    }
+        for byte in file.bytes().skip(2000).take(10000).flatten() {
+            match byte {
+                0 => {
+                    if correct
+                        && !version[0].is_empty()
+                        && !version[1].is_empty()
+                        && !version[2].is_empty()
+                    {
+                        let found_version = Version::new(
+                            bytes_to_num(&version[0]),
+                            bytes_to_num(&version[1]),
+                            bytes_to_num(&version[2])
+                        );
 
-                    46 => {
-                        version_ptr += 1;
-
-                        if version_ptr > 2 {
-                            correct = false;
-                        }
-                    }
-
-                    38 => {
-                        if correct
-                            && version[0].len() > 0
-                            && version[1].len() > 0
-                            && version[2].len() > 0
-                        {
-                            let found_version = Version::new(
-                                bytes_to_num(&version[0]),
-                                bytes_to_num(&version[1]),
-                                bytes_to_num(&version[2])
-                            );
-
-                            // Prioritize version stored in the .version file
-                            // because it's parsed from the API directly
-                            if let Some(stored_version) = stored_version {
-                                if stored_version > found_version {
-                                    return Ok(stored_version);
-                                }
+                        // Prioritize version stored in the .version file
+                        // because it's parsed from the API directly
+                        if let Some(stored_version) = stored_version {
+                            if stored_version > found_version {
+                                return Ok(stored_version);
                             }
-
-                            return Ok(found_version);
                         }
 
+                        return Ok(found_version);
+                    }
+
+                    version = [vec![], vec![], vec![]];
+                    version_ptr = 0;
+                    correct = true;
+                }
+
+                b'.' => {
+                    version_ptr += 1;
+
+                    if version_ptr > 2 {
                         correct = false;
                     }
+                }
 
-                    _ => {
-                        if correct && b"0123456789".contains(&byte) {
-                            version[version_ptr].push(byte);
-                        }
-                        else {
-                            correct = false;
-                        }
+                _ => {
+                    if correct && byte.is_ascii_digit() {
+                        version[version_ptr].push(byte);
+                    }
+                    else {
+                        correct = false;
                     }
                 }
             }

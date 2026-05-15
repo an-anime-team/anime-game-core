@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use crate::version::Version;
@@ -70,70 +70,68 @@ impl GameExt for Game {
     fn get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!("Trying to get installed game version");
 
-        fn bytes_to_num(bytes: &Vec<u8>) -> u8 {
-            bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - '0' as u8))
+        fn bytes_to_num(bytes: &[u8]) -> u8 {
+            bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
         }
 
         let stored_version_path = self.path.join(".version");
         let stored_version = parse_dotversion(&stored_version_path);
 
-        let file = File::open(
+        let file = BufReader::new(File::open(
             self.path
                 .join(self.edition.data_folder())
                 .join("globalgamemanagers")
-        )?;
+        )?);
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
         let mut correct = true;
 
-        for byte in file.bytes().skip(4000).take(10000) {
-            if let Ok(byte) = byte {
-                match byte {
-                    0 => {
-                        if correct
-                            && version_ptr == 2
-                            && version[0].len() > 0
-                            && version[1].len() > 0
-                            && version[2].len() > 0
-                        {
-                            let found_version = Version::new(
-                                bytes_to_num(&version[0]),
-                                bytes_to_num(&version[1]),
-                                bytes_to_num(&version[2])
-                            );
+        for byte in file.bytes().skip(4000).take(10000).flatten() {
+            match byte {
+                0 => {
+                    if correct
+                        && version_ptr == 2
+                        && !version[0].is_empty()
+                        && !version[1].is_empty()
+                        && !version[2].is_empty()
+                    {
+                        let found_version = Version::new(
+                            bytes_to_num(&version[0]),
+                            bytes_to_num(&version[1]),
+                            bytes_to_num(&version[2])
+                        );
 
-                            // Prioritize version stored in the .version file
-                            // because it's parsed from the API directly
-                            if let Some(stored_version) = stored_version {
-                                if stored_version > found_version {
-                                    return Ok(stored_version);
-                                }
+                        // Prioritize version stored in the .version file
+                        // because it's parsed from the API directly
+                        if let Some(stored_version) = stored_version {
+                            if stored_version > found_version {
+                                return Ok(stored_version);
                             }
-
-                            return Ok(found_version);
                         }
 
-                        version = [vec![], vec![], vec![]];
-                        version_ptr = 0;
-                        correct = true;
+                        return Ok(found_version);
                     }
 
-                    46 => {
-                        version_ptr += 1;
+                    version = [vec![], vec![], vec![]];
+                    version_ptr = 0;
+                    correct = true;
+                }
 
-                        if version_ptr > 2 {
-                            correct = false;
-                        }
+                b'.' => {
+                    version_ptr += 1;
+
+                    if version_ptr > 2 {
+                        correct = false;
                     }
+                }
 
-                    _ => {
-                        if correct && b"0123456789".contains(&byte) {
-                            version[version_ptr].push(byte);
-                        }
-                        else {
-                            correct = false;
-                        }
+                _ => {
+                    if correct && byte.is_ascii_digit() {
+                        version[version_ptr].push(byte);
+                    }
+                    else {
+                        correct = false;
                     }
                 }
             }

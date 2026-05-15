@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use crate::sophon;
@@ -98,7 +98,7 @@ impl GameExt for Game {
             .join(self.edition.data_folder())
             .join("globalgamemanagers");
 
-        let file = File::open(path)?;
+        let file = BufReader::new(File::open(path)?);
 
         let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
         let mut version_ptr: usize = 0;
@@ -112,7 +112,7 @@ impl GameExt for Game {
                     correct = true;
                 }
 
-                46 => {
+                b'.' => {
                     version_ptr += 1;
 
                     if version_ptr > 2 {
@@ -120,7 +120,7 @@ impl GameExt for Game {
                     }
                 }
 
-                95 => {
+                b'_' => {
                     if correct
                         && !version[0].is_empty()
                         && !version[1].is_empty()
@@ -148,7 +148,7 @@ impl GameExt for Game {
                 }
 
                 _ => {
-                    if correct && b"0123456789".contains(&byte) {
+                    if correct && byte.is_ascii_digit() {
                         version[version_ptr].push(byte);
                     }
                     else {
