@@ -102,7 +102,7 @@ impl GameExt for Game {
 
         for byte in file.bytes().skip(2000).take(10000).flatten() {
             match byte {
-                0 => {
+                0..10 => {
                     if correct
                         && !version[0].is_empty()
                         && !version[1].is_empty()
