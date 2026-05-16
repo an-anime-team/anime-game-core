@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameEdition {
@@ -31,6 +31,7 @@ impl GameEdition {
     }
 
     #[inline]
+    #[rustfmt::skip]
     pub fn api_uri(&self) -> &str {
         match self {
             GameEdition::China => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1"),
@@ -38,6 +39,16 @@ impl GameEdition {
         }
     }
 
+    #[inline]
+    #[rustfmt::skip]
+    pub fn game_scan_url(&self) -> &str {
+        match self {
+            GameEdition::China  => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGameScanInfo?launcher_id=jGHBHlcOq1"),
+            _ => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGameScanInfo?launcher_id=VYTpXlbWo8")
+        }
+    }
+
+    #[rustfmt::skip]
     pub fn api_game_id(&self) -> &str {
         // 5TIVvvcwtM  glb_official
         // g0mMIvshDb  jp_official
@@ -60,6 +71,11 @@ impl GameEdition {
     }
 
     #[inline]
+    pub fn exe_name(&self) -> &str {
+        "BH3.exe"
+    }
+
+    #[inline]
     pub fn telemetry_servers(&self) -> &[&str] {
         match self {
             Self::China => &[
@@ -78,27 +94,24 @@ impl GameEdition {
 
     pub fn from_system_lang() -> Self {
         let locale = std::env::var("LC_ALL")
-            .unwrap_or_else(|_| std::env::var("LC_MESSAGES")
-            .unwrap_or_else(|_| std::env::var("LANG")
-            .unwrap_or(String::from("en_us"))))
+            .unwrap_or_else(|_| {
+                std::env::var("LC_MESSAGES")
+                    .unwrap_or_else(|_| std::env::var("LANG").unwrap_or(String::from("en_us")))
+            })
             .to_ascii_lowercase();
 
         if locale.starts_with("zh_cn") {
             Self::China
         }
-
         else if locale.starts_with("zh_tw") {
             Self::Taiwan
         }
-
         else if locale.starts_with("ja") {
             Self::Japan
         }
-
         else if locale.starts_with("ko") {
             Self::Korea
         }
-
         else {
             Self::Global
         }

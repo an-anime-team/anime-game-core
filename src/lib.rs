@@ -10,6 +10,7 @@ lazy_static::lazy_static! {
 }
 
 pub mod version;
+pub mod version_detect;
 pub mod traits;
 pub mod prettify_bytes;
 pub mod check_domain;

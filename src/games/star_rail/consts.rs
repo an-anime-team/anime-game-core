@@ -44,21 +44,20 @@ impl GameEdition {
     }
 
     #[inline]
+    #[rustfmt::skip]
     pub fn api_uri(&self) -> &str {
         match self {
-            GameEdition::Global => concat!(
-                "https://sg-hyp-api.",
-                "ho",
-                "yo",
-                "verse",
-                ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=VYTpXlbWo8"
-            ),
-            GameEdition::China => concat!(
-                "https://hyp-api.",
-                "mih",
-                "oyo",
-                ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1"
-            )
+            GameEdition::Global => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=VYTpXlbWo8"),
+            GameEdition::China => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1")
+        }
+    }
+
+    #[inline]
+    #[rustfmt::skip]
+    pub fn game_scan_url(&self) -> &str {
+        match self {
+            GameEdition::Global => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGameScanInfo?launcher_id=VYTpXlbWo8"),
+            GameEdition::China  => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGameScanInfo?launcher_id=jGHBHlcOq1")
         }
     }
 
@@ -66,6 +65,11 @@ impl GameEdition {
     pub fn data_folder(&self) -> &str {
         // Same data folder name for every region
         concat!("Sta", "rRai", "l_Data")
+    }
+
+    #[inline]
+    pub fn exe_name(&self) -> &str {
+        "StarRail.exe"
     }
 
     /// API IDs used by Sophon
