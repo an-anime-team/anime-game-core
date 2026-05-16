@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::voice_data::locale::VoiceLocale;
 
@@ -9,7 +9,7 @@ impl From<GameEdition> for sophon::GameEdition {
     fn from(value: GameEdition) -> Self {
         match value {
             GameEdition::Global => sophon::GameEdition::Global,
-            GameEdition::China => sophon::GameEdition::China,
+            GameEdition::China => sophon::GameEdition::China
         }
     }
 }
@@ -19,7 +19,7 @@ impl From<&GameEdition> for sophon::GameEdition {
     fn from(value: &GameEdition) -> Self {
         match value {
             GameEdition::Global => sophon::GameEdition::Global,
-            GameEdition::China => sophon::GameEdition::China,
+            GameEdition::China => sophon::GameEdition::China
         }
     }
 }
@@ -44,6 +44,7 @@ impl GameEdition {
     }
 
     #[inline]
+    #[rustfmt::skip]
     pub fn api_uri(&self) -> &str {
         match self {
             GameEdition::Global => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGamePackages?launcher_id=VYTpXlbWo8"),
@@ -52,10 +53,28 @@ impl GameEdition {
     }
 
     #[inline]
+    #[rustfmt::skip]
+    pub fn game_scan_url(&self) -> &str {
+        match self {
+            GameEdition::Global => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGameScanInfo?launcher_id=VYTpXlbWo8"),
+            GameEdition::China  => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGameScanInfo?launcher_id=jGHBHlcOq1")
+        }
+    }
+
+    #[inline]
+    #[rustfmt::skip]
     pub fn data_folder(&self) -> &str {
         match self {
             GameEdition::Global => concat!("Ge", "nsh", "inIm", "pact_Data"),
             GameEdition::China  => concat!("Yu", "anS", "hen", "_Data")
+        }
+    }
+
+    #[inline]
+    pub fn exe_name(&self) -> &str {
+        match self {
+            GameEdition::Global => "GenshinImpact.exe",
+            GameEdition::China => "YuanShen.exe"
         }
     }
 
@@ -75,14 +94,16 @@ impl GameEdition {
 
     pub fn from_system_lang() -> Self {
         let locale = std::env::var("LC_ALL")
-            .unwrap_or_else(|_| std::env::var("LC_MESSAGES")
-            .unwrap_or_else(|_| std::env::var("LANG")
-            .unwrap_or(String::from("en_us"))))
+            .unwrap_or_else(|_| {
+                std::env::var("LC_MESSAGES")
+                    .unwrap_or_else(|_| std::env::var("LANG").unwrap_or(String::from("en_us")))
+            })
             .to_ascii_lowercase();
 
         if locale.starts_with("zh_cn") {
             Self::China
-        } else {
+        }
+        else {
             Self::Global
         }
     }
@@ -98,12 +119,17 @@ impl GameEdition {
 
 #[inline]
 pub fn get_voice_packages_path<T: AsRef<Path>>(game_path: T, game_edition: GameEdition) -> PathBuf {
-    game_path.as_ref()
+    game_path
+        .as_ref()
         .join(game_edition.data_folder())
         .join("StreamingAssets/AudioAssets")
 }
 
 #[inline]
-pub fn get_voice_package_path<T: AsRef<Path>>(game_path: T, game_edition: GameEdition, locale: VoiceLocale) -> PathBuf {
+pub fn get_voice_package_path<T: AsRef<Path>>(
+    game_path: T,
+    game_edition: GameEdition,
+    locale: VoiceLocale
+) -> PathBuf {
     get_voice_packages_path(game_path, game_edition).join(locale.to_folder())
 }

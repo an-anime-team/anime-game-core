@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -14,26 +12,16 @@ use super::version_diff::*;
 use super::voice_data::locale::VoiceLocale;
 use super::voice_data::package::VoicePackage;
 
-fn parse_dotversion(path: &Path) -> Option<Version> {
-    std::fs::read(path)
-        .map(|version| {
-            if version.len() == 3 {
-                tracing::info!("Found old format version file");
-                Some(Version::new(version[0], version[1], version[2]))
-            }
-            else if version.len() > 3 {
-                String::from_utf8(version)
-                    .map(|version_str| Version::from_str(version_str.trim_end()))
-                    .ok()
-                    .flatten()
-            }
-            else {
-                tracing::error!(?path, "The `.version` file is too short!");
-                None
-            }
-        })
-        .ok()
-        .flatten()
+fn get_version_from_game_files(
+    file: &Path,
+    stored_version: &Option<Version>
+) -> anyhow::Result<Option<Version>> {
+    crate::version_detect::get_version_from_game_files::<2000, 10000>(
+        file,
+        stored_version,
+        0..=9u8,
+        0..=9u8
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,74 +71,50 @@ impl GameExt for Game {
     fn get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!("Trying to get installed game version");
 
-        fn bytes_to_num(bytes: &[u8]) -> u8 {
-            bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
-        }
-
         let stored_version_path = self.path.join(".version");
-        let stored_version = parse_dotversion(&stored_version_path);
+        let stored_version = crate::version_detect::parse_dotversion(&stored_version_path);
 
-        let file = BufReader::new(File::open(
+        if let Some(version_from_files) = get_version_from_game_files(
             self.path
                 .join(self.edition.data_folder())
                 .join("data.unity3d")
-        )?);
-
-        let mut version: [Vec<u8>; 3] = [vec![], vec![], vec![]];
-        let mut version_ptr: usize = 0;
-        let mut correct = true;
-
-        for byte in file.bytes().skip(2000).take(10000).flatten() {
-            match byte {
-                0..10 => {
-                    if correct
-                        && !version[0].is_empty()
-                        && !version[1].is_empty()
-                        && !version[2].is_empty()
-                    {
-                        let found_version = Version::new(
-                            bytes_to_num(&version[0]),
-                            bytes_to_num(&version[1]),
-                            bytes_to_num(&version[2])
-                        );
-
-                        // Prioritize version stored in the .version file
-                        // because it's parsed from the API directly
-                        if let Some(stored_version) = stored_version {
-                            if stored_version > found_version {
-                                return Ok(stored_version);
-                            }
-                        }
-
-                        return Ok(found_version);
-                    }
-
-                    version = [vec![], vec![], vec![]];
-                    version_ptr = 0;
-                    correct = true;
-                }
-
-                b'.' => {
-                    version_ptr += 1;
-
-                    if version_ptr > 2 {
-                        correct = false;
-                    }
-                }
-
-                _ => {
-                    if correct && byte.is_ascii_digit() {
-                        version[version_ptr].push(byte);
-                    }
-                    else {
-                        correct = false;
-                    }
-                }
-            }
+                .as_ref(),
+            &stored_version
+        )? {
+            tracing::info!(
+                version = version_from_files.to_string(),
+                "Found game version from game files"
+            );
+            return Ok(version_from_files);
         }
 
         if let Some(stored_version) = stored_version {
+            tracing::info!(version = stored_version.to_string(), "Found stored version");
             return Ok(stored_version);
+        }
+
+        if let Some(game_scan_version) = crate::version_detect::get_version_game_scan(
+            self.path.join(self.edition.exe_name()).as_ref(),
+            self.edition.game_scan_url(),
+            self.edition.api_game_id()
+        )? {
+            tracing::info!(
+                version = game_scan_version.to_string(),
+                "Found game version through game scan API"
+            );
+            return Ok(game_scan_version);
+        }
+
+        if let Some(sophon_version) = crate::version_detect::get_version_sophon(
+            self.path.join(self.edition.exe_name()).as_ref(),
+            self.edition.api_game_id(),
+            self.edition.into()
+        )? {
+            tracing::info!(
+                version = sophon_version.to_string(),
+                "Found game version through sophon API"
+            );
+            return Ok(sophon_version);
         }
 
         tracing::error!("Version's bytes sequence wasn't found");
