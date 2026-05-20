@@ -11,10 +11,24 @@ use sysinfo::Disks;
 pub fn available(path: impl AsRef<Path>) -> Option<u64> {
     let disks = Disks::new_with_refreshed_list();
 
-    let Some(meta) = path
-        .as_ref()
-        .ancestors()
-        .find_map(|parent_path| parent_path.metadata().ok())
+    // Look for a path that does have metadata (for example, if input points to a
+    // non-existent path, or one of the parents does not exist). Also check if
+    // the device number is in the list of disks, because btrfs subvolumes do
+    // use separate device numbers.
+    let Some(meta) = path.as_ref().ancestors().find_map(|parent_path| {
+        parent_path.metadata().ok().and_then(|meta| {
+            let devno = meta.dev();
+            disks
+                .iter()
+                .any(|d| {
+                    d.mount_point()
+                        .metadata()
+                        .map(|m| m.dev() == devno)
+                        .unwrap_or(false)
+                })
+                .then_some(meta)
+        })
+    })
     else {
         tracing::error!(path = ?path.as_ref(), "Could not find metadata for any of the ancestors of the path");
         return None;
