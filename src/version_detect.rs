@@ -36,6 +36,7 @@ pub fn get_version_from_game_files<const OFFSET: u64, const REGION_SIZE: usize>(
     start_pattern: RangeInclusive<u8>,
     end_pattern: RangeInclusive<u8>
 ) -> anyhow::Result<Option<Version>> {
+    tracing::debug!(?file, "Trying game files");
     fn bytes_to_num(bytes: &[u8]) -> u8 {
         bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
     }
@@ -117,6 +118,7 @@ pub fn get_version_game_scan(
     scan_url: &str,
     game_id: &str
 ) -> anyhow::Result<Option<Version>> {
+    tracing::debug!(game_id, ?exe_path, "Trying Game Scan");
     let exe_hash = format!("{:x}", Md5::digest(std::fs::read(exe_path)?));
     let scan_info = minreq::get(scan_url)
         .send()
@@ -165,6 +167,7 @@ pub fn get_version_sophon(
     edition: crate::sophon::GameEdition
 ) -> anyhow::Result<Option<Version>> {
     use crate::sophon;
+    tracing::debug!(game_id, ?exe_path, "Trying sophon");
     let Some(exe_filename) = exe_path.file_name().and_then(|filename| filename.to_str())
     else {
         return Ok(None);
