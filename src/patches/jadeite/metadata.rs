@@ -3,9 +3,10 @@ use std::cmp::Ordering;
 use serde_json::Value as JsonValue;
 
 use crate::version::Version;
-
 #[cfg(feature = "star-rail")]
 use crate::games::star_rail::consts::GameEdition as StarRailGameEdition;
+#[cfg(feature = "honkai")]
+use crate::games::honkai::consts::GameEdition as Hi3rdGameEdition;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct JadeiteMetadata {
@@ -16,11 +17,13 @@ pub struct JadeiteMetadata {
 impl From<&JsonValue> for JadeiteMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            jadeite: value.get("jadeite")
+            jadeite: value
+                .get("jadeite")
                 .map(JadeitePatchMetadata::from)
                 .unwrap_or_default(),
 
-            games: value.get("games")
+            games: value
+                .get("games")
                 .map(JadeiteGamesMetadata::from)
                 .unwrap_or_default()
         }
@@ -46,7 +49,8 @@ impl From<&JsonValue> for JadeitePatchMetadata {
         let default = Self::default();
 
         Self {
-            version: value.get("version")
+            version: value
+                .get("version")
                 .and_then(|version| version.as_str())
                 .and_then(Version::from_str)
                 .unwrap_or(default.version)
@@ -57,23 +61,20 @@ impl From<&JsonValue> for JadeitePatchMetadata {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct JadeiteGamesMetadata {
     pub hi3rd: JadeiteHi3rdMetadata,
-    pub hsr: JadeiteHsrMetadata,
-    pub wuwa: JadeiteWuwaMetadata
+    pub hsr: JadeiteHsrMetadata
 }
 
 impl From<&JsonValue> for JadeiteGamesMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            hi3rd: value.get("hi3rd")
+            hi3rd: value
+                .get("hi3rd")
                 .map(JadeiteHi3rdMetadata::from)
                 .unwrap_or_default(),
 
-            hsr: value.get("hsr")
+            hsr: value
+                .get("hsr")
                 .map(JadeiteHsrMetadata::from)
-                .unwrap_or_default(),
-
-            wuwa: value.get("wuwa")
-                .map(JadeiteWuwaMetadata::from)
                 .unwrap_or_default()
         }
     }
@@ -92,29 +93,49 @@ pub struct JadeiteHi3rdMetadata {
 impl From<&JsonValue> for JadeiteHi3rdMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            global: value.get("global")
+            global: value
+                .get("global")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default(),
 
-            sea: value.get("sea")
+            sea: value
+                .get("sea")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default(),
 
-            china: value.get("china")
+            china: value
+                .get("china")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default(),
 
-            taiwan: value.get("taiwan")
+            taiwan: value
+                .get("taiwan")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default(),
 
-            korea: value.get("korea")
+            korea: value
+                .get("korea")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default(),
 
-            japan: value.get("japan")
+            japan: value
+                .get("japan")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default()
+        }
+    }
+}
+
+#[cfg(feature = "honkai")]
+impl JadeiteHi3rdMetadata {
+    pub fn for_edition(&self, edition: Hi3rdGameEdition) -> JadeitePatchStatus {
+        match edition {
+            Hi3rdGameEdition::Global => self.global,
+            Hi3rdGameEdition::Sea => self.sea,
+            Hi3rdGameEdition::China => self.china,
+            Hi3rdGameEdition::Taiwan => self.taiwan,
+            Hi3rdGameEdition::Korea => self.korea,
+            Hi3rdGameEdition::Japan => self.japan
         }
     }
 }
@@ -128,31 +149,13 @@ pub struct JadeiteHsrMetadata {
 impl From<&JsonValue> for JadeiteHsrMetadata {
     fn from(value: &JsonValue) -> Self {
         Self {
-            global: value.get("global")
+            global: value
+                .get("global")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default(),
 
-            china: value.get("china")
-                .map(JadeitePatchStatus::from)
-                .unwrap_or_default()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct JadeiteWuwaMetadata {
-    pub global: JadeitePatchStatus,
-    pub china: JadeitePatchStatus
-}
-
-impl From<&JsonValue> for JadeiteWuwaMetadata {
-    fn from(value: &JsonValue) -> Self {
-        Self {
-            global: value.get("global")
-                .map(JadeitePatchStatus::from)
-                .unwrap_or_default(),
-
-            china: value.get("china")
+            china: value
+                .get("china")
                 .map(JadeitePatchStatus::from)
                 .unwrap_or_default()
         }
@@ -190,12 +193,14 @@ impl From<&JsonValue> for JadeitePatchStatus {
         let default = Self::default();
 
         Self {
-            status: value.get("status")
+            status: value
+                .get("status")
                 .and_then(|status| status.as_str())
                 .map(JadeitePatchStatusVariant::from)
                 .unwrap_or(default.status),
 
-            version: value.get("version")
+            version: value
+                .get("version")
                 .and_then(|version| version.as_str())
                 .and_then(Version::from_str)
                 .unwrap_or(default.version)
@@ -210,7 +215,8 @@ impl JadeitePatchStatus {
             // Metadata game version is lower than the one we gave here,
             // so some predictions are needed
             Ordering::Less => match self.status {
-                // Even if the patch was verified - return that it's not verified, at least because the game was updated
+                // Even if the patch was verified - return that it's not verified, at least because
+                // the game was updated
                 JadeitePatchStatusVariant::Verified => JadeitePatchStatusVariant::Unverified,
 
                 // If the patch wasn't verified - keep it unverified
@@ -240,31 +246,31 @@ impl JadeitePatchStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum JadeitePatchStatusVariant {
     /// Patch is verified and works fine
-    /// 
+    ///
     /// Value: `verified`
     Verified,
 
     /// Patch is not verified to be working
-    /// 
+    ///
     /// Value: `unverified`
     Unverified,
 
     /// Patch doesn't work
-    /// 
+    ///
     /// Value: `broken`
     Broken,
 
     /// Patch is working but unsafe for use
-    /// 
+    ///
     /// You can't run the game with this status
-    /// 
+    ///
     /// Value: `unsafe`
     Unsafe,
 
     /// Patch is working but we have some concerns about it
-    /// 
+    ///
     /// You still can run the game with this status
-    /// 
+    ///
     /// Value: `concerning`
     Concerning
 }
@@ -279,10 +285,10 @@ impl Default for JadeitePatchStatusVariant {
 impl From<&str> for JadeitePatchStatusVariant {
     fn from(value: &str) -> Self {
         match value {
-            "verified"   => Self::Verified,
+            "verified" => Self::Verified,
             "unverified" => Self::Unverified,
-            "broken"     => Self::Broken,
-            "unsafe"     => Self::Unsafe,
+            "broken" => Self::Broken,
+            "unsafe" => Self::Unsafe,
             "concerning" => Self::Concerning,
 
             // Not really a good practice but it's unlikely to happen anyway
