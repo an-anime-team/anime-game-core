@@ -1,6 +1,7 @@
-use std::fs::File;
-use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
+
+use anyhow::Context;
+use sophon::reqwest;
 
 use crate::version::Version;
 use crate::traits::game::GameExt;
@@ -105,76 +106,205 @@ impl Game {
     pub fn try_get_diff(&self) -> anyhow::Result<VersionDiff> {
         tracing::debug!("Trying to find version diff for the game");
 
-        let response = api::request(self.edition)?;
+        let client = reqwest::blocking::Client::new();
+
+        let game_branches = sophon::api::get_game_branches_info(&client, &self.edition.into())
+            .inspect_err(|err| tracing::error!(?err, "getting game branches error"))?;
+
+        let branch_info = game_branches
+            .get_game_branch_by_id_or_biz_latest(self.edition.api_game_id())
+            .ok_or_else(|| {
+                anyhow::anyhow!("failed to get the game version information")
+                    .context(format!("game id: {}", self.edition.api_game_id()))
+            })?;
+        let latest_version = branch_info
+            .version()
+            .expect("must be a valid version")
+            .into();
 
         if self.is_installed() {
-            let current = self.get_version()?;
+            let current = match self.get_version() {
+                Ok(version) => version,
+                Err(err) => {
+                    if self.path.exists() && self.path.metadata()?.len() == 0 {
+                        let game_downloads = sophon::api::get_game_download_sophon_info(
+                            &client,
+                            branch_info
+                                .main
+                                .as_ref()
+                                .expect("The `None` case would have been caught earlier"),
+                            &self.edition.into()
+                        )
+                        .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
 
-            if current >= response.main.major.version {
+                        let download_info = game_downloads
+                            .get_manifests_for("game")
+                            .cloned()
+                            .ok_or_else(|| anyhow::anyhow!("Failed to get game manifest"))?;
+
+                        let downloaded_size = download_info.stats.compressed_size.parse()?;
+                        let unpacked_size = download_info.stats.uncompressed_size.parse()?;
+
+                        return Ok(VersionDiff::NotInstalled {
+                            latest: latest_version,
+
+                            edition: self.edition,
+
+                            downloaded_size,
+                            unpacked_size,
+                            download_info,
+
+                            installation_path: Some(self.path.clone()),
+                            version_file_path: None,
+                            temp_folder: None
+                        });
+                    }
+
+                    return Err(err);
+                }
+            };
+
+            if current >= latest_version {
                 tracing::debug!("Game version is latest");
 
-                Ok(VersionDiff::Latest(current))
+                // If we're running latest game version the diff we need to download
+                // must always be `predownload.diffs[0]`, but just to be safe I made
+                // a loop through possible variants, and if none of them was correct
+                // (which is not possible in reality) we should just say that the game
+                // is latest
+                if let Some(predownload_info) = &branch_info.pre_download {
+                    if predownload_info
+                        .diff_tags
+                        .iter()
+                        .any(|pre_diff| *pre_diff == current)
+                    {
+                        let diffs = sophon::api::get_game_diffs_sophon_info(
+                            &client,
+                            predownload_info,
+                            &self.edition.into()
+                        )?;
+
+                        let diff_info = diffs.get_manifests_for("game").unwrap().clone();
+
+                        return Ok(VersionDiff::Predownload {
+                            current,
+                            latest: Version::from_str(&predownload_info.tag).unwrap(),
+
+                            downloaded_size: diff_info
+                                .stats
+                                .get(&current.to_string())
+                                .unwrap()
+                                .compressed_size
+                                .parse()
+                                .unwrap(),
+
+                            unpacked_size: diff_info
+                                .stats
+                                .get(&current.to_string())
+                                .unwrap()
+                                .uncompressed_size
+                                .parse()
+                                .unwrap(),
+
+                            download_info: sophon::api::schemas::DownloadOrDiff::Patch(diff_info),
+                            edition: self.edition,
+
+                            installation_path: Some(self.path.clone()),
+                            version_file_path: None,
+                            temp_folder: None
+                        });
+                    }
+                }
+
+                Ok(VersionDiff::Latest {
+                    version: current,
+                    edition: self.edition
+                })
             }
             else {
-                tracing::debug!(
-                    "Game is outdated: {} -> {}",
-                    current,
-                    response.main.major.version
-                );
+                tracing::debug!("Game is outdated: {} -> {}", current, latest_version);
 
-                Ok(VersionDiff::Diff {
-                    current,
-                    latest: Version::from_str(response.main.major.version).unwrap(),
-
-                    // TODO: can be a hard issue in future
-                    url: response.main.major.game_pkgs[0].url.clone(),
-
-                    downloaded_size: response
+                let diffs = sophon::api::get_game_diffs_sophon_info(
+                    &client,
+                    branch_info
                         .main
-                        .major
-                        .game_pkgs
-                        .iter()
-                        .flat_map(|pkg| pkg.size.parse::<u64>())
-                        .sum(),
+                        .as_ref()
+                        .expect("The `None` case would have been caught earlier"),
+                    &self.edition.into()
+                )
+                .context("Getting game diffs")?;
 
-                    unpacked_size: response
-                        .main
-                        .major
-                        .game_pkgs
-                        .iter()
-                        .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                        .sum(),
+                if branch_info
+                    .main
+                    .as_ref()
+                    .expect("The `None` case would have been caught earlier")
+                    .diff_tags
+                    .iter()
+                    .any(|tag| *tag == current)
+                {
+                    for diff in &diffs.manifests {
+                        if diff.matching_field == "game" {
+                            if let Some((_, stats)) =
+                                diff.stats.iter().find(|(tag, _)| **tag == current)
+                            {
+                                let downloaded_size = stats.compressed_size.parse()?;
+                                let unpacked_size = stats.uncompressed_size.parse()?;
 
-                    installation_path: Some(self.path.clone()),
-                    version_file_path: None,
-                    temp_folder: None
+                                return Ok(VersionDiff::Diff {
+                                    current,
+                                    latest: latest_version,
+
+                                    edition: self.edition,
+
+                                    downloaded_size,
+                                    unpacked_size,
+
+                                    diff: diff.clone(),
+
+                                    installation_path: Some(self.path.clone()),
+                                    version_file_path: None,
+                                    temp_folder: None
+                                });
+                            }
+                        }
+                    }
+                }
+
+                Ok(VersionDiff::Outdated {
+                    current,
+                    latest: latest_version,
+                    edition: self.edition
                 })
             }
         }
         else {
             tracing::debug!("Game is not installed");
 
+            let game_downloads = sophon::api::get_game_download_sophon_info(
+                &client,
+                branch_info
+                    .main
+                    .as_ref()
+                    .expect("The `None` case would have been caught earlier"),
+                &self.edition.into()
+            )
+            .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
+
+            let download_info = game_downloads
+                .get_manifests_for("game")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("failed to get game manifest"))?;
+
+            let downloaded_size = download_info.stats.compressed_size.parse()?;
+            let unpacked_size = download_info.stats.uncompressed_size.parse()?;
+
             Ok(VersionDiff::NotInstalled {
-                latest: Version::from_str(&response.main.major.version).unwrap(),
+                latest: latest_version,
+                edition: self.edition,
 
-                // TODO: can be a hard issue in future
-                url: response.main.major.game_pkgs[0].url.clone(),
-
-                downloaded_size: response
-                    .main
-                    .major
-                    .game_pkgs
-                    .iter()
-                    .flat_map(|pkg| pkg.size.parse::<u64>())
-                    .sum(),
-
-                unpacked_size: response
-                    .main
-                    .major
-                    .game_pkgs
-                    .iter()
-                    .flat_map(|pkg| pkg.decompressed_size.parse::<u64>())
-                    .sum(),
+                downloaded_size,
+                unpacked_size,
+                download_info,
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,

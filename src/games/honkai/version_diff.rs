@@ -1,22 +1,52 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sophon::{SophonError, reqwest};
+use sophon::updater::SophonPatcher;
+use sophon::api::schemas::sophon_diff::SophonDiff;
+use sophon::api::schemas::DownloadOrDiff;
+use sophon::api::schemas::sophon_manifests::SophonDownloadInfo;
+use sophon::installer::SophonInstaller;
 use thiserror::Error;
 
+use crate::honkai::consts::GameEdition;
 use crate::version::Version;
 use crate::traits::version_diff::VersionDiffExt;
 #[cfg(feature = "install")]
-use crate::installer::{
-    downloader::{Downloader, DownloadingError},
-    free_space,
-    installer::{Installer, Update as InstallerUpdate}
-};
+use crate::installer::downloader::DownloadingError;
 
-#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug)]
+pub enum DiffUpdate {
+    Installer(sophon::installer::Update),
+    Patcher(sophon::updater::Update)
+}
+
+impl From<sophon::updater::Update> for DiffUpdate {
+    fn from(v: sophon::updater::Update) -> Self {
+        Self::Patcher(v)
+    }
+}
+
+impl From<sophon::installer::Update> for DiffUpdate {
+    fn from(v: sophon::installer::Update) -> Self {
+        Self::Installer(v)
+    }
+}
+
+#[derive(Error, Debug)]
 pub enum DiffDownloadingError {
     /// Your installation is already up to date and not needed to be updated
     #[error("Component version is already latest")]
     AlreadyLatest,
+
+    /// Current version is too outdated and can't be updated.
+    /// It means that you have to download everything from zero
+    #[error("Components version is too outdated and can't be updated")]
+    Outdated,
+
+    /// When there's multiple urls and you can't save them as a single file
+    #[error("Component has multiple downloading urls and can't be saved as a single file")]
+    MultipleSegments,
 
     /// Failed to fetch remove data. Redirected from `Downloader`
     #[error("{0}")]
@@ -28,7 +58,11 @@ pub enum DiffDownloadingError {
     /// your game installation path and thus indicates that it doesn't know
     /// where this package needs to be installed
     #[error("Path to the component's downloading folder is not specified")]
-    PathNotSpecified
+    PathNotSpecified,
+
+    /// Sophon download/patch error
+    #[error("{0}")]
+    SophonError(#[from] SophonError)
 }
 
 impl From<minreq::Error> for DiffDownloadingError {
@@ -40,13 +74,18 @@ impl From<minreq::Error> for DiffDownloadingError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VersionDiff {
     /// Latest version
-    Latest(Version),
+    Latest {
+        version: Version,
+        edition: GameEdition
+    },
 
-    /// Component should be updated before using it
-    Diff {
+    /// Component's update can be predownloaded, but you still can use it
+    Predownload {
         current: Version,
         latest: Version,
-        url: String,
+
+        download_info: DownloadOrDiff,
+        edition: GameEdition,
 
         downloaded_size: u64,
         unpacked_size: u64,
@@ -65,10 +104,43 @@ pub enum VersionDiff {
         temp_folder: Option<PathBuf>
     },
 
+    /// Component should be updated before using it
+    Diff {
+        current: Version,
+        latest: Version,
+
+        diff: SophonDiff,
+        edition: GameEdition,
+
+        downloaded_size: u64,
+        unpacked_size: u64,
+
+        /// Path to the folder this difference should be installed by the
+        /// `install` method
+        ///
+        /// This value can be `None`, so `install` will return
+        /// `Err(DiffDownloadError::PathNotSpecified)`
+        installation_path: Option<PathBuf>,
+
+        /// Optional path to the `.version` file
+        version_file_path: Option<PathBuf>,
+
+        /// Temp folder path
+        temp_folder: Option<PathBuf>
+    },
+
+    /// Difference can't be calculated because installed version is too old
+    Outdated {
+        current: Version,
+        latest: Version,
+        edition: GameEdition
+    },
+
     /// Component is not yet installed
     NotInstalled {
         latest: Version,
-        url: String,
+        download_info: SophonDownloadInfo,
+        edition: GameEdition,
 
         downloaded_size: u64,
         unpacked_size: u64,
@@ -93,13 +165,21 @@ impl VersionDiff {
     pub fn version_file_path(&self) -> Option<PathBuf> {
         match self {
             // Can't be installed
-            Self::Latest(_) => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
             Self::Diff {
                 version_file_path, ..
             }
             | Self::NotInstalled {
+                version_file_path, ..
+            }
+            | Self::Predownload {
                 version_file_path, ..
             } => version_file_path.to_owned()
         }
@@ -111,7 +191,12 @@ impl VersionDiff {
     pub fn temp_folder(&self) -> PathBuf {
         match self {
             // Can't be installed
-            Self::Latest(_) => std::env::temp_dir(),
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => std::env::temp_dir(),
 
             // Can be installed
             Self::Diff {
@@ -119,19 +204,35 @@ impl VersionDiff {
             }
             | Self::NotInstalled {
                 temp_folder, ..
-            } => match temp_folder {
-                Some(path) => path.to_owned(),
-                None => std::env::temp_dir()
             }
+            | Self::Predownload {
+                temp_folder, ..
+            } => temp_folder
+                .as_ref()
+                .map(PathBuf::to_owned)
+                .unwrap_or_else(std::env::temp_dir)
         }
     }
 
     pub fn with_temp_folder(mut self, temp: PathBuf) -> Self {
         match &mut self {
             // Can't be installed
-            Self::Latest(_) => self,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => self,
 
             // Can be installed
+            Self::Predownload {
+                temp_folder, ..
+            } => {
+                *temp_folder = Some(temp);
+
+                self
+            }
+
             Self::Diff {
                 temp_folder, ..
             } => {
@@ -149,22 +250,202 @@ impl VersionDiff {
             }
         }
     }
+
+    fn download_game(
+        &self,
+        download_info: &SophonDownloadInfo,
+        thread_count: usize,
+        path: impl AsRef<Path>,
+        updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
+    ) -> Result<(), <Self as VersionDiffExt>::Error> {
+        tracing::debug!(
+            path = ?path.as_ref(),
+            info = ?download_info,
+            "Downloading game"
+        );
+
+        let client = reqwest::blocking::Client::new();
+
+        let mut installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        installer.chunks_in_mem = true;
+        installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
+        installer.inplace = true;
+
+        installer.install(path.as_ref(), thread_count, move |msg| {
+            (updater)(msg.into());
+        })?;
+
+        // Create `.version` file here even if hdiff patching is failed because
+        // it's easier to explain user why he should run files repairer than
+        // why he should re-download entire game update because something is failed
+        #[allow(unused_must_use)]
+        {
+            let version_path = self
+                .version_file_path()
+                .unwrap_or(path.as_ref().join(".version"));
+
+            std::fs::write(version_path, self.latest().to_string());
+        }
+
+        tracing::debug!(
+            temp = ?installer.downloading_temp(),
+            "Removing game downloading cache"
+        );
+
+        let _ = std::fs::remove_dir_all(installer.downloading_temp());
+
+        Ok(())
+    }
+
+    fn patch_game(
+        &self,
+        from: Version,
+        thread_count: usize,
+        diff: &SophonDiff,
+        path: impl AsRef<Path>,
+        updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
+    ) -> Result<(), <Self as VersionDiffExt>::Error> {
+        tracing::debug!(
+            path = ?path.as_ref(),
+            from_version = from.to_string(),
+            ?diff,
+            "Patching game files"
+        );
+
+        let client = reqwest::blocking::Client::new();
+
+        let patcher = SophonPatcher::new(client, diff, self.temp_folder(), None)?;
+
+        patcher.update(&path, from.into(), thread_count, move |msg| {
+            (updater)(msg.into());
+        })?;
+
+        // Create `.version` file here even if hdiff patching is failed because
+        // it's easier to explain user why he should run files repairer than
+        // why he should re-download entire game update because something is failed
+        #[allow(unused_must_use)]
+        {
+            let version_path = self
+                .version_file_path()
+                .unwrap_or(path.as_ref().join(".version"));
+
+            std::fs::write(version_path, self.latest().to_string());
+        }
+
+        tracing::debug!(
+            temp = ?patcher.files_temp(),
+            "Removing patching cache"
+        );
+
+        let _ = std::fs::remove_dir_all(patcher.files_temp());
+
+        Ok(())
+    }
+
+    fn pre_download(
+        &self,
+        download_or_patch_info: &DownloadOrDiff,
+        from: Version,
+        thread_count: usize,
+        updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
+    ) -> Result<(), <Self as VersionDiffExt>::Error> {
+        tracing::debug!(
+            from_version = from.to_string(),
+            diff = ?download_or_patch_info,
+            "Predownloading game update"
+        );
+
+        let client = reqwest::blocking::Client::new();
+
+        match download_or_patch_info {
+            DownloadOrDiff::Download(download_info) => {
+                let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+
+                installer.pre_download(thread_count, move |msg| {
+                    (updater)(msg.into());
+                })?;
+            }
+
+            DownloadOrDiff::Patch(diff_info) => {
+                let patcher = SophonPatcher::new(client, diff_info, self.temp_folder(), None)?;
+
+                patcher.pre_download(from.into(), thread_count, move |msg| {
+                    (updater)(msg.into());
+                })?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the matching field value for this diff. Returns none in case of
+    /// [`VersionDiff::Latest`] or [`VersionDiff::Outdated`]
+    pub fn matching_field(&self) -> Option<&str> {
+        match self {
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
+            Self::Predownload {
+                download_info, ..
+            } => match download_info {
+                DownloadOrDiff::Patch(SophonDiff {
+                    matching_field, ..
+                })
+                | DownloadOrDiff::Download(SophonDownloadInfo {
+                    matching_field, ..
+                }) => Some(matching_field)
+            },
+            Self::Diff {
+                diff, ..
+            } => Some(&diff.matching_field),
+            Self::NotInstalled {
+                download_info, ..
+            } => Some(&download_info.matching_field)
+        }
+    }
 }
 
 impl VersionDiffExt for VersionDiff {
-    type Edition = ();
+    type Edition = GameEdition;
     type Error = DiffDownloadingError;
-    type Update = InstallerUpdate;
+    type Update = DiffUpdate;
 
     #[inline]
     fn edition(&self) -> Self::Edition {
-        ()
+        match self {
+            Self::Latest {
+                edition, ..
+            }
+            | Self::Predownload {
+                edition, ..
+            }
+            | Self::Diff {
+                edition, ..
+            }
+            | Self::Outdated {
+                edition, ..
+            }
+            | Self::NotInstalled {
+                edition, ..
+            } => *edition
+        }
     }
 
     fn current(&self) -> Option<Version> {
         match self {
-            Self::Latest(current)
+            Self::Latest {
+                version: current, ..
+            }
+            | Self::Predownload {
+                current, ..
+            }
             | Self::Diff {
+                current, ..
+            }
+            | Self::Outdated {
                 current, ..
             } => Some(*current),
 
@@ -176,8 +457,16 @@ impl VersionDiffExt for VersionDiff {
 
     fn latest(&self) -> Version {
         match self {
-            Self::Latest(latest)
+            Self::Latest {
+                version: latest, ..
+            }
+            | Self::Predownload {
+                latest, ..
+            }
             | Self::Diff {
+                latest, ..
+            }
+            | Self::Outdated {
                 latest, ..
             }
             | Self::NotInstalled {
@@ -189,10 +478,18 @@ impl VersionDiffExt for VersionDiff {
     fn downloaded_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest(_) => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
             Self::Diff {
+                downloaded_size, ..
+            }
+            | Self::Predownload {
                 downloaded_size, ..
             }
             | Self::NotInstalled {
@@ -204,10 +501,18 @@ impl VersionDiffExt for VersionDiff {
     fn unpacked_size(&self) -> Option<u64> {
         match self {
             // Can't be installed
-            Self::Latest(_) => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
             Self::Diff {
+                unpacked_size, ..
+            }
+            | Self::Predownload {
                 unpacked_size, ..
             }
             | Self::NotInstalled {
@@ -219,10 +524,18 @@ impl VersionDiffExt for VersionDiff {
     fn installation_path(&self) -> Option<&Path> {
         match self {
             // Can't be installed
-            Self::Latest(_) => None,
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
 
             // Can be installed
             Self::Diff {
+                installation_path, ..
+            }
+            | Self::Predownload {
                 installation_path, ..
             }
             | Self::NotInstalled {
@@ -235,44 +548,67 @@ impl VersionDiffExt for VersionDiff {
     }
 
     fn downloading_uri(&self) -> Option<String> {
-        match self {
-            // Can't be installed
-            Self::Latest(_) => None,
-
-            // Can be installed
-            Self::Diff {
-                url, ..
-            }
-            | Self::NotInstalled {
-                url, ..
-            } => Some(url.to_owned())
-        }
+        // because sophon
+        None
     }
 
     fn download_as(
         &mut self,
-        path: impl AsRef<Path>,
-        progress: impl Fn(u64, u64) + Send + 'static
+        _path: impl AsRef<Path>,
+        _progress: impl Fn(u64, u64) + Send + 'static
     ) -> Result<(), Self::Error> {
         tracing::debug!("Downloading version difference");
 
-        let mut downloader = Downloader::new(match self {
-            // Can't be downloaded
-            Self::Latest(_) => return Err(Self::Error::AlreadyLatest),
+        match self {
+            Self::Latest {
+                ..
+            } => Err(Self::Error::AlreadyLatest),
+            _ => Err(Self::Error::MultipleSegments)
+        }
+    }
 
-            // Can be downloaded
-            Self::Diff {
-                url, ..
-            }
-            | Self::NotInstalled {
-                url, ..
-            } => url
-        })?;
+    // Reimplemented for predownloading. Since self.file_name() returns None, the
+    // implementation provided in trait definition won't work.
+    //
+    // Implemented based on observation that the method is only called for
+    // predownloads in the launcher itself.
+    fn download_to(
+        &mut self,
+        folder: impl AsRef<Path>,
+        progress: impl Fn(u64, u64) + Send + 'static
+    ) -> Result<(), Self::Error> {
+        if matches!(self, Self::Predownload { .. }) {
+            // non-sync and non-clone progress callback was provided, so have
+            // to do stuff like this
+            let (sender, recver) = std::sync::mpsc::channel();
 
-        if let Err(err) = downloader.download(path.as_ref(), progress) {
-            tracing::error!("Failed to download version difference: {err}");
+            let proxy_thread_handle = std::thread::spawn(move || {
+                while let Ok((downloaded, total)) = recver.recv() {
+                    (progress)(downloaded, total);
+                }
+            });
 
-            return Err(err.into());
+            self.install_to(folder, 1, move |msg| match msg {
+                DiffUpdate::Patcher(sophon::updater::Update::DownloadingProgressBytes {
+                    downloaded_bytes,
+                    total_bytes
+                }) => {
+                    let _ = sender.send((downloaded_bytes, total_bytes));
+                }
+
+                DiffUpdate::Installer(sophon::installer::Update::DownloadingProgressBytes {
+                    downloaded_bytes,
+                    total_bytes
+                }) => {
+                    let _ = sender.send((downloaded_bytes, total_bytes));
+                }
+
+                _ => ()
+            })?;
+
+            proxy_thread_handle
+                .join()
+                .expect("failed to join game downloader thread");
         }
 
         Ok(())
@@ -281,104 +617,33 @@ impl VersionDiffExt for VersionDiff {
     fn install_to(
         &self,
         path: impl AsRef<Path>,
-        _thread_count: usize,
+        thread_count: usize,
         updater: impl Fn(Self::Update) + Clone + Send + 'static
     ) -> Result<(), Self::Error> {
         tracing::debug!("Installing version difference");
 
-        let path = path.as_ref();
+        match self {
+            Self::Latest {
+                ..
+            } => Err(Self::Error::AlreadyLatest),
+            Self::Outdated {
+                ..
+            } => Err(Self::Error::Outdated),
 
-        let url = self
-            .downloading_uri()
-            .expect("Failed to retreive downloading url");
-        let downloaded_size = self
-            .downloaded_size()
-            .expect("Failed to retreive downloaded size");
-        let unpacked_size = self
-            .unpacked_size()
-            .expect("Failed to retreive unpacked size");
+            Self::Diff {
+                diff,
+                current,
+                ..
+            } => self.patch_game(*current, thread_count, diff, path, updater),
+            Self::NotInstalled {
+                download_info, ..
+            } => self.download_game(download_info, thread_count, path, updater),
 
-        let mut installer = Installer::new(url)?
-            // Set custom temp folder location
-            .with_temp_folder(self.temp_folder())
-            // Don't perform space checks in the Installer because we're doing it here
-            .with_free_space_check(false);
-
-        (updater)(InstallerUpdate::CheckingFreeSpace(
-            installer.temp_folder.to_path_buf()
-        ));
-
-        // Check available free space for archive itself
-        let Some(space) = free_space::available(&installer.temp_folder)
-        else {
-            tracing::error!("Path is not mounted: {:?}", installer.temp_folder);
-
-            return Err(DownloadingError::PathNotMounted(installer.temp_folder).into());
-        };
-
-        // We can possibly store downloaded archive + unpacked data on the same disk
-        let required = if free_space::is_same_disk(&installer.temp_folder, path) {
-            downloaded_size + unpacked_size
+            Self::Predownload {
+                download_info,
+                current,
+                ..
+            } => self.pre_download(download_info, *current, thread_count, updater)
         }
-        else {
-            downloaded_size
-        };
-
-        if space < required {
-            tracing::error!(
-                "No free space available in the temp folder. Required: {required}. Available: {space}"
-            );
-
-            return Err(
-                DownloadingError::NoSpaceAvailable(installer.temp_folder, required, space).into()
-            );
-        }
-
-        (updater)(InstallerUpdate::CheckingFreeSpace(path.to_path_buf()));
-
-        // Check available free space for unpacked archvie data
-        let Some(space) = free_space::available(&path)
-        else {
-            tracing::error!("Path is not mounted: {:?}", &path);
-
-            return Err(DownloadingError::PathNotMounted(path.to_path_buf()).into());
-        };
-
-        // We can possibly store downloaded archive + unpacked data on the same disk
-        let required = if free_space::is_same_disk(&path, &installer.temp_folder) {
-            unpacked_size + downloaded_size
-        }
-        else {
-            unpacked_size
-        };
-
-        if space < required {
-            tracing::error!(
-                "No free space available in the installation folder. Required: {required}. Available: {space}"
-            );
-
-            return Err(
-                DownloadingError::NoSpaceAvailable(path.to_path_buf(), required, space).into()
-            );
-        }
-
-        // Install data
-        let installer_updater = updater.clone();
-
-        installer.install(path, move |update| (installer_updater)(update));
-
-        // Create `.version` file here even if hdiff patching is failed because
-        // it's easier to explain user why he should run files repairer than
-        // why he should re-download entire game update because something is failed
-        #[allow(unused_must_use)]
-        {
-            let version_path = self
-                .version_file_path()
-                .unwrap_or_else(|| path.join(".version"));
-
-            std::fs::write(version_path, self.latest().to_string());
-        }
-
-        Ok(())
     }
 }
