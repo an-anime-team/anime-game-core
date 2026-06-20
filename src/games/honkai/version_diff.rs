@@ -84,7 +84,8 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        download_info: DownloadOrDiff,
+        game_download_info: DownloadOrDiff,
+        asb_download_info: DownloadOrDiff,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -109,7 +110,10 @@ pub enum VersionDiff {
         current: Version,
         latest: Version,
 
-        diff: SophonDiff,
+        // `game` might not ever have an update
+        game_diff: Option<SophonDiff>,
+        asb_diff: Option<SophonDiff>,
+
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -139,7 +143,8 @@ pub enum VersionDiff {
     /// Component is not yet installed
     NotInstalled {
         latest: Version,
-        download_info: SophonDownloadInfo,
+        game_download_info: SophonDownloadInfo,
+        asb_download_info: SophonDownloadInfo,
         edition: GameEdition,
 
         downloaded_size: u64,
@@ -253,26 +258,59 @@ impl VersionDiff {
 
     fn download_game(
         &self,
-        download_info: &SophonDownloadInfo,
+        game_download_info: &SophonDownloadInfo,
+        asb_download_info: &SophonDownloadInfo,
         thread_count: usize,
         path: impl AsRef<Path>,
         updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
     ) -> Result<(), <Self as VersionDiffExt>::Error> {
         tracing::debug!(
             path = ?path.as_ref(),
-            info = ?download_info,
+            info = ?game_download_info,
             "Downloading game"
         );
 
         let client = reqwest::blocking::Client::new();
 
-        let mut installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
-        installer.chunks_in_mem = true;
-        installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
-        installer.inplace = true;
+        tracing::info_span!("Downloading `asb`").in_scope(|| {
+            let mut installer =
+                SophonInstaller::new(client.clone(), asb_download_info, self.temp_folder())?;
+            installer.chunks_in_mem = true;
+            installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
+            installer.inplace = true;
 
-        installer.install(path.as_ref(), thread_count, move |msg| {
-            (updater)(msg.into());
+            let updater_clone = updater.clone();
+            installer.install(path.as_ref(), thread_count, move |msg| {
+                (updater_clone)(msg.into());
+            })?;
+
+            tracing::debug!(
+                temp = ?installer.downloading_temp(),
+                "Removing game downloading cache"
+            );
+
+            let _ = std::fs::remove_dir_all(installer.downloading_temp());
+            Ok::<_, SophonError>(())
+        })?;
+
+        tracing::info_span!("Downloading `game`").in_scope(|| {
+            let mut installer =
+                SophonInstaller::new(client, game_download_info, self.temp_folder())?;
+            installer.chunks_in_mem = true;
+            installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
+            installer.inplace = true;
+
+            installer.install(path.as_ref(), thread_count, move |msg| {
+                (updater)(msg.into());
+            })?;
+
+            tracing::debug!(
+                temp = ?installer.downloading_temp(),
+                "Removing game downloading cache"
+            );
+
+            let _ = std::fs::remove_dir_all(installer.downloading_temp());
+            Ok::<_, SophonError>(())
         })?;
 
         // Create `.version` file here even if hdiff patching is failed because
@@ -286,13 +324,6 @@ impl VersionDiff {
 
             std::fs::write(version_path, self.latest().to_string());
         }
-
-        tracing::debug!(
-            temp = ?installer.downloading_temp(),
-            "Removing game downloading cache"
-        );
-
-        let _ = std::fs::remove_dir_all(installer.downloading_temp());
 
         Ok(())
     }
@@ -301,63 +332,111 @@ impl VersionDiff {
         &self,
         from: Version,
         thread_count: usize,
-        diff: &SophonDiff,
+        game_diff: &Option<SophonDiff>,
+        asb_diff: &Option<SophonDiff>,
         path: impl AsRef<Path>,
         updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
     ) -> Result<(), <Self as VersionDiffExt>::Error> {
         tracing::debug!(
             path = ?path.as_ref(),
             from_version = from.to_string(),
-            ?diff,
+            ?game_diff,
             "Patching game files"
         );
 
         let client = reqwest::blocking::Client::new();
 
-        let patcher = SophonPatcher::new(client, diff, self.temp_folder(), None)?;
+        if let Some(asb_diff) = asb_diff {
+            tracing::info_span!("Updating `asb").in_scope(|| {
+                let patcher =
+                    SophonPatcher::new(client.clone(), asb_diff, self.temp_folder(), None)?;
 
-        patcher.update(&path, from.into(), thread_count, move |msg| {
-            (updater)(msg.into());
-        })?;
+                let updater_clone = updater.clone();
+                patcher.update(&path, from.into(), thread_count, move |msg| {
+                    (updater_clone)(msg.into());
+                })?;
 
-        // Create `.version` file here even if hdiff patching is failed because
-        // it's easier to explain user why he should run files repairer than
-        // why he should re-download entire game update because something is failed
-        #[allow(unused_must_use)]
-        {
-            let version_path = self
-                .version_file_path()
-                .unwrap_or(path.as_ref().join(".version"));
+                tracing::debug!(
+                    temp = ?patcher.files_temp(),
+                    "Removing patching cache"
+                );
 
-            std::fs::write(version_path, self.latest().to_string());
+                let _ = std::fs::remove_dir_all(patcher.files_temp());
+                Ok::<_, SophonError>(())
+            })?;
         }
 
-        tracing::debug!(
-            temp = ?patcher.files_temp(),
-            "Removing patching cache"
-        );
+        if let Some(game_diff) = game_diff {
+            tracing::info_span!("Updating `game`").in_scope(|| {
+                let patcher = SophonPatcher::new(client, game_diff, self.temp_folder(), None)?;
 
-        let _ = std::fs::remove_dir_all(patcher.files_temp());
+                patcher.update(&path, from.into(), thread_count, move |msg| {
+                    (updater)(msg.into());
+                })?;
+
+                // Create `.version` file here even if hdiff patching is failed because
+                // it's easier to explain user why he should run files repairer than
+                // why he should re-download entire game update because something is failed
+                #[allow(unused_must_use)]
+                {
+                    let version_path = self
+                        .version_file_path()
+                        .unwrap_or(path.as_ref().join(".version"));
+
+                    std::fs::write(version_path, self.latest().to_string());
+                }
+
+                tracing::debug!(
+                    temp = ?patcher.files_temp(),
+                    "Removing patching cache"
+                );
+
+                let _ = std::fs::remove_dir_all(patcher.files_temp());
+                Ok::<_, SophonError>(())
+            })?;
+        }
 
         Ok(())
     }
 
     fn pre_download(
         &self,
-        download_or_patch_info: &DownloadOrDiff,
+        game_download_or_patch_info: &DownloadOrDiff,
+        asb_download_or_patch_info: &DownloadOrDiff,
         from: Version,
         thread_count: usize,
         updater: impl Fn(<Self as VersionDiffExt>::Update) + Clone + Send + 'static
     ) -> Result<(), <Self as VersionDiffExt>::Error> {
         tracing::debug!(
             from_version = from.to_string(),
-            diff = ?download_or_patch_info,
+            diff = ?game_download_or_patch_info,
             "Predownloading game update"
         );
 
         let client = reqwest::blocking::Client::new();
 
-        match download_or_patch_info {
+        let updater_clone = updater.clone();
+        match game_download_or_patch_info {
+            DownloadOrDiff::Download(download_info) => {
+                let installer =
+                    SophonInstaller::new(client.clone(), download_info, self.temp_folder())?;
+
+                installer.pre_download(thread_count, move |msg| {
+                    (updater_clone)(msg.into());
+                })?;
+            }
+
+            DownloadOrDiff::Patch(diff_info) => {
+                let patcher =
+                    SophonPatcher::new(client.clone(), diff_info, self.temp_folder(), None)?;
+
+                patcher.pre_download(from.into(), thread_count, move |msg| {
+                    (updater_clone)(msg.into());
+                })?;
+            }
+        }
+
+        match asb_download_or_patch_info {
             DownloadOrDiff::Download(download_info) => {
                 let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
 
@@ -376,35 +455,6 @@ impl VersionDiff {
         }
 
         Ok(())
-    }
-
-    /// Get the matching field value for this diff. Returns none in case of
-    /// [`VersionDiff::Latest`] or [`VersionDiff::Outdated`]
-    pub fn matching_field(&self) -> Option<&str> {
-        match self {
-            Self::Latest {
-                ..
-            }
-            | Self::Outdated {
-                ..
-            } => None,
-            Self::Predownload {
-                download_info, ..
-            } => match download_info {
-                DownloadOrDiff::Patch(SophonDiff {
-                    matching_field, ..
-                })
-                | DownloadOrDiff::Download(SophonDownloadInfo {
-                    matching_field, ..
-                }) => Some(matching_field)
-            },
-            Self::Diff {
-                diff, ..
-            } => Some(&diff.matching_field),
-            Self::NotInstalled {
-                download_info, ..
-            } => Some(&download_info.matching_field)
-        }
     }
 }
 
@@ -631,19 +681,35 @@ impl VersionDiffExt for VersionDiff {
             } => Err(Self::Error::Outdated),
 
             Self::Diff {
-                diff,
+                game_diff,
+                asb_diff,
                 current,
                 ..
-            } => self.patch_game(*current, thread_count, diff, path, updater),
+            } => self.patch_game(*current, thread_count, game_diff, asb_diff, path, updater),
             Self::NotInstalled {
-                download_info, ..
-            } => self.download_game(download_info, thread_count, path, updater),
+                game_download_info,
+                asb_download_info,
+                ..
+            } => self.download_game(
+                game_download_info,
+                asb_download_info,
+                thread_count,
+                path,
+                updater
+            ),
 
             Self::Predownload {
-                download_info,
+                game_download_info,
+                asb_download_info,
                 current,
                 ..
-            } => self.pre_download(download_info, *current, thread_count, updater)
+            } => self.pre_download(
+                game_download_info,
+                asb_download_info,
+                *current,
+                thread_count,
+                updater
+            )
         }
     }
 }

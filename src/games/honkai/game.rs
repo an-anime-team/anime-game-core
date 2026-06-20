@@ -137,13 +137,27 @@ impl Game {
                         )
                         .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
 
-                        let download_info = game_downloads
+                        let game_download_info = game_downloads
                             .get_manifests_for("game")
                             .cloned()
                             .ok_or_else(|| anyhow::anyhow!("Failed to get game manifest"))?;
 
-                        let downloaded_size = download_info.stats.compressed_size.parse()?;
-                        let unpacked_size = download_info.stats.uncompressed_size.parse()?;
+                        let asb_download_info = game_downloads
+                            .get_manifests_for("asb")
+                            .cloned()
+                            .ok_or_else(|| anyhow::anyhow!("Failed to get asb manifest"))?;
+
+                        let game_downloaded_size: u64 =
+                            game_download_info.stats.compressed_size.parse()?;
+                        let game_unpacked_size: u64 =
+                            game_download_info.stats.uncompressed_size.parse()?;
+                        let asb_downloaded_size: u64 =
+                            asb_download_info.stats.compressed_size.parse()?;
+                        let asb_unpacked_size: u64 =
+                            asb_download_info.stats.uncompressed_size.parse()?;
+
+                        let downloaded_size = game_downloaded_size + asb_downloaded_size;
+                        let unpacked_size = game_unpacked_size + asb_unpacked_size;
 
                         return Ok(VersionDiff::NotInstalled {
                             latest: latest_version,
@@ -152,7 +166,8 @@ impl Game {
 
                             downloaded_size,
                             unpacked_size,
-                            download_info,
+                            game_download_info,
+                            asb_download_info,
 
                             installation_path: Some(self.path.clone()),
                             version_file_path: None,
@@ -184,29 +199,47 @@ impl Game {
                             &self.edition.into()
                         )?;
 
-                        let diff_info = diffs.get_manifests_for("game").unwrap().clone();
+                        let game_diff_info = diffs.get_manifests_for("game").unwrap().clone();
+                        let asb_diff_info = diffs.get_manifests_for("asb").unwrap().clone();
+
+                        let game_stats = game_diff_info
+                            .stats
+                            .get(&current.to_string())
+                            .map(|stats| {
+                                (
+                                    stats.compressed_size.parse::<u64>().unwrap(),
+                                    stats.uncompressed_size.parse::<u64>().unwrap()
+                                )
+                            })
+                            .unwrap_or((0, 0));
+
+                        let asb_stats = asb_diff_info
+                            .stats
+                            .get(&current.to_string())
+                            .map(|stats| {
+                                (
+                                    stats.compressed_size.parse::<u64>().unwrap(),
+                                    stats.uncompressed_size.parse::<u64>().unwrap()
+                                )
+                            })
+                            .unwrap_or((0, 0));
+
+                        let downloaded_size = game_stats.0 + asb_stats.0;
+                        let unpacked_size = game_stats.1 + asb_stats.1;
 
                         return Ok(VersionDiff::Predownload {
                             current,
                             latest: Version::from_str(&predownload_info.tag).unwrap(),
 
-                            downloaded_size: diff_info
-                                .stats
-                                .get(&current.to_string())
-                                .unwrap()
-                                .compressed_size
-                                .parse()
-                                .unwrap(),
+                            downloaded_size,
+                            unpacked_size,
 
-                            unpacked_size: diff_info
-                                .stats
-                                .get(&current.to_string())
-                                .unwrap()
-                                .uncompressed_size
-                                .parse()
-                                .unwrap(),
-
-                            download_info: sophon::api::schemas::DownloadOrDiff::Patch(diff_info),
+                            game_download_info: sophon::api::schemas::DownloadOrDiff::Patch(
+                                game_diff_info
+                            ),
+                            asb_download_info: sophon::api::schemas::DownloadOrDiff::Patch(
+                                asb_diff_info
+                            ),
                             edition: self.edition,
 
                             installation_path: Some(self.path.clone()),
@@ -242,31 +275,54 @@ impl Game {
                     .iter()
                     .any(|tag| *tag == current)
                 {
-                    for diff in &diffs.manifests {
-                        if diff.matching_field == "game" {
-                            if let Some((_, stats)) =
-                                diff.stats.iter().find(|(tag, _)| **tag == current)
-                            {
-                                let downloaded_size = stats.compressed_size.parse()?;
-                                let unpacked_size = stats.uncompressed_size.parse()?;
+                    let game_diff = diffs.get_manifests_for("game");
+                    let asb_diff = diffs.get_manifests_for("asb");
 
-                                return Ok(VersionDiff::Diff {
-                                    current,
-                                    latest: latest_version,
+                    let game_diff_stats = game_diff.and_then(|game_diff| {
+                        game_diff
+                            .stats
+                            .iter()
+                            .find(|(tag, _)| **tag == current)
+                            .map(|(_, stats)| stats)
+                    });
+                    let asb_diff_stats = asb_diff.and_then(|asb_diff| {
+                        asb_diff
+                            .stats
+                            .iter()
+                            .find(|(tag, _)| **tag == current)
+                            .map(|(_, stats)| stats)
+                    });
 
-                                    edition: self.edition,
+                    if game_diff_stats.is_some() || asb_diff_stats.is_some() {
+                        let downloaded_size = game_diff_stats
+                            .map(|stats| stats.compressed_size.parse::<u64>().unwrap())
+                            .unwrap_or(0)
+                            + asb_diff_stats
+                                .map(|stats| stats.compressed_size.parse::<u64>().unwrap())
+                                .unwrap_or(0);
+                        let unpacked_size = game_diff_stats
+                            .map(|stats| stats.uncompressed_size.parse::<u64>().unwrap())
+                            .unwrap_or(0)
+                            + asb_diff_stats
+                                .map(|stats| stats.uncompressed_size.parse::<u64>().unwrap())
+                                .unwrap_or(0);
 
-                                    downloaded_size,
-                                    unpacked_size,
+                        return Ok(VersionDiff::Diff {
+                            current,
+                            latest: latest_version,
 
-                                    diff: diff.clone(),
+                            edition: self.edition,
 
-                                    installation_path: Some(self.path.clone()),
-                                    version_file_path: None,
-                                    temp_folder: None
-                                });
-                            }
-                        }
+                            downloaded_size,
+                            unpacked_size,
+
+                            game_diff: game_diff.cloned(),
+                            asb_diff: asb_diff.cloned(),
+
+                            installation_path: Some(self.path.clone()),
+                            version_file_path: None,
+                            temp_folder: None
+                        });
                     }
                 }
 
@@ -290,13 +346,19 @@ impl Game {
             )
             .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
 
-            let download_info = game_downloads
+            let game_download_info = game_downloads
                 .get_manifests_for("game")
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("failed to get game manifest"))?;
+            let asb_download_info = game_downloads
+                .get_manifests_for("asb")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("failed to get asb manifest"))?;
 
-            let downloaded_size = download_info.stats.compressed_size.parse()?;
-            let unpacked_size = download_info.stats.uncompressed_size.parse()?;
+            let downloaded_size = game_download_info.stats.compressed_size.parse::<u64>()?
+                + asb_download_info.stats.compressed_size.parse::<u64>()?;
+            let unpacked_size = game_download_info.stats.uncompressed_size.parse::<u64>()?
+                + asb_download_info.stats.uncompressed_size.parse::<u64>()?;
 
             Ok(VersionDiff::NotInstalled {
                 latest: latest_version,
@@ -304,7 +366,9 @@ impl Game {
 
                 downloaded_size,
                 unpacked_size,
-                download_info,
+
+                game_download_info,
+                asb_download_info,
 
                 installation_path: Some(self.path.clone()),
                 version_file_path: None,
