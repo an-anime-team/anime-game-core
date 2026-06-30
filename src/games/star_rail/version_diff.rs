@@ -295,9 +295,13 @@ impl VersionDiff {
         installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
         installer.inplace = true;
 
-        installer.install(path.as_ref(), thread_count, move |msg| {
-            (updater)(msg.into());
-        })?;
+        installer.install(
+            path.as_ref(),
+            thread_count,
+            Box::new(move |msg| {
+                (updater)(msg.into());
+            })
+        )?;
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
@@ -341,9 +345,14 @@ impl VersionDiff {
         let mut patcher = SophonPatcher::new(client, diff, self.temp_folder(), None)?;
         patcher.last_file_suffix = Some("data.unity3d".to_owned());
 
-        patcher.update(&path, from.into(), thread_count, move |msg| {
-            (updater)(msg.into());
-        })?;
+        patcher.update(
+            &path,
+            from.into(),
+            thread_count,
+            Box::new(move |msg| {
+                (updater)(msg.into());
+            })
+        )?;
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
@@ -388,18 +397,25 @@ impl VersionDiff {
                     SophonInstaller::new(client, download_info, self.temp_folder())?;
                 installer.last_file_suffix = Some("data.unity3d".to_owned());
 
-                installer.pre_download(thread_count, move |msg| {
-                    (updater)(msg.into());
-                })?;
+                installer.pre_download(
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater)(msg.into());
+                    })
+                )?;
             }
 
             DownloadOrDiff::Patch(diff_info) => {
                 let mut patcher = SophonPatcher::new(client, diff_info, self.temp_folder(), None)?;
                 patcher.last_file_suffix = Some("data.unity3d".to_owned());
 
-                patcher.pre_download(from.into(), thread_count, move |msg| {
-                    (updater)(msg.into());
-                })?;
+                patcher.pre_download(
+                    from.into(),
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater)(msg.into());
+                    })
+                )?;
             }
         }
 
