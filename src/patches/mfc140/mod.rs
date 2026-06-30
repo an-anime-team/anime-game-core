@@ -3,27 +3,28 @@ use std::process::Command;
 
 use crate::installer::downloader::Downloader;
 
-// Source: https://github.com/Winetricks/winetricks/blob/e9454179686b3659ad3f47a5d49e6e4e82862cd5/src/winetricks#L13206
+// Source: https://github.com/Winetricks/winetricks/blob/master/src/winetricks#L13598
 // TODO: consider moving it to the wincompatlib
 
-const URL: &str = "https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x64.exe";
+const URL_X64: &str = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
 
-const LIBRARIES: &[&str] = &[
-    "mfc140.dll",
-    "mfc140u.dll",
-    "mfcm140.dll",
-    "mfcm140u.dll"
-];
+const LIBRARIES: &[&str] = &["mfc140.dll", "mfc140u.dll", "mfcm140.dll", "mfcm140u.dll"];
 
 pub fn is_installed(wine_prefix: impl AsRef<Path>) -> bool {
-    wine_prefix.as_ref().join("drive_c/windows/system32/mfc140.dll").exists()
+    wine_prefix
+        .as_ref()
+        .join("drive_c/windows/system32/mfc140.dll")
+        .exists()
 }
 
-pub fn install(wine_prefix: impl AsRef<Path>, temp: Option<impl Into<PathBuf>>) -> anyhow::Result<()> {
+pub fn install(
+    wine_prefix: impl AsRef<Path>,
+    temp: Option<impl Into<PathBuf>>,
+) -> anyhow::Result<()> {
     let temp = temp
         .map(|path| path.into())
         .unwrap_or_else(std::env::temp_dir)
-        .join("mfc140");
+        .join("vcrun2022");
 
     if temp.exists() {
         std::fs::remove_dir_all(&temp)?;
@@ -31,44 +32,58 @@ pub fn install(wine_prefix: impl AsRef<Path>, temp: Option<impl Into<PathBuf>>) 
 
     std::fs::create_dir_all(&temp)?;
 
-    let vcredist = temp.join("vc_redist.x86.exe");
-    let vcredist_extracted = temp.join("extracted");
+    let vcredist = temp.join("vc_redist.x64.exe");
+    let cabs_dir = temp.join("cabs");
+    let dll_dir = temp.join("dll");
 
-    Downloader::new(URL)?
+    Downloader::new(URL_X64)?
         .with_continue_downloading(false)
         .download(&vcredist, |_, _| {})?;
 
-    // w_try_cabextract --directory="${W_TMP}/win64"  "${W_CACHE}"/vcrun2015/vc_redist.x64.exe -F 'a11'
+    std::fs::create_dir_all(&cabs_dir)?;
+    std::fs::create_dir_all(&dll_dir)?;
+
+    // extract all embedded cabs from the installer; the cab number that holds
+    // the mfc dlls shifts between versions so we just dump them all and search
     let output = Command::new("cabextract")
         .arg("-d")
-        .arg(&vcredist_extracted)
-        .arg(vcredist)
-        .arg("-F")
-        .arg("a11")
+        .arg(&cabs_dir)
+        .arg(&vcredist)
         .spawn()?
         .wait_with_output()?;
 
     if !output.status.success() {
-        anyhow::bail!("Failed to extract vcredist (1): {}", String::from_utf8_lossy(&output.stderr));
+        anyhow::bail!(
+            "Failed to extract vcredist cabs: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
-    // w_try_cabextract --directory="${W_TMP}/win64" "${W_TMP}/win64/a11"
-    let output = Command::new("cabextract")
-        .arg("-d")
-        .arg(&vcredist_extracted)
-        .arg(vcredist_extracted.join("a11"))
-        .spawn()?
-        .wait_with_output()?;
+    for entry in std::fs::read_dir(&cabs_dir)?.flatten() {
+        let _ = Command::new("cabextract")
+            .arg("-d")
+            .arg(&dll_dir)
+            .arg(entry.path())
+            .spawn()
+            .and_then(|mut c| c.wait());
 
-    if !output.status.success() {
-        anyhow::bail!("Failed to extract vcredist (2): {}", String::from_utf8_lossy(&output.stderr));
+        if LIBRARIES
+            .iter()
+            .all(|lib| dll_dir.join(format!("{lib}_amd64")).exists())
+        {
+            break;
+        }
     }
 
-    // w_try_cp_dll "${W_TMP}/win64"/mfc140.dll "${W_SYSTEM64_DLLS}"/mfc140.dll
+    let system32 = wine_prefix.as_ref().join("drive_c/windows/system32");
+
+    // dlls inside the cab are named with an _amd64 suffix, strip it on copy
     for lib in LIBRARIES {
-        let dest = wine_prefix.as_ref().join("drive_c/windows/system32").join(lib);
-
-        std::fs::copy(vcredist_extracted.join(lib), dest)?;
+        let src = dll_dir.join(format!("{lib}_amd64"));
+        if !src.exists() {
+            anyhow::bail!("Could not find {} in vcrun2022 installer", lib);
+        }
+        std::fs::copy(src, system32.join(lib))?;
     }
 
     std::fs::remove_dir_all(temp)?;
