@@ -3,7 +3,7 @@ use std::process::Command;
 
 use crate::installer::downloader::Downloader;
 
-// Source: https://github.com/Winetricks/winetricks/blob/master/src/winetricks#L13598
+// Source: https://github.com/Winetricks/winetricks/blob/08304e81f9ac9a83c552a6bd78689040d174bf95/src/winetricks#L13770
 // TODO: consider moving it to the wincompatlib
 
 const URL_X64: &str = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
