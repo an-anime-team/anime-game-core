@@ -280,9 +280,13 @@ impl VersionDiff {
             installer.inplace = true;
 
             let updater_clone = updater.clone();
-            installer.install(path.as_ref(), thread_count, move |msg| {
-                (updater_clone)(msg.into());
-            })?;
+            installer.install(
+                path.as_ref(),
+                thread_count,
+                Box::new(move |msg| {
+                    (updater_clone)(msg.into());
+                })
+            )?;
 
             tracing::debug!(
                 temp = ?installer.downloading_temp(),
@@ -300,9 +304,13 @@ impl VersionDiff {
             installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
             installer.inplace = true;
 
-            installer.install(path.as_ref(), thread_count, move |msg| {
-                (updater)(msg.into());
-            })?;
+            installer.install(
+                path.as_ref(),
+                thread_count,
+                Box::new(move |msg| {
+                    (updater)(msg.into());
+                })
+            )?;
 
             tracing::debug!(
                 temp = ?installer.downloading_temp(),
@@ -352,9 +360,14 @@ impl VersionDiff {
                     SophonPatcher::new(client.clone(), asb_diff, self.temp_folder(), None)?;
 
                 let updater_clone = updater.clone();
-                patcher.update(&path, from.into(), thread_count, move |msg| {
-                    (updater_clone)(msg.into());
-                })?;
+                patcher.update(
+                    &path,
+                    from.into(),
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater_clone)(msg.into());
+                    })
+                )?;
 
                 tracing::debug!(
                     temp = ?patcher.files_temp(),
@@ -370,9 +383,14 @@ impl VersionDiff {
             tracing::info_span!("Updating `game`").in_scope(|| {
                 let patcher = SophonPatcher::new(client, game_diff, self.temp_folder(), None)?;
 
-                patcher.update(&path, from.into(), thread_count, move |msg| {
-                    (updater)(msg.into());
-                })?;
+                patcher.update(
+                    &path,
+                    from.into(),
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater)(msg.into());
+                    })
+                )?;
 
                 // Create `.version` file here even if hdiff patching is failed because
                 // it's easier to explain user why he should run files repairer than
@@ -421,18 +439,25 @@ impl VersionDiff {
                 let installer =
                     SophonInstaller::new(client.clone(), download_info, self.temp_folder())?;
 
-                installer.pre_download(thread_count, move |msg| {
-                    (updater_clone)(msg.into());
-                })?;
+                installer.pre_download(
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater_clone)(msg.into());
+                    })
+                )?;
             }
 
             DownloadOrDiff::Patch(diff_info) => {
                 let patcher =
                     SophonPatcher::new(client.clone(), diff_info, self.temp_folder(), None)?;
 
-                patcher.pre_download(from.into(), thread_count, move |msg| {
-                    (updater_clone)(msg.into());
-                })?;
+                patcher.pre_download(
+                    from.into(),
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater_clone)(msg.into());
+                    })
+                )?;
             }
         }
 
@@ -440,21 +465,57 @@ impl VersionDiff {
             DownloadOrDiff::Download(download_info) => {
                 let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
 
-                installer.pre_download(thread_count, move |msg| {
-                    (updater)(msg.into());
-                })?;
+                installer.pre_download(
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater)(msg.into());
+                    })
+                )?;
             }
 
             DownloadOrDiff::Patch(diff_info) => {
                 let patcher = SophonPatcher::new(client, diff_info, self.temp_folder(), None)?;
 
-                patcher.pre_download(from.into(), thread_count, move |msg| {
-                    (updater)(msg.into());
-                })?;
+                patcher.pre_download(
+                    from.into(),
+                    thread_count,
+                    Box::new(move |msg| {
+                        (updater)(msg.into());
+                    })
+                )?;
             }
         }
 
         Ok(())
+    }
+
+    /// Get the matching field value for this diff. Returns none in case of
+    /// [`VersionDiff::Latest`] or [`VersionDiff::Outdated`]
+    pub fn matching_field(&self) -> Option<&str> {
+        match self {
+            Self::Latest {
+                ..
+            }
+            | Self::Outdated {
+                ..
+            } => None,
+            Self::Predownload {
+                game_download_info, ..
+            } => match download_info {
+                DownloadOrDiff::Patch(SophonDiff {
+                    matching_field, ..
+                })
+                | DownloadOrDiff::Download(SophonDownloadInfo {
+                    matching_field, ..
+                }) => Some(matching_field)
+            },
+            Self::Diff {
+                diff, ..
+            } => Some(&diff.matching_field),
+            Self::NotInstalled {
+                download_info, ..
+            } => Some(&download_info.matching_field)
+        }
     }
 }
 
