@@ -117,3 +117,14 @@ impl GameEdition {
         }
     }
 }
+
+impl From<GameEdition> for sophon::GameEdition {
+    fn from(value: GameEdition) -> Self {
+        // Only as far as the API endpoint and launcher id is concerned. The game id is
+        // taken from non-sophon GameEdition
+        match value {
+            GameEdition::China => sophon::GameEdition::China,
+            _ => sophon::GameEdition::Global
+        }
+    }
+}

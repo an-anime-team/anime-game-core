@@ -41,7 +41,7 @@ fn try_get_some_integrity_files(
         .find(|download_info| download_info.matching_field == matching_field)
         .ok_or_else(|| {
             anyhow::anyhow!("failed to find game download info")
-                .context("matching field: {matching_field}")
+                .context(format!("matching field: {matching_field}"))
         })?;
 
     let download_manifest = sophon::api::get_download_manifest(&client, download_info)?;

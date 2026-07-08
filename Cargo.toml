@@ -52,7 +52,7 @@ optional = true
 genshin = ["sophon"]
 star-rail = ["sophon"]
 zzz = []
-honkai = []
+honkai = ["sophon"]
 sophon = ["dep:sophon"]
 
 install = [
