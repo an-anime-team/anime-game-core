@@ -267,9 +267,9 @@ impl Game {
                 })
             }
             else {
-                tracing::debug!("Game is outdated: {} -> {}", current, latest_version);
+                tracing::info!("Game is outdated {} -> {}", current, latest_version);
 
-                let diffs = sophon::api::get_game_diffs_sophon_info(
+                let game_downloads = sophon::api::get_game_download_sophon_info(
                     &client,
                     branch_info
                         .main
@@ -277,71 +277,36 @@ impl Game {
                         .expect("The `None` case would have been caught earlier"),
                     &self.edition.into()
                 )
-                .context("Getting game diffs")?;
+                .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
 
-                if branch_info
-                    .main
-                    .as_ref()
-                    .expect("The `None` case would have been caught earlier")
-                    .diff_tags
-                    .iter()
-                    .any(|tag| *tag == current)
-                {
-                    let game_diff = diffs.get_manifests_for("game");
-                    let asb_diff = diffs.get_manifests_for("asb");
+                let game_download_info = game_downloads
+                    .get_manifests_for("game")
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("failed to get game manifest"))?;
+                let asb_download_info = game_downloads
+                    .get_manifests_for("asb")
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("failed to get asb manifest"))?;
 
-                    let game_diff_stats = game_diff.and_then(|game_diff| {
-                        game_diff
-                            .stats
-                            .iter()
-                            .find(|(tag, _)| **tag == current)
-                            .map(|(_, stats)| stats)
-                    });
-                    let asb_diff_stats = asb_diff.and_then(|asb_diff| {
-                        asb_diff
-                            .stats
-                            .iter()
-                            .find(|(tag, _)| **tag == current)
-                            .map(|(_, stats)| stats)
-                    });
-
-                    if game_diff_stats.is_some() || asb_diff_stats.is_some() {
-                        let downloaded_size = game_diff_stats
-                            .map(|stats| stats.compressed_size.parse::<u64>().unwrap())
-                            .unwrap_or(0)
-                            + asb_diff_stats
-                                .map(|stats| stats.compressed_size.parse::<u64>().unwrap())
-                                .unwrap_or(0);
-                        let unpacked_size = game_diff_stats
-                            .map(|stats| stats.uncompressed_size.parse::<u64>().unwrap())
-                            .unwrap_or(0)
-                            + asb_diff_stats
-                                .map(|stats| stats.uncompressed_size.parse::<u64>().unwrap())
-                                .unwrap_or(0);
-
-                        return Ok(VersionDiff::Diff {
-                            current,
-                            latest: latest_version,
-
-                            edition: self.edition,
-
-                            downloaded_size,
-                            unpacked_size,
-
-                            game_diff: game_diff.cloned(),
-                            asb_diff: asb_diff.cloned(),
-
-                            installation_path: Some(self.path.clone()),
-                            version_file_path: None,
-                            temp_folder: None
-                        });
-                    }
-                }
-
-                Ok(VersionDiff::Outdated {
+                let downloaded_size = game_download_info.stats.compressed_size.parse::<u64>()?
+                    + asb_download_info.stats.compressed_size.parse::<u64>()?;
+                let unpacked_size = game_download_info.stats.uncompressed_size.parse::<u64>()?
+                    + asb_download_info.stats.uncompressed_size.parse::<u64>()?;
+                Ok(VersionDiff::Update {
                     current,
                     latest: latest_version,
-                    edition: self.edition
+
+                    edition: self.edition,
+
+                    downloaded_size,
+                    unpacked_size,
+
+                    game_dlinfo: game_download_info,
+                    asb_dlinfo: asb_download_info,
+
+                    installation_path: Some(self.path.clone()),
+                    version_file_path: None,
+                    temp_folder: None
                 })
             }
         }

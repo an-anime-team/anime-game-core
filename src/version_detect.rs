@@ -1,6 +1,6 @@
+use std::io::{BufReader, Read, Seek};
 use std::ops::RangeInclusive;
 use std::fs::File;
-use std::io::{Read, Seek};
 use std::path::Path;
 
 use anyhow::Context;
@@ -41,7 +41,11 @@ pub fn get_version_from_game_files<const OFFSET: u64, const REGION_SIZE: usize>(
         bytes.iter().fold(0u8, |acc, &x| acc * 10 + (x - b'0'))
     }
 
-    let mut file = File::open(file)?;
+    let mut file = match File::open(file) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into())
+    };
     file.seek(std::io::SeekFrom::Start(OFFSET))?;
     let mut search_region = [0u8; REGION_SIZE];
     file.read_exact(&mut search_region)?;
@@ -113,13 +117,26 @@ pub fn get_version_from_game_files<const OFFSET: u64, const REGION_SIZE: usize>(
     Ok(None)
 }
 
+fn file_md5(path: &Path) -> std::io::Result<String> {
+    let mut file = BufReader::new(File::open(path)?);
+    let mut md5 = Md5::new();
+
+    std::io::copy(&mut file, &mut md5)?;
+
+    Ok(format!("{:x}", md5.finalize()))
+}
+
 pub fn get_version_game_scan(
     exe_path: &Path,
     scan_url: &str,
     game_id: &str
 ) -> anyhow::Result<Option<Version>> {
     tracing::debug!(game_id, ?exe_path, "Trying Game Scan");
-    let exe_hash = format!("{:x}", Md5::digest(std::fs::read(exe_path)?));
+    let exe_hash = match file_md5(exe_path) {
+        Ok(hash) => hash,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into())
+    };
     let scan_info = minreq::get(scan_url)
         .send()
         .context("Sending game scan API request")?
@@ -172,7 +189,11 @@ pub fn get_version_sophon(
     else {
         return Ok(None);
     };
-    let exe_hash = format!("{:x}", Md5::digest(std::fs::read(exe_path)?));
+    let exe_hash = match file_md5(exe_path) {
+        Ok(hash) => hash,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into())
+    };
     let client = crate::reqwest::blocking::Client::new();
 
     let game_branches = sophon::api::get_game_branches_info(&client, &edition)?;
