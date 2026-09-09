@@ -851,8 +851,13 @@ impl VersionDiffExt for VersionDiff {
             for (i, file) in files.into_iter().enumerate() {
                 let file = path.join(file);
 
-                std::fs::remove_file(&file)
-                    .expect(&format!("Failed to remove outdated file: {:?}", file));
+                // [`Path::exists`] is fine to use here
+                if file.exists() {
+                    // This does not warrant a panic
+                    std::fs::remove_file(&file).unwrap_or_else(|_| {
+                        tracing::error!("Failed to remove outdated file: {:?}", file)
+                    });
+                }
 
                 (updater)(Self::Update::RemovingOutdatedProgress(
                     i as u64 + 1,
