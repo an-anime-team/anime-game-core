@@ -511,7 +511,8 @@ impl VersionDiffExt for VersionDiff {
             return Err(DownloadingError::PathNotMounted(temp_folder).into());
         };
 
-        // We can possibly store downloaded archive + unpacked data on the same disk
+        // We can possibly store downloaded archive + unpacked data on the same
+        // disk
         let required = if free_space::is_same_disk(&temp_folder, &path) {
             downloaded_size + unpacked_size
         }
@@ -537,7 +538,8 @@ impl VersionDiffExt for VersionDiff {
             return Err(DownloadingError::PathNotMounted(path.to_path_buf()).into());
         };
 
-        // We can possibly store downloaded archive + unpacked data on the same disk
+        // We can possibly store downloaded archive + unpacked data on the same
+        // disk
         let required = if free_space::is_same_disk(&path, &temp_folder) {
             unpacked_size + downloaded_size
         }
@@ -607,8 +609,9 @@ impl VersionDiffExt for VersionDiff {
         // on a full rewrite so this code won't stay here for always
         match Archive::open(temp_folder.join(&first_segment_name)) {
             Ok(mut archive) => {
-                // Temporary workaround as we can't get archive extraction process
-                // directly - we'll spawn it in another thread and check this archive entries
+                // Temporary workaround as we can't get archive extraction
+                // process directly - we'll spawn it in another
+                // thread and check this archive entries
                 // appearance in the filesystem
                 let mut total = 0;
 
@@ -621,15 +624,17 @@ impl VersionDiffExt for VersionDiff {
 
                     let path = path.join(&entry.name);
 
-                    // Failed to change permissions => likely patch-related file and was made by the
-                    // sudo, so root
+                    // Failed to change permissions => likely patch-related file
+                    // and was made by the sudo, so root
                     #[allow(unused_must_use)]
                     if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666))
                         .is_err()
                     {
-                        // For weird reason we can delete files made by root, but can't modify their
+                        // For weird reason we can delete files made by root,
+                        // but can't modify their
                         // permissions We're not checking its result because
-                        // if it's error - then it's either couldn't be removed (which is not the
+                        // if it's error - then it's either couldn't be removed
+                        // (which is not the
                         // case) or the file doesn't exist, which we
                         // obviously can just ignore
                         std::fs::remove_file(&path);
@@ -685,14 +690,16 @@ impl VersionDiffExt for VersionDiff {
                 let unpacking_updater = updater.clone();
                 let extract_to = path.clone();
 
-                // Run archive extraction in another thread to not to freeze the current one
+                // Run archive extraction in another thread to not to freeze the
+                // current one
                 let handle_1 = std::thread::spawn(move || {
                     (unpacking_updater)(DiffUpdate::InstallerUpdate(
                         InstallerUpdate::UnpackingStarted(extract_to.clone())
                     ));
 
                     // We have to create new instance of Archive here
-                    // because otherwise it may not work after get_entries method call
+                    // because otherwise it may not work after get_entries
+                    // method call
                     match Archive::open(temp_folder.join(first_segment_name)) {
                         Ok(mut archive) => match archive.extract(&extract_to) {
                             Ok(_) => {
@@ -736,7 +743,8 @@ impl VersionDiffExt for VersionDiff {
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
-        // why he should re-download entire game update because something is failed
+        // why he should re-download entire game update because something is
+        // failed
         #[allow(unused_must_use)]
         {
             let version_path = self.version_file_path().unwrap_or(path.join(".version"));
@@ -745,8 +753,8 @@ impl VersionDiffExt for VersionDiff {
         }
 
         // Apply hdiff patches
-        // We're ignoring Err because in practice it means that hdifffiles.txt is
-        // missing
+        // We're ignoring Err because in practice it means that hdifffiles.txt
+        // is missing
         if let Ok(files) = std::fs::read_to_string(path.join("hdifffiles.txt")) {
             tracing::debug!("Applying hdiff patches");
 
@@ -756,8 +764,8 @@ impl VersionDiffExt for VersionDiff {
             let hdiffs = files.len() as u64;
 
             // {"remoteName":
-            // "AnimeGame_Data/StreamingAssets/Audio/GeneratedSoundBanks/Windows/Japanese/
-            // 1001.pck"}
+            // "AnimeGame_Data/StreamingAssets/Audio/GeneratedSoundBanks/
+            // Windows/Japanese/ 1001.pck"}
             for (i, file) in files.into_iter().enumerate() {
                 let relative_file = &file[16..file.len() - 2];
 
@@ -770,8 +778,9 @@ impl VersionDiffExt for VersionDiff {
                     tracing::warn!("Failed to apply hdiff patch for {:?}: {err}", file);
                     tracing::debug!("Trying to repair corrupted file");
 
-                    // If we were able to get API response - it shouldn't be impossible
-                    // to also get integrity files list from the same API
+                    // If we were able to get API response - it shouldn't be
+                    // impossible to also get integrity
+                    // files list from the same API
                     match super::repairer::try_get_integrity_file(
                         self.edition(),
                         relative_file,
@@ -830,8 +839,8 @@ impl VersionDiffExt for VersionDiff {
         tracing::debug!("Deleting outdated files");
 
         // Remove outdated files
-        // We're ignoring Err because in practice it means that deletefiles.txt is
-        // missing
+        // We're ignoring Err because in practice it means that deletefiles.txt
+        // is missing
         if let Ok(files) = std::fs::read_to_string(path.join("deletefiles.txt")) {
             let files = files.lines().collect::<Vec<&str>>();
             let files_len = files.len() as u64;
