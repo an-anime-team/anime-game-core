@@ -226,11 +226,12 @@ impl Game {
             if current >= latest_version {
                 tracing::debug!("Game version is latest");
 
-                // If we're running latest game version the diff we need to download
-                // must always be `predownload.diffs[0]`, but just to be safe I made
-                // a loop through possible variants, and if none of them was correct
-                // (which is not possible in reality) we should just say thath the game
-                // is latest
+                // If we're running latest game version the diff we need to
+                // download must always be
+                // `predownload.diffs[0]`, but just to be safe I made
+                // a loop through possible variants, and if none of them was
+                // correct (which is not possible in reality) we
+                // should just say thath the game is latest
                 if let Some(predownload_info) = &branch_info.pre_download {
                     if predownload_info
                         .diff_tags

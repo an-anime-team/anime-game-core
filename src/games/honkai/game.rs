@@ -53,7 +53,8 @@ impl GameExt for Game {
     fn get_latest_version(edition: Self::Edition) -> anyhow::Result<Version> {
         tracing::trace!("Trying to get latest game version");
 
-        // I assume game's API can't return incorrect version format right? Right?
+        // I assume game's API can't return incorrect version format right?
+        // Right?
         Ok(Version::from_str(api::request(edition)?.main.major.version).unwrap())
     }
 
@@ -194,11 +195,12 @@ impl Game {
             if current >= latest_version {
                 tracing::debug!("Game version is latest");
 
-                // If we're running latest game version the diff we need to download
-                // must always be `predownload.diffs[0]`, but just to be safe I made
-                // a loop through possible variants, and if none of them was correct
-                // (which is not possible in reality) we should just say that the game
-                // is latest
+                // If we're running latest game version the diff we need to
+                // download must always be
+                // `predownload.diffs[0]`, but just to be safe I made
+                // a loop through possible variants, and if none of them was
+                // correct (which is not possible in reality) we
+                // should just say that the game is latest
                 if let Some(predownload_info) = &branch_info.pre_download {
                     if predownload_info
                         .diff_tags
