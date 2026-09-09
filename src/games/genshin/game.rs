@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
+
 use crate::sophon;
 use crate::sophon::reqwest;
 use crate::version::Version;
