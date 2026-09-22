@@ -41,7 +41,7 @@ pub enum DownloadingError {
 
     /// minreq error
     #[error("minreq error: {0}")]
-    Minreq(String)
+    Minreq(String),
 }
 
 impl From<minreq::Error> for DownloadingError {
@@ -63,7 +63,7 @@ pub struct Downloader {
     pub continue_downloading: bool,
 
     /// Perform free space verifications before downloading file
-    pub check_free_space: bool
+    pub check_free_space: bool,
 }
 
 impl Downloader {
@@ -74,8 +74,10 @@ impl Downloader {
             .with_timeout(*crate::REQUESTS_TIMEOUT)
             .send()?;
 
-        let length = header.headers.get("content-length")
-            .map(|len| len.parse().expect("Requested site's content-length is not a number"));
+        let length = header.headers.get("content-length").map(|len| {
+            len.parse()
+                .expect("Requested site's content-length is not a number")
+        });
 
         Ok(Self {
             uri: uri.to_owned(),
@@ -83,7 +85,7 @@ impl Downloader {
 
             chunk_size: DEFAULT_CHUNK_SIZE,
             continue_downloading: true,
-            check_free_space: true
+            check_free_space: true,
         })
     }
 
@@ -131,7 +133,11 @@ impl Downloader {
         "index.html"
     }
 
-    pub fn download(&mut self, path: impl Into<PathBuf>, progress: impl Fn(u64, u64) + Send + 'static) -> Result<(), DownloadingError> {
+    pub fn download(
+        &mut self,
+        path: impl Into<PathBuf>,
+        progress: impl Fn(u64, u64) + Send + 'static,
+    ) -> Result<(), DownloadingError> {
         let path = path.into();
 
         let mut downloaded = 0;
@@ -140,7 +146,10 @@ impl Downloader {
         let file = if path.exists() && self.continue_downloading {
             tracing::debug!("Opening output file");
 
-            let mut file = std::fs::OpenOptions::new().read(true).write(true).open(&path);
+            let mut file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&path);
 
             // Continue downloading if the file exists and can be opened
             if let Ok(file) = &mut file {
@@ -156,7 +165,10 @@ impl Downloader {
                                 // Trim downloaded file to prevent future issues (e.g. with extracting the archive)
                                 std::cmp::Ordering::Greater => {
                                     if let Err(err) = file.set_len(length) {
-                                        return Err(DownloadingError::OutputFileError(path, err.to_string()));
+                                        return Err(DownloadingError::OutputFileError(
+                                            path,
+                                            err.to_string(),
+                                        ));
                                     }
 
                                     return Ok(());
@@ -171,7 +183,12 @@ impl Downloader {
                         downloaded = metadata.len() as usize;
                     }
 
-                    Err(err) => return Err(DownloadingError::OutputFileMetadataError(path, err.to_string()))
+                    Err(err) => {
+                        return Err(DownloadingError::OutputFileMetadataError(
+                            path,
+                            err.to_string(),
+                        ));
+                    }
                 }
             }
 
@@ -197,8 +214,7 @@ impl Downloader {
             match free_space::available(&path) {
                 Some(space) => {
                     if let Some(required) = self.length() {
-                        let required = required.checked_sub(downloaded as u64)
-                            .unwrap_or_default();
+                        let required = required.checked_sub(downloaded as u64).unwrap_or_default();
 
                         if space < required {
                             return Err(DownloadingError::NoSpaceAvailable(path, required, space));
@@ -206,7 +222,7 @@ impl Downloader {
                     }
                 }
 
-                None => return Err(DownloadingError::PathNotMounted(path))
+                None => return Err(DownloadingError::PathNotMounted(path)),
             }
         }
 
@@ -228,7 +244,10 @@ impl Downloader {
                 if let Some(range) = request.headers.get("content-range") {
                     // Finish downloading if header says that we've already downloaded all the data
                     if range.contains("*/") {
-                        (progress)(self.length.unwrap_or(downloaded as u64), self.length.unwrap_or(downloaded as u64));
+                        (progress)(
+                            self.length.unwrap_or(downloaded as u64),
+                            self.length.unwrap_or(downloaded as u64),
+                        );
 
                         return Ok(());
                     }
@@ -243,7 +262,10 @@ impl Downloader {
                 //
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
                 if request.status_code == 416 {
-                    (progress)(self.length.unwrap_or(downloaded as u64), self.length.unwrap_or(downloaded as u64));
+                    (progress)(
+                        self.length.unwrap_or(downloaded as u64),
+                        self.length.unwrap_or(downloaded as u64),
+                    );
 
                     return Ok(());
                 }
@@ -262,7 +284,10 @@ impl Downloader {
 
                         downloaded += self.chunk_size;
 
-                        (progress)(downloaded as u64, self.length.unwrap_or(expected_len as u64));
+                        (progress)(
+                            downloaded as u64,
+                            self.length.unwrap_or(expected_len as u64),
+                        );
                     }
                 }
 
@@ -279,7 +304,7 @@ impl Downloader {
                 Ok(())
             }
 
-            Err(err) => Err(DownloadingError::OutputFileError(path, err.to_string()))
+            Err(err) => Err(DownloadingError::OutputFileError(path, err.to_string())),
         }
     }
 }
