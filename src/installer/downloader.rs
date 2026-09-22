@@ -287,8 +287,6 @@ impl Downloader {
         // Download data
         match file {
             Ok(mut file) => {
-                let mut chunk = Vec::with_capacity(self.chunk_size);
-
                 let mut head_request =
                     minreq::head(&self.uri).with_header("range", format!("bytes={downloaded}-"));
                 if let Some(user_agent) = &self.user_agent {
@@ -341,6 +339,15 @@ impl Downloader {
 
                     return Ok(());
                 }
+
+                if response.status_code != 206 && !response.headers.contains_key("content-range") {
+                    // Server did not respect the range request
+                    if let Err(err) = file.seek(std::io::SeekFrom::Start(0)) {
+                        return Err(DownloadingError::OutputFileError(path, err.to_string()));
+                    }
+                }
+
+                let mut chunk = Vec::with_capacity(self.chunk_size);
 
                 for byte in response {
                     let (byte, expected_len) = byte?;
