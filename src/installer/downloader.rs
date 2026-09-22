@@ -124,7 +124,7 @@ impl Downloader {
     /// - `https://example.com/example.zip` -> `example.zip`
     /// - `https://example.com` -> `index.html`
     pub fn get_filename(&self) -> &str {
-        if let Some(pos) = self.uri.replace('\\', "/").rfind(|c| c == '/') {
+        if let Some(pos) = self.uri.replace('\\', "/").rfind('/') {
             if !self.uri[pos + 1..].is_empty() {
                 return &self.uri[pos + 1..];
             }
@@ -214,7 +214,7 @@ impl Downloader {
             match free_space::available(&path) {
                 Some(space) => {
                     if let Some(required) = self.length() {
-                        let required = required.checked_sub(downloaded as u64).unwrap_or_default();
+                        let required = required.saturating_sub(downloaded as u64);
 
                         if space < required {
                             return Err(DownloadingError::NoSpaceAvailable(path, required, space));
