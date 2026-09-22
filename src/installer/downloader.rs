@@ -1,14 +1,15 @@
-use std::io::{Write, Seek};
+use std::io::{Seek, Write};
 use std::path::PathBuf;
 use std::fs::File;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::free_space;
 use crate::prettify_bytes::prettify_bytes;
 
-/// Default amount of bytes `Downloader::download` method will send to `downloader` function
+/// Default amount of bytes `Downloader::download` method will send to
+/// `downloader` function
 pub const DEFAULT_CHUNK_SIZE: usize = 128 * 1024; // 128 KB
 
 #[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,7 +42,7 @@ pub enum DownloadingError {
 
     /// minreq error
     #[error("minreq error: {0}")]
-    Minreq(String),
+    Minreq(String)
 }
 
 impl From<minreq::Error> for DownloadingError {
@@ -56,7 +57,8 @@ pub struct Downloader {
     length: Option<u64>,
     user_agent: Option<String>,
 
-    /// Amount of bytes `Downloader::download` method will send to `downloader` function
+    /// Amount of bytes `Downloader::download` method will send to `downloader`
+    /// function
     pub chunk_size: usize,
 
     /// If true, then `Downloader` will try to continue downloading of the file.
@@ -67,7 +69,7 @@ pub struct Downloader {
     pub check_free_space: bool,
 
     /// Set the "Referer" header
-    pub referer: Option<String>,
+    pub referer: Option<String>
 }
 
 impl Downloader {
@@ -91,16 +93,17 @@ impl Downloader {
             chunk_size: DEFAULT_CHUNK_SIZE,
             continue_downloading: true,
             check_free_space: true,
-            referer: None,
+            referer: None
         })
     }
 
-    /// Same as [Self::new] but also sets the user agent and allows setting the Referer immediately.
-    /// The separate method is required becuase of the HEAD request done as part of initialization.
+    /// Same as [Self::new] but also sets the user agent and allows setting the
+    /// Referer immediately. The separate method is required becuase of the
+    /// HEAD request done as part of initialization.
     pub fn new_with_user_agent<T: AsRef<str>>(
         uri: T,
         user_agent: String,
-        referer: Option<String>,
+        referer: Option<String>
     ) -> Result<Self, minreq::Error> {
         let uri = uri.as_ref();
 
@@ -125,7 +128,7 @@ impl Downloader {
             chunk_size: DEFAULT_CHUNK_SIZE,
             continue_downloading: true,
             check_free_space: true,
-            referer,
+            referer
         })
     }
 
@@ -155,7 +158,8 @@ impl Downloader {
 
     #[inline]
     /// Specify the value of `User-Agent` header used during download.
-    /// If it's necessary for the HEAD request as well, use [Self::new_with_user_agent]
+    /// If it's necessary for the HEAD request as well, use
+    /// [Self::new_with_user_agent]
     pub fn with_user_agent(mut self, user_agent: String) -> Self {
         self.user_agent = Some(user_agent);
 
@@ -164,7 +168,8 @@ impl Downloader {
 
     #[inline]
     /// Specify the value of `Referer` header used during download.
-    /// If it's necessary for the HEAD request as well, use [Self::new_with_user_agent]
+    /// If it's necessary for the HEAD request as well, use
+    /// [Self::new_with_user_agent]
     pub fn with_referer(mut self, referer: String) -> Self {
         self.referer = Some(referer);
 
@@ -194,7 +199,7 @@ impl Downloader {
     pub fn download(
         &mut self,
         path: impl Into<PathBuf>,
-        progress: impl Fn(u64, u64) + Send + 'static,
+        progress: impl Fn(u64, u64) + Send + 'static
     ) -> Result<(), DownloadingError> {
         let path = path.into();
 
@@ -220,12 +225,13 @@ impl Downloader {
 
                                 std::cmp::Ordering::Equal => return Ok(()),
 
-                                // Trim downloaded file to prevent future issues (e.g. with extracting the archive)
+                                // Trim downloaded file to prevent future issues (e.g. with
+                                // extracting the archive)
                                 std::cmp::Ordering::Greater => {
                                     if let Err(err) = file.set_len(length) {
                                         return Err(DownloadingError::OutputFileError(
                                             path,
-                                            err.to_string(),
+                                            err.to_string()
                                         ));
                                     }
 
@@ -244,14 +250,15 @@ impl Downloader {
                     Err(err) => {
                         return Err(DownloadingError::OutputFileMetadataError(
                             path,
-                            err.to_string(),
+                            err.to_string()
                         ));
                     }
                 }
             }
 
             file
-        } else {
+        }
+        else {
             tracing::debug!("Creating output file");
 
             let base_folder = path.parent().unwrap();
@@ -280,7 +287,7 @@ impl Downloader {
                     }
                 }
 
-                None => return Err(DownloadingError::PathNotMounted(path)),
+                None => return Err(DownloadingError::PathNotMounted(path))
             }
         }
 
@@ -305,11 +312,12 @@ impl Downloader {
                 //
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
                 if let Some(range) = head_response.headers.get("content-range") {
-                    // Finish downloading if header says that we've already downloaded all the data
+                    // Finish downloading if header says that we've already
+                    // downloaded all the data
                     if range.contains("*/") {
                         (progress)(
                             self.length.unwrap_or(downloaded as u64),
-                            self.length.unwrap_or(downloaded as u64),
+                            self.length.unwrap_or(downloaded as u64)
                         );
 
                         return Ok(());
@@ -327,14 +335,15 @@ impl Downloader {
 
                 let response = request.send_lazy()?;
 
-                // HTTP 416 = provided range is overcame actual content length (means file is downloaded)
-                // I check this here because HEAD request can return 200 OK while GET - 416
+                // HTTP 416 = provided range is overcame actual content length
+                // (means file is downloaded) I check this here
+                // because HEAD request can return 200 OK while GET - 416
                 //
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
                 if response.status_code == 416 {
                     (progress)(
                         self.length.unwrap_or(downloaded as u64),
-                        self.length.unwrap_or(downloaded as u64),
+                        self.length.unwrap_or(downloaded as u64)
                     );
 
                     return Ok(());
@@ -365,7 +374,7 @@ impl Downloader {
 
                         (progress)(
                             downloaded as u64,
-                            self.length.unwrap_or(expected_len as u64),
+                            self.length.unwrap_or(expected_len as u64)
                         );
                     }
                 }
@@ -383,7 +392,7 @@ impl Downloader {
                 Ok(())
             }
 
-            Err(err) => Err(DownloadingError::OutputFileError(path, err.to_string())),
+            Err(err) => Err(DownloadingError::OutputFileError(path, err.to_string()))
         }
     }
 }
