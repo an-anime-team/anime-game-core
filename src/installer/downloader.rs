@@ -54,6 +54,7 @@ impl From<minreq::Error> for DownloadingError {
 pub struct Downloader {
     uri: String,
     length: Option<u64>,
+    user_agent: Option<String>,
 
     /// Amount of bytes `Downloader::download` method will send to `downloader` function
     pub chunk_size: usize,
@@ -64,6 +65,9 @@ pub struct Downloader {
 
     /// Perform free space verifications before downloading file
     pub check_free_space: bool,
+
+    /// Set the "Referer" header
+    pub referer: Option<String>,
 }
 
 impl Downloader {
@@ -82,10 +86,46 @@ impl Downloader {
         Ok(Self {
             uri: uri.to_owned(),
             length,
+            user_agent: None,
 
             chunk_size: DEFAULT_CHUNK_SIZE,
             continue_downloading: true,
             check_free_space: true,
+            referer: None,
+        })
+    }
+
+    /// Same as [Self::new] but also sets the user agent and allows setting the Referer immediately.
+    /// The separate method is required becuase of the HEAD request done as part of initialization.
+    pub fn new_with_user_agent<T: AsRef<str>>(
+        uri: T,
+        user_agent: String,
+        referer: Option<String>,
+    ) -> Result<Self, minreq::Error> {
+        let uri = uri.as_ref();
+
+        let mut head_request = minreq::head(uri)
+            .with_header("User-Agent", &user_agent)
+            .with_timeout(*crate::REQUESTS_TIMEOUT);
+        if let Some(referer) = &referer {
+            head_request = head_request.with_header("Referer", referer);
+        }
+        let head_response = head_request.send()?;
+
+        let length = head_response.headers.get("content-length").map(|len| {
+            len.parse()
+                .expect("Requested site's content-length is not a number")
+        });
+
+        Ok(Self {
+            uri: uri.to_owned(),
+            length,
+            user_agent: Some(user_agent),
+
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            continue_downloading: true,
+            check_free_space: true,
+            referer,
         })
     }
 
@@ -109,6 +149,24 @@ impl Downloader {
     /// Specify whether installer should check free space availability
     pub fn with_free_space_check(mut self, check_free_space: bool) -> Self {
         self.check_free_space = check_free_space;
+
+        self
+    }
+
+    #[inline]
+    /// Specify the value of `User-Agent` header used during download.
+    /// If it's necessary for the HEAD request as well, use [Self::new_with_user_agent]
+    pub fn with_user_agent(mut self, user_agent: String) -> Self {
+        self.user_agent = Some(user_agent);
+
+        self
+    }
+
+    #[inline]
+    /// Specify the value of `Referer` header used during download.
+    /// If it's necessary for the HEAD request as well, use [Self::new_with_user_agent]
+    pub fn with_referer(mut self, referer: String) -> Self {
+        self.referer = Some(referer);
 
         self
     }
@@ -231,9 +289,16 @@ impl Downloader {
             Ok(mut file) => {
                 let mut chunk = Vec::with_capacity(self.chunk_size);
 
-                let request = minreq::head(&self.uri)
-                    .with_header("range", format!("bytes={downloaded}-"))
-                    .send()?;
+                let mut head_request =
+                    minreq::head(&self.uri).with_header("range", format!("bytes={downloaded}-"));
+                if let Some(user_agent) = &self.user_agent {
+                    head_request = head_request.with_header("User-Agent", user_agent);
+                }
+                if let Some(referer) = &self.referer {
+                    head_request = head_request.with_header("Referer", referer);
+                }
+
+                let head_response = head_request.send()?;
 
                 // Request content range (downloaded + remained content size)
                 //
@@ -241,7 +306,7 @@ impl Downloader {
                 // If not finished: bytes 10611646759-10611646759/10611646760
                 //
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
-                if let Some(range) = request.headers.get("content-range") {
+                if let Some(range) = head_response.headers.get("content-range") {
                     // Finish downloading if header says that we've already downloaded all the data
                     if range.contains("*/") {
                         (progress)(
@@ -253,15 +318,22 @@ impl Downloader {
                     }
                 }
 
-                let request = minreq::get(&self.uri)
-                    .with_header("range", format!("bytes={downloaded}-"))
-                    .send_lazy()?;
+                let mut request =
+                    minreq::get(&self.uri).with_header("range", format!("bytes={downloaded}-"));
+                if let Some(user_agent) = &self.user_agent {
+                    request = request.with_header("User-Agent", user_agent);
+                }
+                if let Some(referer) = &self.referer {
+                    request = request.with_header("Referer", referer);
+                }
+
+                let response = request.send_lazy()?;
 
                 // HTTP 416 = provided range is overcame actual content length (means file is downloaded)
                 // I check this here because HEAD request can return 200 OK while GET - 416
                 //
                 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416
-                if request.status_code == 416 {
+                if response.status_code == 416 {
                     (progress)(
                         self.length.unwrap_or(downloaded as u64),
                         self.length.unwrap_or(downloaded as u64),
@@ -270,7 +342,7 @@ impl Downloader {
                     return Ok(());
                 }
 
-                for byte in request {
+                for byte in response {
                     let (byte, expected_len) = byte?;
 
                     chunk.push(byte);
