@@ -12,6 +12,9 @@ use crate::genshin::voice_data::locale::VoiceLocale;
 #[cfg(feature = "install")]
 use crate::genshin::version_diff::*;
 
+#[cfg(test)]
+mod tests;
+
 /// List of voiceover sizes
 ///
 /// Format: `(version, english, japanese, korean, chinese)`
@@ -326,8 +329,6 @@ impl VoicePackage {
     pub fn try_get_version(&self) -> anyhow::Result<Version> {
         tracing::debug!(locale = ?self.locale(), "Trying to get voice package version");
 
-        let client = reqwest::blocking::Client::new();
-
         match &self {
             Self::NotInstalled {
                 version, ..
@@ -335,6 +336,7 @@ impl VoicePackage {
 
             Self::Installed {
                 path,
+                locale,
                 game_edition,
                 ..
             } => {
@@ -358,26 +360,28 @@ impl VoicePackage {
                         }
                     }
 
-                    // We don't create .version file here because we don't
-                    // actually know current version and just predict it
-                    // This file will be properly created in the install method
-                    Err(_) => {
-                        tracing::debug!(".version file wasn't found. Assuming latest");
-
-                        let game_branches =
-                            sophon::api::get_game_branches_info(&client, &game_edition.into())?;
-
-                        let branch_info = game_branches
-                            .get_game_branch_by_id_or_biz_latest(game_edition.game_id())
-                            .ok_or_else(|| {
-                                anyhow::anyhow!("Failed to find the latest game version")
-                            })?;
-
-                        Ok(branch_info
-                            .version()
-                            .expect("must be a valid version")
-                            .into())
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        // Windows/HoYoPlay imports have no launcher-specific
+                        // .version file. Fingerprint their official package index
+                        // instead of assuming the voices match the latest game.
+                        let game_path = path.ancestors().nth(4).ok_or_else(|| {
+                            anyhow::anyhow!("Voice package path has no game directory: {path:?}")
+                        })?;
+                        let asset_name = format!("Audio_{}_pkg_version", locale.to_folder());
+                        crate::version_detect::get_asset_version_sophon(
+                            &game_path.join(&asset_name),
+                            &asset_name,
+                            locale.to_code(),
+                            game_edition.game_id(),
+                            (*game_edition).into()
+                        )?.ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "Could not determine the installed {} voice version from .version or {asset_name}",
+                                locale.to_name()
+                            )
+                        })
                     }
+                    Err(err) => Err(err.into())
                 }
             }
         }
