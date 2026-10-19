@@ -8,6 +8,9 @@ use md5::{Digest, Md5};
 
 use crate::version::Version;
 
+#[cfg(all(test, feature = "sophon"))]
+mod tests;
+
 pub fn parse_dotversion(path: &Path) -> Option<Version> {
     std::fs::read(path)
         .map(|version| {
@@ -183,13 +186,28 @@ pub fn get_version_sophon(
     game_id: &str,
     edition: crate::sophon::GameEdition
 ) -> anyhow::Result<Option<Version>> {
-    use crate::sophon;
-    tracing::debug!(game_id, ?exe_path, "Trying sophon");
     let Some(exe_filename) = exe_path.file_name().and_then(|filename| filename.to_str())
     else {
         return Ok(None);
     };
-    let exe_hash = match file_md5(exe_path) {
+
+    get_asset_version_sophon(exe_path, exe_filename, "game", game_id, edition)
+}
+
+/// Identify an installed asset using the current and previous Sophon hashes.
+/// `asset_name` is relative to the game directory, while `matching_field`
+/// selects the game or voice package manifest.
+#[cfg(feature = "sophon")]
+pub fn get_asset_version_sophon(
+    asset_path: &Path,
+    asset_name: &str,
+    matching_field: &str,
+    game_id: &str,
+    edition: crate::sophon::GameEdition
+) -> anyhow::Result<Option<Version>> {
+    use crate::sophon;
+    tracing::debug!(game_id, ?asset_path, matching_field, "Trying sophon");
+    let asset_hash = match sophon::file_md5_hash_str(asset_path) {
         Ok(hash) => hash,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => return Err(err.into())
@@ -204,55 +222,51 @@ pub fn get_version_sophon(
     };
 
     let download_info = sophon::api::get_game_download_sophon_info(&client, package, &edition)?;
-    let Some(dlinfo) = download_info.get_manifests_for("game")
+    let Some(dlinfo) = download_info.get_manifests_for(matching_field)
     else {
         return Ok(None);
     };
 
     let download_manifest = sophon::api::get_download_manifest(&client, dlinfo)?;
-    let exe_hash_from_dl = download_manifest
+    let asset_hash_from_dl = download_manifest
         .assets
         .iter()
-        .find_map(|asset| (asset.asset_name == exe_filename).then_some(&asset.asset_hash_md5));
+        .find_map(|asset| (asset.asset_name == asset_name).then_some(&asset.asset_hash_md5));
 
-    if let Some(dlhash) = exe_hash_from_dl {
-        if dlhash.eq_ignore_ascii_case(&exe_hash) {
+    if let Some(dlhash) = asset_hash_from_dl {
+        if dlhash.eq_ignore_ascii_case(&asset_hash) {
             return Ok(Version::from_str(&package.tag));
         }
     }
     else {
-        tracing::error!("Failed to find exe hashes in sophon download api, asset not found")
+        tracing::error!(asset_name, "Asset not found in sophon download manifest")
     }
 
     // Hash does not match latest at this point, try to find in updates
 
     let diffs = sophon::api::get_game_diffs_sophon_info(&client, package, &edition)?;
-    let Some(diff_info) = diffs.get_manifests_for("game")
+    let Some(diff_info) = diffs.get_manifests_for(matching_field)
     else {
         return Ok(None);
     };
 
     let patch_manifest = sophon::api::get_patch_manifest(&client, diff_info)?;
-    let Some(exe_hashes) = patch_manifest.patch_assets.iter().find_map(|patch_asset| {
-        (patch_asset.asset_name == exe_filename).then(|| {
-            patch_asset
-                .asset_patch_chunks
-                .iter()
-                .map(|(tag, chunk)| (tag, &chunk.original_file_md5))
-        })
-    })
-    else {
-        tracing::error!("Failed to get exe hashes from sophon update api, asset not found");
-        return Ok(None);
-    };
+    Ok(version_from_patch_manifest(&patch_manifest, asset_name, &asset_hash))
+}
 
-    for (tag, patch_exe_hash) in exe_hashes {
-        if patch_exe_hash.eq_ignore_ascii_case(&exe_hash) {
-            return Ok(Version::from_str(tag));
-        }
-    }
-
-    tracing::warn!("Sophon API lookup faield to find any matching exe hash");
-
-    Ok(None)
+#[cfg(feature = "sophon")]
+fn version_from_patch_manifest(
+    manifest: &crate::sophon::protos::SophonPatchProto,
+    asset_name: &str,
+    asset_hash: &str
+) -> Option<Version> {
+    manifest
+        .patch_assets
+        .iter()
+        .find(|asset| asset.asset_name == asset_name)?
+        .asset_patch_chunks
+        .iter()
+        .filter(|(_, chunk)| chunk.original_file_md5.eq_ignore_ascii_case(asset_hash))
+        .filter_map(|(tag, _)| Version::from_str(tag))
+        .max()
 }
