@@ -68,3 +68,29 @@ pub struct GamePredownloadInfo {
     pub major: Option<GameLatestInfo>,
     pub patches: Vec<GamePatch>
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BranchesResponse {
+    pub retcode: u16,
+    pub message: String,
+    pub data: BranchesData
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BranchesData {
+    pub game_branches: Vec<GameBranch>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GameBranch {
+    pub game: GameId,
+    pub main: Option<Branch>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Branch {
+    pub package_id: String,
+    pub tag: String,
+    #[serde(default)]
+    pub diff_tags: Vec<String>
+}

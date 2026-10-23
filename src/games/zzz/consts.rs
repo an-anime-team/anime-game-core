@@ -30,6 +30,15 @@ impl GameEdition {
 
     #[inline]
     #[rustfmt::skip]
+    pub fn branches_uri(&self) -> &str {
+        match self {
+            GameEdition::Global => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGameBranches?launcher_id=VYTpXlbWo8&game_ids%5B%5D=U5hbdsT9W7"),
+            GameEdition::China  => concat!("https://hyp-api.", "mih", "oyo", ".com/hyp/hyp-connect/api/getGameBranches?launcher_id=jGHBHlcOq1&game_ids%5B%5D=x6znKlJ0xK")
+        }
+    }
+
+    #[inline]
+    #[rustfmt::skip]
     pub fn game_scan_url(&self) -> &str {
         match self {
             GameEdition::Global => concat!("https://sg-hyp-api.", "ho", "yo", "verse", ".com/hyp/hyp-connect/api/getGameScanInfo?launcher_id=VYTpXlbWo8"),
