@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use cached::proc_macro::cached;
+use sophon::api::ApiContext;
 
 use crate::repairer::IntegrityFile;
 use crate::sophon;
-use crate::sophon::reqwest;
 use super::consts::GameEdition;
 use super::voice_data::locale::VoiceLocale;
 
@@ -15,36 +15,25 @@ fn try_get_some_integrity_files(
     matching_field: &str,
     _timeout: Option<u64>
 ) -> anyhow::Result<Vec<IntegrityFile>> {
-    let client = reqwest::blocking::Client::new();
+    let api = ApiContext::new(game_edition.into());
 
-    let game_branches = sophon::api::get_game_branches_info(&client, &game_edition.into())?;
-
-    let game_branch_info = game_branches
-        .get_game_branch_by_id_or_biz_latest(game_edition.api_game_id())
+    let download_manifest = api
+        .game_branches()?
+        .as_ref()
+        .package_latest(game_edition.api_game_id(), false)
         .ok_or_else(|| {
             anyhow::anyhow!("failed to get the game version information")
                 .context(format!("game id: {}", game_edition.api_game_id()))
-        })?;
-
-    let downloads = sophon::api::get_game_download_sophon_info(
-        &client,
-        game_branch_info
-            .main
-            .as_ref()
-            .expect("The `None` case would have been caught earlier"),
-        &game_edition.into()
-    )?;
-
-    let download_info = downloads
-        .manifests
-        .iter()
-        .find(|download_info| download_info.matching_field == matching_field)
+        })?
+        .downloads()?
+        .as_ref()
+        .for_component(matching_field)
         .ok_or_else(|| {
             anyhow::anyhow!("failed to find game download info")
                 .context(format!("matching field: {matching_field}"))
-        })?;
-
-    let download_manifest = sophon::api::get_download_manifest(&client, download_info)?;
+        })?
+        .download_manifest()?
+        .value;
 
     let files = download_manifest
         .assets

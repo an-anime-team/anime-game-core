@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use sophon::api::ApiContext;
 
 use crate::sophon;
-use crate::sophon::reqwest;
 use crate::version::Version;
 use crate::traits::game::GameExt;
 use super::api;
@@ -63,7 +63,8 @@ impl GameExt for Game {
     fn get_latest_version(edition: GameEdition) -> anyhow::Result<Version> {
         tracing::trace!("Trying to get latest game version");
 
-        // I assume game's API can't return incorrect version format right? Right?
+        // I assume game's API can't return incorrect version format right?
+        // Right?
         Ok(Version::from_str(api::request(edition)?.main.major.version).unwrap())
     }
 
@@ -148,18 +149,19 @@ impl Game {
 
         let game_edition = self.edition;
 
-        let client = reqwest::blocking::Client::new();
+        let api = ApiContext::new(game_edition.into());
 
-        let game_branches = sophon::api::get_game_branches_info(&client, &game_edition.into())
-            .inspect_err(|err| tracing::error!(?err, "getting game branches error"))?;
-
+        let game_branches = api.game_branches()?;
         let branch_info = game_branches
-            .get_game_branch_by_id_or_biz_latest(game_edition.api_game_id())
+            .as_ref()
+            .branch_latest(game_edition.api_game_id())
             .ok_or_else(|| {
                 anyhow::anyhow!("failed to get the game version information")
                     .context(format!("game id: {}", game_edition.api_game_id()))
             })?;
+
         let latest_version = branch_info
+            .value
             .version()
             .expect("must be a valid version")
             .into();
@@ -181,20 +183,20 @@ impl Game {
                         {
                             anyhow::bail!("Game directory is not empty")
                         }
-                        let game_downloads = sophon::api::get_game_download_sophon_info(
-                            &client,
-                            branch_info
-                                .main
-                                .as_ref()
-                                .expect("The `None` case would have been caught earlier"),
-                            &game_edition.into()
-                        )
-                        .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
+                        let game_downloads = branch_info
+                            .main()
+                            .expect("The `None` case would have been caught earlier")
+                            .downloads()
+                            .inspect_err(|err| {
+                                tracing::error!(?err, "getting download info error")
+                            })?;
 
                         let download_info = game_downloads
-                            .get_manifests_for("game")
+                            .as_ref()
+                            .for_component("game")
+                            .ok_or_else(|| anyhow::anyhow!("Failed to get game manifest"))?
                             .cloned()
-                            .ok_or_else(|| anyhow::anyhow!("Failed to get game manifest"))?;
+                            .value;
 
                         let downloaded_size = download_info.stats.compressed_size.parse()?;
                         let unpacked_size = download_info.stats.uncompressed_size.parse()?;
@@ -221,28 +223,30 @@ impl Game {
             if current >= latest_version {
                 tracing::debug!("Game version is latest");
 
-                // If we're running latest game version the diff we need to download
-                // must always be `predownload.diffs[0]`, but just to be safe I made
-                // a loop through possible variants, and if none of them was correct
-                // (which is not possible in reality) we should just say that the game
-                // is latest
-                if let Some(predownload_info) = &branch_info.pre_download {
+                // If we're running latest game version the diff we need to
+                // download must always be
+                // `predownload.diffs[0]`, but just to be safe I made
+                // a loop through possible variants, and if none of them was
+                // correct (which is not possible in reality) we
+                // should just say that the game is latest
+                if let Some(predownload_info) = &branch_info.pre_download() {
                     if predownload_info
+                        .value
                         .diff_tags
                         .iter()
                         .any(|pre_diff| *pre_diff == current)
                     {
-                        let diffs = sophon::api::get_game_diffs_sophon_info(
-                            &client,
-                            predownload_info,
-                            &game_edition.into()
-                        )?;
-
-                        let diff_info = diffs.get_manifests_for("game").unwrap().clone();
+                        let diff_info = predownload_info
+                            .diffs()?
+                            .as_ref()
+                            .for_component("game")
+                            .unwrap()
+                            .value
+                            .clone();
 
                         return Ok(VersionDiff::Predownload {
                             current,
-                            latest: Version::from_str(&predownload_info.tag).unwrap(),
+                            latest: predownload_info.value.version().unwrap().into(),
 
                             downloaded_size: diff_info
                                 .stats
@@ -282,25 +286,21 @@ impl Game {
                     "Game is outdated"
                 );
 
-                let diffs = sophon::api::get_game_diffs_sophon_info(
-                    &client,
-                    branch_info
-                        .main
-                        .as_ref()
-                        .expect("The `None` case would have been caught earlier"),
-                    &game_edition.into()
-                )
-                .context("Getting game diffs")?;
+                let diffs = branch_info
+                    .main()
+                    .expect("The `None` case would have been caught earlier")
+                    .diffs()
+                    .context("Getting game diffs")?;
 
                 if branch_info
-                    .main
-                    .as_ref()
+                    .main()
                     .expect("The `None` case would have been caught earlier")
+                    .value
                     .diff_tags
                     .iter()
                     .any(|tag| *tag == current)
                 {
-                    for diff in &diffs.manifests {
+                    for diff in &diffs.value.manifests {
                         if diff.matching_field == "game" {
                             if let Some((_, stats)) =
                                 diff.stats.iter().find(|(tag, _)| **tag == current)
@@ -338,20 +338,18 @@ impl Game {
         else {
             tracing::debug!("Game is not installed");
 
-            let game_downloads = sophon::api::get_game_download_sophon_info(
-                &client,
-                branch_info
-                    .main
-                    .as_ref()
-                    .expect("The `None` case would have been caught earlier"),
-                &game_edition.into()
-            )
-            .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
+            let game_downloads = branch_info
+                .main()
+                .expect("The `None` case would have been caught earlier")
+                .downloads()
+                .inspect_err(|err| tracing::error!(?err, "getting download info error"))?;
 
             let download_info = game_downloads
-                .get_manifests_for("game")
+                .as_ref()
+                .for_component("game")
+                .ok_or_else(|| anyhow::anyhow!("failed to get game manifest"))?
                 .cloned()
-                .ok_or_else(|| anyhow::anyhow!("failed to get game manifest"))?;
+                .value;
 
             let downloaded_size = download_info.stats.compressed_size.parse()?;
             let unpacked_size = download_info.stats.uncompressed_size.parse()?;

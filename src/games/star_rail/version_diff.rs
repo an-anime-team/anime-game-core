@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sophon::api::ApiContext;
 use thiserror::Error;
 
 use super::consts::GameEdition;
@@ -287,9 +288,9 @@ impl VersionDiff {
             "Downloading game"
         );
 
-        let client = reqwest::blocking::Client::new();
+        let api = ApiContext::new(self.edition().into());
 
-        let mut installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        let mut installer = SophonInstaller::new(api.wrap(download_info), self.temp_folder())?;
         installer.last_file_suffix = Some("data.unity3d".to_owned());
         installer.chunks_in_mem = true;
         installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024); // 2GiB
@@ -305,7 +306,8 @@ impl VersionDiff {
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
-        // why he should re-download entire game update because something is failed
+        // why he should re-download entire game update because something is
+        // failed
         #[allow(unused_must_use)]
         {
             let version_path = self
@@ -340,9 +342,9 @@ impl VersionDiff {
             "Patching game files"
         );
 
-        let client = reqwest::blocking::Client::new();
+        let api = ApiContext::new(self.edition().into());
 
-        let mut patcher = SophonPatcher::new(client, diff, self.temp_folder(), None)?;
+        let mut patcher = SophonPatcher::new(api.wrap(diff), self.temp_folder(), None)?;
         patcher.last_file_suffix = Some("data.unity3d".to_owned());
 
         patcher.update(
@@ -356,7 +358,8 @@ impl VersionDiff {
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
-        // why he should re-download entire game update because something is failed
+        // why he should re-download entire game update because something is
+        // failed
         #[allow(unused_must_use)]
         {
             let version_path = self
@@ -389,12 +392,12 @@ impl VersionDiff {
             "Predownloading game update"
         );
 
-        let client = reqwest::blocking::Client::new();
+        let api = ApiContext::new(self.edition().into());
 
         match download_or_patch_info {
             DownloadOrDiff::Download(download_info) => {
                 let mut installer =
-                    SophonInstaller::new(client, download_info, self.temp_folder())?;
+                    SophonInstaller::new(api.wrap(download_info), self.temp_folder())?;
                 installer.last_file_suffix = Some("data.unity3d".to_owned());
 
                 installer.pre_download(
@@ -406,7 +409,8 @@ impl VersionDiff {
             }
 
             DownloadOrDiff::Patch(diff_info) => {
-                let mut patcher = SophonPatcher::new(client, diff_info, self.temp_folder(), None)?;
+                let mut patcher =
+                    SophonPatcher::new(api.wrap(diff_info), self.temp_folder(), None)?;
                 patcher.last_file_suffix = Some("data.unity3d".to_owned());
 
                 patcher.pre_download(

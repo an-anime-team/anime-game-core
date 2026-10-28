@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sophon::api::ApiContext;
 use thiserror::Error;
 
 use crate::version::Version;
@@ -288,9 +289,9 @@ impl VersionDiff {
             "Downloading game"
         );
 
-        let client = sophon::reqwest::blocking::Client::new();
+        let api = ApiContext::new(self.edition().into());
 
-        let mut installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+        let mut installer = SophonInstaller::new(api.wrap(download_info), self.temp_folder())?;
         installer.chunks_in_mem = true;
         installer.chunks_queue_data_limit = Some(2048 * 1024 * 1024);
         installer.inplace = true;
@@ -305,7 +306,8 @@ impl VersionDiff {
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
-        // why he should re-download entire game update because something is failed
+        // why he should re-download entire game update because something is
+        // failed
         #[allow(unused_must_use)]
         {
             let version_path = self
@@ -340,9 +342,9 @@ impl VersionDiff {
             "Patching game files"
         );
 
-        let client = sophon::reqwest::blocking::Client::new();
+        let api = ApiContext::new(self.edition().into());
 
-        let patcher = SophonPatcher::new(client, diff, self.temp_folder(), None)?;
+        let patcher = SophonPatcher::new(api.wrap(diff), self.temp_folder(), None)?;
 
         patcher.update(
             &path,
@@ -355,7 +357,8 @@ impl VersionDiff {
 
         // Create `.version` file here even if hdiff patching is failed because
         // it's easier to explain user why he should run files repairer than
-        // why he should re-download entire game update because something is failed
+        // why he should re-download entire game update because something is
+        // failed
         #[allow(unused_must_use)]
         {
             let version_path = self
@@ -388,11 +391,11 @@ impl VersionDiff {
             "Predownloading game update"
         );
 
-        let client = sophon::reqwest::blocking::Client::new();
+        let api = ApiContext::new(self.edition().into());
 
         match download_or_patch_info {
             DownloadOrDiff::Download(download_info) => {
-                let installer = SophonInstaller::new(client, download_info, self.temp_folder())?;
+                let installer = SophonInstaller::new(api.wrap(download_info), self.temp_folder())?;
 
                 installer.pre_download(
                     thread_count,
@@ -403,7 +406,7 @@ impl VersionDiff {
             }
 
             DownloadOrDiff::Patch(diff_info) => {
-                let patcher = SophonPatcher::new(client, diff_info, self.temp_folder(), None)?;
+                let patcher = SophonPatcher::new(api.wrap(diff_info), self.temp_folder(), None)?;
 
                 patcher.pre_download(
                     from.into(),
@@ -586,8 +589,8 @@ impl VersionDiffExt for VersionDiff {
         }
     }
 
-    // There isn't a single type providing download information, so this method is
-    // useless
+    // There isn't a single type providing download information, so this method
+    // is useless
     fn downloading_uri(&self) -> Option<String> {
         None
     }
