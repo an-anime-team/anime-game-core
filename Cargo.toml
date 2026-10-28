@@ -15,7 +15,7 @@ serde_json = "1.0"
 tracing = "0.1"
 
 [dependencies.sophon-tools]
-git = "https://dawn.wine/dawn-winery/sophon-tools"
+git = "https://github.com/dawn-winery/sophon-tools"
 package = "sophon-lib"
 
 [build-dependencies]
