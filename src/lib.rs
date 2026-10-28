@@ -1,82 +1,28 @@
-/// Core library version
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// anime-game-core
+// Copyright (C) 2021 - 2026  Nikita Podvirnyi <krypt0nn@dawn.wine>
+// Copyright (C) 2025 - 2026  @JohnTheCoolingFan <ivan8215145640@gmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+pub use sophon_tools;
+
+pub mod game;
+
+// #[cfg(feature = "patches")]
+// pub mod patches;
+
+/// `anime-game-core` version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-lazy_static::lazy_static! {
-    /// Default requests timeout in seconds
-    pub static ref REQUESTS_TIMEOUT: u64 = match std::env::var("LAUNCHER_REQUESTS_TIMEOUT") {
-        Ok(timeout) => timeout.parse().unwrap_or(8),
-        Err(_) => 8
-    };
-}
-
-pub mod version;
-pub mod version_detect;
-pub mod traits;
-pub mod prettify_bytes;
-pub mod check_domain;
-
-#[cfg(feature = "patches")]
-pub mod patches;
-
-// Games-specific functionality
-
-mod games;
-
-pub use minreq;
-
-#[cfg(feature = "sophon")]
-pub use sophon;
-#[cfg(feature = "sophon")]
-pub use sophon::reqwest;
-
-#[cfg(feature = "genshin")]
-pub use games::genshin;
-
-#[cfg(feature = "star-rail")]
-pub use games::star_rail;
-
-#[cfg(feature = "zzz")]
-pub use games::zzz;
-
-#[cfg(feature = "honkai")]
-pub use games::honkai;
-
-// Core functionality
-
-#[cfg(feature = "external")]
-pub mod external;
-
-#[cfg(feature = "install")]
-pub mod installer;
-
-#[cfg(feature = "install")]
-pub mod repairer;
-
-pub mod prelude {
-    pub use super::version::*;
-    pub use super::prettify_bytes::prettify_bytes;
-
-    pub use super::traits::prelude::*;
-
-    #[cfg(feature = "patches")]
-    #[allow(unused_imports)]
-    pub use super::patches::prelude::*;
-
-    #[cfg(feature = "genshin")]
-    pub use super::genshin::prelude as genshin;
-
-    #[cfg(feature = "star-rail")]
-    pub use super::star_rail::prelude as star_rail;
-
-    #[cfg(feature = "zzz")]
-    pub use super::zzz::prelude as zzz;
-
-    #[cfg(feature = "honkai")]
-    pub use super::honkai::prelude as honkai;
-
-    #[cfg(feature = "install")]
-    pub use super::installer::prelude::*;
-
-    #[cfg(feature = "install")]
-    pub use super::repairer::*;
-}
