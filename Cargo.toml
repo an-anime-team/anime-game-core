@@ -1,6 +1,6 @@
 [package]
 name = "anime-game-core"
-version = "1.37.0"
+version = "1.40.0"
 authors = ["Nikita Podvirnyi <krypt0nn@vk.com>"]
 license = "GPL-3.0-or-later"
 homepage = "https://github.com/an-anime-team/an-anime-game-launcher"
