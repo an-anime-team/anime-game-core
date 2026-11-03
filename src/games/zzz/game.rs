@@ -156,12 +156,8 @@ impl Game {
                             anyhow::bail!("Game directory is not empty")
                         }
                         let game_downloads = branch_info
-                            .map(|branch| {
-                                branch
-                                    .main
-                                    .as_ref()
-                                    .expect("The `None` case would have been caught earlier")
-                            })
+                            .main()
+                            .expect("The `None` case would have been caught earlier")
                             .downloads()
                             .inspect_err(|err| {
                                 tracing::error!(?err, "getting download info error")
